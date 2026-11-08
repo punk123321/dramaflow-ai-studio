@@ -1,6 +1,8 @@
 # Project checklist
 
-Legend: Code written = source exists. Verified = actually run. Nothing is Verified yet.
+Legend: Code written = source exists. Verified = actually run.
+
+CI result (GitHub Actions run 42444881217, 2026-11-08): `flutter pub get`, `flutter analyze` (no errors), `flutter test` (5 unit tests) and `flutter build apk --release` all passed. The APK has NOT been installed or run on a phone yet, so every on-device item below is still unverified.
 
 ## Phase 1 - setup, design, home, navigation, database, projects
 
@@ -17,7 +19,8 @@ Legend: Code written = source exists. Verified = actually run. Nothing is Verifi
 | Delete project (never deletes video files) | yes | no |
 | Resume unfinished project after restart | yes | no |
 | Workflow stages, Guided and Free mode | yes | no |
-| Unit tests (progress logic, map round trip, date text) | yes | not run |
+| Unit tests (progress logic, map round trip, date text) | yes | yes, passed in CI |
+| Compiles and builds a release APK | yes | yes, passed in CI |
 
 ## Not started
 
@@ -34,6 +37,6 @@ Legend: Code written = source exists. Verified = actually run. Nothing is Verifi
 
 ## Known limits
 
-- This code was written without a Flutter compiler. Expect a few compile errors on the first build.
+- The first CI build found one real error (enum value `index` clashed with Dart's built-in `index`). It was renamed to `videoIndex` and the second build passed.
 - Dependency versions and licenses are not verified against pub.dev.
 - Module tiles on Home only show a "later phase" message.
