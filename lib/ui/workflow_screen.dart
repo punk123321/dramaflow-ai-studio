@@ -84,8 +84,8 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
         decoration: BoxDecoration(
           color: DfColors.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: open ? c : c.withOpacity(0.4), width: open ? 2 : 1.5),
-          boxShadow: open ? [BoxShadow(color: c.withOpacity(0.3), blurRadius: 18)] : null,
+          border: Border.all(color: open ? c : c.withValues(alpha: 0.4), width: open ? 2 : 1.5),
+          boxShadow: open ? [BoxShadow(color: c.withValues(alpha: 0.3), blurRadius: 18)] : null,
         ),
         child: Column(
           children: [
@@ -101,9 +101,9 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                       height: 34,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: done ? DfColors.ok : c.withOpacity(0.16),
+                        color: done ? DfColors.ok : c.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: done ? DfColors.ok : c.withOpacity(0.45)),
+                        border: Border.all(color: done ? DfColors.ok : c.withValues(alpha: 0.45)),
                       ),
                       child: done
                           ? const Icon(Icons.check, size: 18, color: Color(0xFF06210F))

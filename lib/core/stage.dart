@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// The six guided-workflow stages, in order. Each keeps one color everywhere.
-enum Stage { index, copy, tts, edit, render, save }
+enum Stage { videoIndex, copy, tts, edit, render, save }
 
 extension StageInfo on Stage {
   String get title => const [

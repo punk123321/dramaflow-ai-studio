@@ -15,15 +15,15 @@ void main() {
   test('new project starts at Video index with nothing done', () {
     final p = fresh();
     expect(p.doneCount, 0);
-    expect(p.currentStage, Stage.index);
+    expect(p.currentStage, Stage.videoIndex);
     expect(p.finished, false);
   });
 
   test('marking stages done moves the current stage forward', () {
     var p = fresh();
-    p = p.withStage(Stage.index, true, 2000);
+    p = p.withStage(Stage.videoIndex, true, 2000);
     p = p.withStage(Stage.copy, true, 3000);
-    expect(p.isDone(Stage.index), true);
+    expect(p.isDone(Stage.videoIndex), true);
     expect(p.isDone(Stage.tts), false);
     expect(p.currentStage, Stage.tts);
     expect(p.doneCount, 2);

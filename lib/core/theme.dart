@@ -52,7 +52,7 @@ ThemeData buildTheme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: DfColors.bg,
-      indicatorColor: DfColors.accent.withOpacity(0.25),
+      indicatorColor: DfColors.accent.withValues(alpha: 0.25),
       labelTextStyle: WidgetStateProperty.all(
         const TextStyle(fontSize: 12, fontFamilyFallback: burmeseFallback),
       ),

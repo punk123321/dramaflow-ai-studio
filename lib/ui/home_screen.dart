@@ -128,11 +128,11 @@ class _ResumeCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: DfColors.accent.withOpacity(0.5)),
+        border: Border.all(color: DfColors.accent.withValues(alpha: 0.5)),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [DfColors.accent.withOpacity(0.22), DfColors.surface],
+          colors: [DfColors.accent.withValues(alpha: 0.22), DfColors.surface],
         ),
       ),
       child: Column(
@@ -229,9 +229,9 @@ class _ModuleTile extends StatelessWidget {
                     height: 34,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: c.withOpacity(0.16),
+                      color: c.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: c.withOpacity(0.45)),
+                      border: Border.all(color: c.withValues(alpha: 0.45)),
                     ),
                     child: Text(module.code, style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
@@ -314,7 +314,7 @@ class _ProjectTile extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(99),
-                  border: Border.all(color: color.withOpacity(0.55)),
+                  border: Border.all(color: color.withValues(alpha: 0.55)),
                 ),
                 child: Text(label, style: TextStyle(color: color, fontSize: 12)),
               ),

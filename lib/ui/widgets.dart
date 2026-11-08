@@ -1,4 +1,3 @@
-import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 
 import '../core/stage.dart';
@@ -86,9 +85,9 @@ class ErrorBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: DfColors.danger.withOpacity(0.12),
+        color: DfColors.danger.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: DfColors.danger.withOpacity(0.5)),
+        border: Border.all(color: DfColors.danger.withValues(alpha: 0.5)),
       ),
       child: Text(message, style: const TextStyle(color: DfColors.danger)),
     );
