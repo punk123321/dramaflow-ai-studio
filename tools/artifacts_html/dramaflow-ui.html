@@ -1,0 +1,359 @@
+<title>DramaFlow UI Preview</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;500;600&family=Noto+Serif+Myanmar:wght@600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: phone-width column. Home = resume card + module grid. Workflow = six numbered stage cards joined by a vertical rail, with a segment strip on top. Colors follow the stage: each module keeps one hue everywhere. */
+:root {
+  --bg: #090B14;
+  --surface: #121627;
+  --raise: #1A1F35;
+  --ink: #ECEEF8;
+  --muted: #8F96B3;
+  --line: #262C47;
+  --c-index: #FF9F43;
+  --c-copy: #3DDC84;
+  --c-tts: #5B8CFF;
+  --c-edit: #A46BFF;
+  --c-render: #F2C94C;
+  --c-save: #FF5FA8;
+  --accent: #A46BFF;
+  --accent-ink: #12082A;
+  --display: "Noto Serif Myanmar", "Padauk", "Myanmar Text", serif;
+  --body: "Noto Sans Myanmar", "Myanmar Text", "Padauk", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #F1F2F8; --surface: #FFFFFF; --raise: #F5F6FB; --ink: #14172A; --muted: #5C6382; --line: #DCDFEE;
+    --c-index: #C26500; --c-copy: #11804A; --c-tts: #2F5FD9; --c-edit: #7B3FE0; --c-render: #8F6C00; --c-save: #C21F6F;
+    --accent: #7B3FE0; --accent-ink: #FFFFFF; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #F1F2F8; --surface: #FFFFFF; --raise: #F5F6FB; --ink: #14172A; --muted: #5C6382; --line: #DCDFEE;
+  --c-index: #C26500; --c-copy: #11804A; --c-tts: #2F5FD9; --c-edit: #7B3FE0; --c-render: #8F6C00; --c-save: #C21F6F;
+  --accent: #7B3FE0; --accent-ink: #FFFFFF; color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.8;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px 96px;
+}
+.app { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.app > * { min-width: 0; }
+button { font: inherit; color: inherit; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.preview-note { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 10px; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.brand { font-family: var(--display); font-size: 22px; line-height: 1.5; margin: 0; }
+.brand span { color: var(--accent); }
+.mode { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 3px; }
+.mode button { border: 0; background: transparent; padding: 3px 12px; border-radius: 99px; font-size: 13px; line-height: 1.6; cursor: pointer; color: var(--muted); }
+.mode button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.screen[hidden] { display: none; }
+.screen { display: flex; flex-direction: column; gap: 16px; }
+.screen > * { min-width: 0; }
+
+h2.sec { font-family: var(--display); font-size: 17px; line-height: 1.6; margin: 0; }
+.row-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.link { background: none; border: 0; color: var(--accent); font-size: 14px; cursor: pointer; padding: 4px 0; }
+
+/* resume card */
+.resume { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), var(--surface) 60%); border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.resume .meta { display: flex; gap: 12px; align-items: center; }
+.poster { flex: none; width: 56px; height: 76px; border-radius: 10px; background: linear-gradient(160deg, #3b2a6e, #0f1d4a 60%, #7a2a5a); display: grid; place-items: center; font-family: var(--display); font-size: 22px; color: #fff; border: 1px solid var(--line); }
+.resume h3 { margin: 0; font-family: var(--display); font-size: 18px; line-height: 1.6; }
+.sub { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0; }
+.segbar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.segbar i { height: 6px; border-radius: 3px; background: var(--line); display: block; }
+.segbar i.on { background: var(--c); }
+.status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.6; }
+.glow { width: 8px; height: 8px; border-radius: 50%; background: var(--c-copy); box-shadow: 0 0 8px var(--c-copy); }
+.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 12px; padding: 9px 16px; font-size: 15px; font-weight: 500; line-height: 1.6; cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.block { width: 100%; }
+
+/* module grid */
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mod { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+.mod:hover { border-color: var(--c); }
+.mod .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-family: var(--mono); font-size: 13px; line-height: 1; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); }
+.mod b { font-size: 15px; font-weight: 600; line-height: 1.5; }
+.mod small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+/* recents */
+.list { display: flex; flex-direction: column; gap: 8px; }
+.proj { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.proj .poster { width: 42px; height: 56px; font-size: 16px; border-radius: 8px; }
+.proj .t { flex: 1; min-width: 0; }
+.proj .t b { display: block; font-size: 15px; line-height: 1.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip { flex: none; font-size: 12px; line-height: 1.6; padding: 1px 10px; border-radius: 99px; border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); color: var(--c); }
+
+/* workflow */
+.wf-head { display: flex; flex-direction: column; gap: 4px; }
+.wf-head h1 { margin: 0; font-family: var(--display); font-size: 22px; line-height: 1.6; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.chips button { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px; font-family: var(--mono); font-size: 12px; line-height: 1.6; cursor: pointer; color: var(--muted); }
+.chips button[aria-pressed="true"] { color: var(--c-index); border-color: var(--c-index); background: color-mix(in srgb, var(--c-index) 12%, var(--surface)); }
+.steps { display: flex; flex-direction: column; position: relative; }
+.step { position: relative; padding-left: 0; display: flex; flex-direction: column; }
+.step + .step { margin-top: 14px; }
+.step + .step::before { content: ""; position: absolute; left: 28px; top: -14px; height: 14px; width: 0; border-left: 2px dotted var(--c); opacity: .7; }
+.card { background: var(--surface); border: 1.5px solid color-mix(in srgb, var(--c) 55%, var(--line)); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; text-align: left; width: 100%; }
+.step.active .card { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 0 22px color-mix(in srgb, var(--c) 35%, transparent); }
+.step.locked .card { opacity: .45; border-color: var(--line); }
+.card-top { display: flex; align-items: center; gap: 12px; }
+.n { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-family: var(--mono); font-size: 14px; line-height: 1; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); }
+.step.done .n { background: var(--c-copy); color: #06210f; border-color: var(--c-copy); }
+.card-top .tt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.card-top b { font-size: 16px; line-height: 1.5; font-weight: 600; }
+.card-top small { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.tick { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--c) 70%, transparent); display: grid; place-items: center; font-size: 13px; line-height: 1; color: #06210f; }
+.step.done .tick { background: var(--c-copy); border-color: var(--c-copy); }
+.detail { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.detail[hidden] { display: none; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.acts .btn { font-size: 14px; padding: 7px 12px; }
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.kv div { background: var(--raise); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; }
+.kv small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.kv span { font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+.chunk { display: flex; align-items: center; gap: 8px; background: var(--raise); border-radius: 10px; padding: 6px 10px; font-size: 14px; line-height: 1.6; }
+.chunk em { font-style: normal; font-family: var(--mono); font-size: 12px; color: var(--muted); flex: 1; }
+.chunk button { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 2px 10px; font-size: 13px; cursor: pointer; }
+.warn { margin: 0; font-size: 13px; line-height: 1.7; color: var(--c-index); background: color-mix(in srgb, var(--c-index) 10%, transparent); border-radius: 10px; padding: 6px 10px; }
+
+.empty { text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 16px; padding: 28px 16px; margin: 0; }
+
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--bg) 92%, transparent); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); display: flex; justify-content: center; backdrop-filter: blur(10px); z-index: 5; }
+nav.tabs .in { width: 100%; max-width: 480px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+nav.tabs button { background: none; border: 0; border-radius: 12px; padding: 6px 4px; font-size: 12px; line-height: 1.5; color: var(--muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+nav.tabs button i { width: 22px; height: 4px; border-radius: 2px; background: transparent; display: block; }
+nav.tabs button[aria-current="page"] { color: var(--ink); }
+nav.tabs button[aria-current="page"] i { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .step.active .card { transition: box-shadow .3s; } }
+</style>
+
+<div class="app">
+  <p class="preview-note">Design preview ဖြစ်ပါတယ်။ ခလုတ်တွေက စခရင်ဘယ်လိုလှုပ်ရှားမလဲ ကြည့်ဖို့သာ။ တကယ့် function တွေကို Flutter code မှာ ထည့်ရေးပါမယ်။</p>
+  <div class="top">
+    <h1 class="brand">Drama<span>Flow</span></h1>
+    <div class="mode" role="group" aria-label="Workflow mode">
+      <button type="button" id="m-guided" aria-pressed="true">Guided</button>
+      <button type="button" id="m-free" aria-pressed="false">Free</button>
+    </div>
+  </div>
+
+  <!-- HOME -->
+  <section class="screen" id="home">
+    <div class="resume" style="--c: var(--c-copy)">
+      <div class="meta">
+        <div class="poster">斗</div>
+        <div style="min-width:0">
+          <p class="sub">ဆက်လုပ်ရန်</p>
+          <h3>စီးဆင်းနေသော ကောင်းကင်</h3>
+          <p class="sub">ဇာတ်လမ်းတွဲ ဥပမာ · အပိုင်း 12 · ယနေ့ 09:14</p>
+        </div>
+      </div>
+      <div class="segbar" id="homebar" aria-label="Workflow progress"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="status"><span class="glow"></span><span id="homestage">အဆင့် 2 · Save and copy</span></span>
+        <button class="btn primary" type="button" id="resume">ဆက်လုပ်မယ်</button>
+      </div>
+    </div>
+
+    <div class="row-h"><h2 class="sec">Studio</h2></div>
+    <div class="grid" id="mods"></div>
+
+    <div class="row-h"><h2 class="sec">နောက်ဆုံး Project များ</h2><button class="link" type="button" data-go="lib">အားလုံး</button></div>
+    <div class="list">
+      <div class="proj" style="--c: var(--c-tts)"><div class="poster">龍</div><div class="t"><b>နဂါးမင်း ဇာတ်လမ်း · EP 03</b><p class="sub">မနေ့က · TTS အဆင့်</p></div><span class="chip">TTS</span></div>
+      <div class="proj" style="--c: var(--c-save)"><div class="poster">雪</div><div class="t"><b>နှင်းဆီမိုး · EP 08</b><p class="sub">၃ ရက် အကြာ · Render ပြီး</p></div><span class="chip">Save</span></div>
+    </div>
+  </section>
+
+  <!-- WORKFLOW -->
+  <section class="screen" id="flow" hidden>
+    <div class="wf-head">
+      <h1>Recap Workflow</h1>
+      <p class="sub" id="flowsub">Guided mode · အဆင့်ကို အစဉ်လိုက် လုပ်ပါ</p>
+    </div>
+    <div>
+      <p class="sub" style="margin-bottom:6px">Segment ကြာချိန်</p>
+      <div class="chips" id="segchips" role="group" aria-label="Segment length"></div>
+    </div>
+    <div class="steps" id="steps"></div>
+  </section>
+
+  <section class="screen" id="lib" hidden><p class="empty">Drama Library ကို Phase 2 မှာ ရေးပါမယ်။</p></section>
+  <section class="screen" id="set" hidden><p class="empty">Settings (font၊ ဘာသာစကား၊ model) ကို နောက်ပိုင်း phase မှာ ရေးပါမယ်။</p></section>
+</div>
+
+<nav class="tabs" aria-label="Main">
+  <div class="in">
+    <button type="button" data-go="home" aria-current="page"><i></i>Home</button>
+    <button type="button" data-go="flow"><i></i>Workflow</button>
+    <button type="button" data-go="lib"><i></i>Library</button>
+    <button type="button" data-go="set"><i></i>Settings</button>
+  </div>
+</nav>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var STEPS = [
+    { k: 'index', c: '--c-index', t: 'Video index', s: 'အပိုင်းတွေ ခွဲပြီး index ဖြစ်မယ်', cta: 'Index သိမ်းမယ်' },
+    { k: 'copy', c: '--c-copy', t: 'Save and copy', s: 'AI ဖိုင် သိမ်း + Prompt ကူး', cta: 'Gemini ကို ပို့ပြီးပြီ' },
+    { k: 'tts', c: '--c-tts', t: 'TTS / mp3', s: 'AI အဖြေ ထည့်ပြီး အသံထုတ်', cta: 'အသံ အဆင်သင့်ပြီ' },
+    { k: 'edit', c: '--c-edit', t: 'Studio editor', s: 'Clip တွေ ကြည့်ပြီး ပြင်မယ်', cta: 'Edit ပြီးပြီ' },
+    { k: 'render', c: '--c-render', t: 'Render', s: 'Video ထုတ်မယ်', cta: 'Render လုပ်မယ်' },
+    { k: 'save', c: '--c-save', t: 'Save', s: 'Gallery ထဲ သိမ်းမယ်', cta: 'Gallery ထဲ သိမ်းမယ်' }
+  ];
+  var MODS = [
+    { c: '--c-index', ic: 'VI', t: 'Video Index', s: 'အပိုင်းခွဲ', go: 'flow' },
+    { c: '--c-copy', ic: 'GM', t: 'Recap Studio', s: 'Gemini handoff', go: 'flow' },
+    { c: '--c-tts', ic: 'ST', t: 'Subtitle Studio', s: 'SRT / VTT / TXT', go: 'lib' },
+    { c: '--c-tts', ic: 'TT', t: 'TTS / MP3', s: 'အသံ ထုတ်/ဖမ်း', go: 'flow' },
+    { c: '--c-edit', ic: 'ED', t: 'Video Editor', s: 'Timeline 4 track', go: 'flow' },
+    { c: '--c-render', ic: 'RN', t: 'Render Center', s: 'MP4 720p / 1080p', go: 'flow' },
+    { c: '--c-save', ic: 'EX', t: 'Exported Videos', s: 'ထုတ်ပြီးသား', go: 'lib' },
+    { c: '--c-index', ic: 'DL', t: 'Drama Library', s: 'ဇာတ်လမ်း၊ အပိုင်း', go: 'lib' },
+    { c: '--c-render', ic: 'FU', t: 'Copyright & Fair Use', s: 'Upload မတင်ခင် စစ်', go: 'lib' },
+    { c: '--c-copy', ic: 'ST', t: 'Settings', s: 'Font၊ ဘာသာ', go: 'set' }
+  ];
+  var SEG = ['5 မိ', '10 မိ', '15 မိ', '20 မိ', 'Custom'];
+  var state = { done: [true, false, false, false, false, false], open: 1, free: false, seg: 1, copied: {} };
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) { e.className = cls; } if (text != null) { e.textContent = text; } return e; }
+  function cv(name) { return 'var(' + name + ')'; }
+  function firstOpen() { for (var i = 0; i < 6; i++) { if (!state.done[i]) { return i; } } return 5; }
+  function unlocked(i) { return state.free || i === 0 || state.done[i - 1]; }
+
+  function renderMods() {
+    var g = $('mods'); g.textContent = '';
+    MODS.forEach(function (m) {
+      var b = el('button', 'mod'); b.type = 'button'; b.style.setProperty('--c', cv(m.c));
+      b.appendChild(el('span', 'ic', m.ic)); b.appendChild(el('b', null, m.t)); b.appendChild(el('small', null, m.s));
+      b.addEventListener('click', function () { go(m.go); });
+      g.appendChild(b);
+    });
+  }
+  function renderHome() {
+    var bar = $('homebar'); bar.textContent = '';
+    STEPS.forEach(function (s, i) { var x = el('i', state.done[i] ? 'on' : ''); x.style.setProperty('--c', cv(s.c)); bar.appendChild(x); });
+    var n = firstOpen();
+    var all = state.done.every(Boolean);
+    $('homestage').textContent = all ? 'အားလုံး ပြီးပါပြီ' : 'အဆင့် ' + (n + 1) + ' · ' + STEPS[n].t;
+  }
+  function renderChips() {
+    var c = $('segchips'); c.textContent = '';
+    SEG.forEach(function (t, i) {
+      var b = el('button', null, t); b.type = 'button'; b.setAttribute('aria-pressed', String(state.seg === i));
+      b.addEventListener('click', function () { state.seg = i; renderChips(); renderSteps(); });
+      c.appendChild(b);
+    });
+  }
+  function detail(i) {
+    var d = el('div', 'detail');
+    var s = STEPS[i];
+    if (i === 0) {
+      var kv = el('div', 'kv');
+      [['ကြာချိန်', '48:20'], ['Resolution', '1080p'], ['ဖိုင်အရွယ်', '1.2 GB']].forEach(function (p) {
+        var x = el('div'); x.appendChild(el('small', null, p[0])); x.appendChild(el('span', null, p[1])); kv.appendChild(x);
+      });
+      d.appendChild(kv);
+      var len = [5, 10, 15, 20, 10][state.seg];
+      var n = Math.ceil(48.33 / len);
+      d.appendChild(el('p', 'sub', 'Segment ' + n + ' ခု · တစ်ခုကို ' + len + ' မိနစ်'));
+      d.appendChild(el('p', 'sub', 'မူရင်း video ကို မပြင်ပါဘူး၊ index ကိုပဲ သိမ်းပါတယ်။'));
+    } else if (i === 1) {
+      var tot = 4;
+      for (var k = 1; k <= tot; k++) {
+        (function (k) {
+          var r = el('div', 'chunk'); r.appendChild(el('span', null, 'Chunk ' + k + ' / ' + tot));
+          r.appendChild(el('em', null, '#' + ((k - 1) * 120 + 1) + '–' + (k * 120)));
+          var b = el('button', null, state.copied[k] ? 'ကူးပြီး' : 'ကူးမယ်'); b.type = 'button';
+          b.addEventListener('click', function (e) { e.stopPropagation(); state.copied[k] = true; renderSteps(); });
+          r.appendChild(b); d.appendChild(r);
+        })(k);
+      }
+      var a = el('div', 'acts');
+      ['Prompt ရွေး', 'Gemini သို့ Share', 'ပြန်ရလဒ် Import'].forEach(function (t) { var b = el('button', 'btn', t); b.type = 'button'; a.appendChild(b); });
+      d.appendChild(a);
+      d.appendChild(el('p', 'warn', 'Gemini အဖြေကို app က အလိုအလျောက် မဖတ်နိုင်ပါဘူး။ ကိုယ်တိုင်ကူး၊ ပြန် paste လုပ်ပါ။'));
+    } else if (i === 2) {
+      d.appendChild(el('p', 'warn', 'ဒီဖုန်းမှာ မြန်မာအသံ မတွေ့ရင် MP3 import သို့ မိုက်ဖမ်း သုံးပါ။'));
+      var a2 = el('div', 'acts');
+      ['MP3 ထည့်', 'အသံဖမ်း', 'Voice စမ်း'].forEach(function (t) { var b = el('button', 'btn', t); b.type = 'button'; a2.appendChild(b); });
+      d.appendChild(a2);
+    } else if (i === 3) {
+      var a3 = el('div', 'acts');
+      ['Video track', 'Voice-over', 'Music', 'Subtitle'].forEach(function (t) { var b = el('button', 'btn', t); b.type = 'button'; a3.appendChild(b); });
+      d.appendChild(a3);
+    } else if (i === 4) {
+      var kv2 = el('div', 'kv');
+      [['Resolution', '1080p'], ['FPS', '30'], ['ခန့်မှန်း', '~420 MB']].forEach(function (p) {
+        var x = el('div'); x.appendChild(el('small', null, p[0])); x.appendChild(el('span', null, p[1])); kv2.appendChild(x);
+      });
+      d.appendChild(kv2);
+      d.appendChild(el('p', 'warn', 'Render က battery နဲ့ နေရာ များများသုံးပါတယ်။ အားသွင်းထားပြီး ဖုန်းကို မပိတ်ပါနဲ့။'));
+    } else {
+      d.appendChild(el('p', 'sub', 'Gallery ထဲ သိမ်းပြီး Export history ထဲ မှတ်ပါမယ်။'));
+    }
+    var cta = el('button', 'btn primary block', s.cta); cta.type = 'button';
+    cta.style.background = cv(s.c); cta.style.borderColor = cv(s.c); cta.style.color = '#0a0a12';
+    cta.addEventListener('click', function (e) { e.stopPropagation(); state.done[i] = true; state.open = Math.min(5, i + 1); renderAll(); });
+    d.appendChild(cta);
+    return d;
+  }
+  function renderSteps() {
+    var box = $('steps'); box.textContent = '';
+    STEPS.forEach(function (s, i) {
+      var ok = unlocked(i);
+      var cls = 'step' + (state.done[i] ? ' done' : '') + (state.open === i && ok ? ' active' : '') + (ok ? '' : ' locked');
+      var st = el('div', cls); st.style.setProperty('--c', cv(s.c));
+      var card = el('div', 'card');
+      var top = el('button', 'card-top'); top.type = 'button';
+      top.style.cssText = 'background:none;border:0;padding:0;text-align:left;cursor:' + (ok ? 'pointer' : 'not-allowed');
+      top.disabled = !ok;
+      top.setAttribute('aria-expanded', String(state.open === i && ok));
+      top.appendChild(el('span', 'n', String(i + 1)));
+      var tt = el('span', 'tt'); tt.appendChild(el('b', null, s.t)); tt.appendChild(el('small', null, ok ? s.s : 'အရင်အဆင့် ပြီးမှ ဖွင့်မယ်'));
+      top.appendChild(tt);
+      top.appendChild(el('span', 'tick', state.done[i] ? '✓' : ''));
+      top.addEventListener('click', function () { state.open = state.open === i ? -1 : i; renderSteps(); });
+      card.appendChild(top);
+      if (state.open === i && ok) { card.appendChild(detail(i)); }
+      st.appendChild(card); box.appendChild(st);
+    });
+  }
+  function renderAll() { renderHome(); renderSteps(); }
+
+  function go(name) {
+    ['home', 'flow', 'lib', 'set'].forEach(function (id) { $(id).hidden = id !== name; });
+    document.querySelectorAll('nav.tabs button').forEach(function (b) {
+      if (b.getAttribute('data-go') === name) { b.setAttribute('aria-current', 'page'); } else { b.removeAttribute('aria-current'); }
+    });
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('[data-go]').forEach(function (b) { b.addEventListener('click', function () { go(b.getAttribute('data-go')); }); });
+  $('resume').addEventListener('click', function () { state.open = firstOpen(); renderSteps(); go('flow'); });
+  function setMode(free) {
+    state.free = free;
+    $('m-guided').setAttribute('aria-pressed', String(!free)); $('m-free').setAttribute('aria-pressed', String(free));
+    $('flowsub').textContent = free ? 'Free mode · ဘယ်အဆင့်ကိုမဆို တိုက်ရိုက်ဖွင့်လို့ရပါတယ်' : 'Guided mode · အဆင့်ကို အစဉ်လိုက် လုပ်ပါ';
+    renderSteps();
+  }
+  $('m-guided').addEventListener('click', function () { setMode(false); });
+  $('m-free').addEventListener('click', function () { setMode(true); });
+
+  renderMods(); renderChips(); renderAll();
+})();
+</script>

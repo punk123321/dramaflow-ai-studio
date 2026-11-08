@@ -1,0 +1,831 @@
+PROJECT: DramaFlow AI Studio
+
+Complete Android Personal Drama Recap & Video Production Application
+
+You are acting as a Senior Android Developer, Flutter Architect, UI/UX Designer, Video Processing Engineer, AI Workflow Engineer, and QA Engineer.
+
+Your task is to DESIGN AND BUILD a complete, functional Android application named DramaFlow AI Studio.
+
+This is a personal-use application, not a public SaaS service.
+
+I want a real working Android application, not just a UI prototype, mockup, concept, or collection of screenshots.
+
+The application must be designed primarily for Android smartphones, especially Redmi Note 12 Pro+.
+
+I will attach two screenshots of an existing application called Easy Recap / Zippy_CUT. Use those screenshots as the primary workflow and visual design references. Do not copy its branding or exact appearance. Create a more polished, modern, professional version.
+
+---
+
+1. MOST IMPORTANT PROJECT REQUIREMENTS
+
+Follow these requirements strictly:
+
+1. The app must work on Android smartphones.
+2. Do not require a Windows PC to use the application.
+3. Do not require Gemini API.
+4. Do not require OpenAI API or ChatGPT API.
+5. Do not use paid AI APIs as mandatory dependencies.
+6. Gemini must be accessed through the official Gemini Android app using Android sharing, copy/paste, and import workflows.
+7. Core project data and media should be stored locally on the phone.
+8. The app must support offline operations wherever technically possible.
+9. The UI must be responsive, smooth, and easy to use.
+10. Every major button must perform a real function.
+11. Do not create fake buttons, placeholder functionality, or misleading progress indicators.
+12. Do not claim that a feature is complete if it is only a mockup.
+13. Do not silently omit difficult features. Explain limitations and provide practical alternatives.
+14. Build the application in modular stages so it can be tested and improved.
+
+The final result must include complete source code, build instructions, and an installable APK if the available development environment supports APK compilation.
+
+---
+
+2. APPLICATION IDENTITY AND DESIGN
+
+Application name: DramaFlow AI Studio
+
+Package name: com.dramaflow.aistudio
+
+Application type: Android Personal Video Production Studio
+
+Design direction:
+
+- Premium dark cinematic interface.
+- Modern neon accents.
+- Professional video production dashboard.
+- Smooth animations and transitions.
+- Clear workflow progression.
+- Large touch-friendly controls.
+- Readable Burmese text.
+- Responsive layout for different Android screen sizes.
+
+Suggested color palette:
+
+- Main background: Deep black / dark navy.
+- Primary accent: Neon purple.
+- Secondary accent: Electric blue.
+- Success accent: Neon green.
+- Warning accent: Orange.
+- Export accent: Pink / magenta.
+
+Use modern cards, rounded corners, subtle gradients, glowing status indicators, and clean typography.
+
+Do not overcrowd the interface.
+
+Use a consistent design system throughout the application.
+
+The app must support both Burmese and English interface text where appropriate.
+
+Burmese text must render correctly. Allow users to select suitable Myanmar fonts where technically possible.
+
+---
+
+3. MAIN DASHBOARD
+
+Create a Home Dashboard containing:
+
+- New Project
+- Recent Projects
+- Drama Library
+- Video Index
+- Recap Studio
+- Subtitle Studio
+- TTS / MP3 Studio
+- Video Studio Editor
+- Render Center
+- Exported Videos
+- Settings
+
+Each project should display:
+
+- Project name
+- Drama title
+- Episode number
+- Project thumbnail
+- Current workflow stage
+- Last modified date
+- Processing status
+
+Allow users to resume unfinished projects.
+
+Add a clear project progress indicator.
+
+---
+
+4. EASY RECAP-STYLE WORKFLOW
+
+The primary workflow must be inspired by the attached Easy Recap screenshots.
+
+Create a vertical workflow with clearly numbered steps.
+
+STEP 1: VIDEO INDEX
+
+Purpose: Organize the original drama video into manageable sections.
+
+Features:
+
+- Import videos from Android Gallery or File Manager.
+- Support common formats such as MP4, MOV, and MKV where supported.
+- Display video duration, resolution, file size, and thumbnail.
+- Generate video thumbnails.
+- Create video segments.
+- Allow custom segment durations.
+- Preset segment lengths: 5, 10, 15, 20 minutes.
+- Allow custom start and end times.
+- Show segment index and timestamps.
+- Save the video index.
+- Resume indexing after closing the application.
+
+Important:
+
+Never modify the original video file when creating an index.
+
+STEP 2: SAVE AND COPY / GEMINI WORKFLOW
+
+This is one of the most important features.
+
+I DO NOT WANT GEMINI API.
+
+I want to use the official Gemini Android application directly.
+
+Implement a reliable Android handoff workflow.
+
+Features:
+
+- Prepare text for Gemini.
+- Prepare SRT content for Gemini.
+- Copy prompts to clipboard.
+- Copy selected transcript segments.
+- Share text through Android ACTION_SEND.
+- Open Gemini through the Android app-sharing flow when available.
+- Provide a fallback Android share chooser if Gemini cannot be opened directly.
+- Let the user manually copy Gemini's response.
+- Import the returned text or SRT back into DramaFlow.
+- Detect whether the returned content appears to be valid SRT.
+- Preview the imported result before saving.
+
+Create separate prompt templates:
+
+1. Chinese to Burmese translation.
+2. Burmese subtitle proofreading.
+3. Chinese drama recap.
+4. Short recap.
+5. Medium recap.
+6. Long recap.
+7. YouTube narration script.
+8. Character name consistency.
+9. Terminology consistency.
+10. Timestamp-preserving subtitle translation.
+
+IMPORTANT GEMINI INTEGRATION LIMITATIONS:
+
+Do not pretend the app can automatically read Gemini's private conversation or retrieve its response without an official integration.
+
+Do not scrape Gemini's website.
+
+Do not use hidden APIs.
+
+Do not automate taps or extract account data through accessibility hacks.
+
+The user must be able to manually return the Gemini result through copy/paste, Android sharing, or file import.
+
+For long transcripts, automatically divide the content into manageable chunks while preserving subtitle numbers and timestamps.
+
+Provide a clear chunk sequence:
+
+Chunk 1 / 5
+Chunk 2 / 5
+Chunk 3 / 5
+
+Allow the user to copy each chunk separately.
+
+After importing all translated chunks, merge them into one complete SRT file.
+
+Never lose subtitle indices or timestamps during merging.
+
+---
+
+5. SUBTITLE STUDIO
+
+Create a complete subtitle editing environment.
+
+Supported input:
+
+- SRT
+- VTT
+- TXT
+- Plain text transcript
+
+Features:
+
+- Import subtitle files.
+- Edit subtitle text.
+- Edit timestamps.
+- Add subtitles.
+- Delete subtitles.
+- Merge subtitle entries.
+- Split subtitle entries.
+- Reorder entries.
+- Search and replace.
+- Preview subtitles over video.
+- Adjust subtitle timing.
+- Detect overlapping timestamps.
+- Detect missing subtitle numbers.
+- Detect invalid SRT formatting.
+- Export SRT.
+- Export VTT.
+- Export TXT.
+
+Chinese-to-Burmese translation requirements:
+
+- Preserve the original meaning.
+- Use natural, fluent Burmese.
+- Avoid awkward literal translations.
+- Keep character names consistent.
+- Keep cultivation terminology consistent.
+- Preserve the original subtitle numbering.
+- Preserve timestamps unless the user explicitly edits them.
+- Do not invent dialogue.
+- Do not omit dialogue.
+- Do not add explanations inside subtitle lines.
+- Maintain readable subtitle length.
+
+Create a terminology dictionary where users can save preferred Burmese translations for recurring Chinese names and cultivation terms.
+
+Include a subtitle style editor:
+
+- Myanmar font selection.
+- Font size.
+- Text color.
+- Outline.
+- Shadow.
+- Background opacity.
+- Position.
+- Alignment.
+- Line spacing.
+
+Allow subtitle previews using the actual selected video.
+
+---
+
+6. SPEECH-TO-TEXT
+
+Provide an optional local speech-to-text workflow.
+
+The application should be able to:
+
+- Extract audio from imported videos.
+- Generate Chinese transcripts where supported.
+- Generate timestamps.
+- Export transcripts as TXT or SRT.
+- Allow manual correction.
+
+Investigate suitable Android-compatible local speech recognition solutions, such as Whisper.cpp Android integration or another maintained offline engine.
+
+Do not assume every device can process large models smoothly.
+
+Provide model selection:
+
+- Small / lightweight model.
+- Medium model.
+- Higher accuracy model where device resources permit.
+
+Display:
+
+- Model download size.
+- Available storage requirement.
+- Estimated memory requirement.
+- Processing status.
+
+Allow the user to skip speech recognition and import an existing transcript or SRT.
+
+Do not require cloud APIs.
+
+---
+
+7. RECAP STUDIO
+
+Create a dedicated recap workspace.
+
+Recap modes:
+
+- Short Recap.
+- Medium Recap.
+- Long Recap.
+- Custom Duration.
+
+Allow users to select:
+
+- Source transcript.
+- Episode range.
+- Recap language.
+- Narration style.
+- Target video duration.
+- Preferred character naming.
+- Preferred terminology.
+
+Narration styles:
+
+- Cinematic.
+- Dramatic.
+- Storytelling.
+- Emotional.
+- Action-focused.
+- Documentary.
+- Simple conversational Burmese.
+
+Gemini must be used through manual sharing and copy/paste workflows.
+
+The app should prepare high-quality prompts for Gemini and organize returned scripts.
+
+Do not fabricate a Gemini response.
+
+Allow users to edit the returned recap before moving to TTS.
+
+---
+
+8. TTS / MP3 STUDIO
+
+Create a voice-over production module.
+
+Requirements:
+
+- Import MP3 and WAV files.
+- Record voice directly from the microphone.
+- Divide narration into paragraphs or scenes.
+- Associate audio clips with narration segments.
+- Preview each audio clip.
+- Adjust volume.
+- Adjust playback speed where supported.
+- Organize clips in sequence.
+- Export combined narration audio.
+
+Provide Android Text-to-Speech support where suitable voices are installed.
+
+IMPORTANT:
+
+Do not claim that Android provides a high-quality Burmese voice on every device.
+
+Check available installed voices and languages.
+
+If no suitable Burmese voice exists:
+
+- Show a clear warning.
+- Allow imported Burmese voice recordings.
+- Allow imported MP3 voice-over.
+- Provide a way to test available TTS voices.
+
+No mandatory paid TTS API.
+
+---
+
+9. VIDEO STUDIO EDITOR
+
+Create a practical mobile video editing interface.
+
+Required functions:
+
+- Import original video.
+- Preview video.
+- Add and remove clips.
+- Trim clip start and end.
+- Arrange clips in sequence.
+- Add narration audio.
+- Add background music.
+- Add subtitle tracks.
+- Adjust subtitle timing.
+- Adjust audio volume.
+- Preview the final composition.
+
+Timeline must support:
+
+- Video track.
+- Voice-over track.
+- Background music track.
+- Subtitle track.
+
+Use touch-friendly controls.
+
+Avoid trying to reproduce a complicated desktop editor on a phone.
+
+Focus on the essential functions needed for drama recap production.
+
+---
+
+10. YOUTUBE COPYRIGHT AND FAIR USE REVIEW
+
+Create a dedicated module named:
+
+YouTube Copyright & Fair Use Assistant
+
+IMPORTANT LEGAL AND TECHNICAL REQUIREMENTS:
+
+The app must not advertise or implement a method to bypass YouTube Content ID, evade copyright detection, disguise copyrighted material, or guarantee that a video qualifies as Fair Use.
+
+Instead, create a responsible copyright-risk review workflow.
+
+Features:
+
+1. Original footage usage log.
+2. Clip start and end time records.
+3. Total original footage duration.
+4. Percentage of original footage used.
+5. Commentary and criticism tracking.
+6. Original narration tracking.
+7. Transformative purpose checklist.
+8. Music and sound-effect source records.
+9. License and permission records.
+10. Pre-upload copyright checklist.
+
+Evaluate the following Fair Use considerations:
+
+- Purpose and character of use.
+- Whether the work is transformative.
+- Nature of the original copyrighted work.
+- Amount and substantiality used.
+- Potential effect on the original market.
+
+Explain that these are legal considerations, not a guaranteed scoring formula.
+
+Provide risk labels:
+
+- Lower apparent risk.
+- Needs review.
+- Higher apparent risk.
+
+These labels are informational only.
+
+The app must clearly state:
+
+- Fair Use is not guaranteed.
+- Changing speed, cropping, mirroring, adding subtitles, or changing pitch does not automatically create Fair Use.
+- Copyright law differs by jurisdiction.
+- YouTube Content ID claims can still occur.
+- The user is responsible for obtaining necessary permissions.
+
+Encourage original commentary, criticism, analysis, and properly licensed footage.
+
+Do not automatically generate false copyright disclaimers or misleading permission claims.
+
+---
+
+11. RENDER CENTER
+
+Create a real video rendering workflow.
+
+Output formats:
+
+- MP4
+- 720p
+- 1080p where supported
+
+Features:
+
+- Burn subtitles into video.
+- Combine original video and narration.
+- Mix background music.
+- Adjust audio levels.
+- Select output resolution.
+- Select frame rate where supported.
+- Show render progress.
+- Show estimated output size where possible.
+- Handle low storage.
+- Handle interruptions.
+- Allow safe cancellation.
+- Avoid corrupting original files.
+
+Investigate currently maintained Android-compatible media processing libraries.
+
+Prefer a reliable Android-native video processing approach such as AndroidX Media3 Transformer where appropriate.
+
+If an FFmpeg-based solution is selected, verify its maintenance status, Android compatibility, and licensing before implementation.
+
+Do not depend on abandoned libraries without explaining the risks.
+
+---
+
+12. SAVE AND PROJECT MANAGEMENT
+
+Every project must be saved locally.
+
+Use a proper local database such as Room or SQLite.
+
+Store:
+
+- Project metadata.
+- Drama metadata.
+- Episode information.
+- Video indexes.
+- Subtitle files.
+- Recap scripts.
+- Audio files.
+- Export history.
+- Copyright review records.
+
+Use Android Storage Access Framework and MediaStore appropriately.
+
+Do not request unnecessary permissions.
+
+Provide:
+
+- Rename project.
+- Duplicate project.
+- Delete project.
+- Backup project.
+- Restore project.
+- Export project files.
+- View project history.
+
+Do not delete original video files when deleting a project unless the user explicitly confirms.
+
+---
+
+13. DRAMA LIBRARY
+
+Create a dedicated drama management module.
+
+Features:
+
+- Add drama.
+- Add poster.
+- Add description.
+- Add season.
+- Add episodes.
+- Record episode duration.
+- Record episode source.
+- Track completed episodes.
+- Track unfinished episodes.
+- Search dramas.
+- Filter by status.
+- Resume previous project.
+
+Allow custom Chinese drama titles and Burmese titles.
+
+Do not require an online movie database.
+
+All metadata can be entered manually.
+
+---
+
+14. USER EXPERIENCE
+
+The application should have two workflow modes.
+
+A. Guided Workflow
+
+The user follows each step in order:
+
+1. Video Index.
+2. Save and Copy.
+3. TTS / MP3.
+4. Studio Editor.
+5. Render.
+6. Save.
+
+Show which stages are complete.
+
+Prevent accidental loss of unfinished work.
+
+B. Free Mode
+
+Allow users to open any module directly without completing the previous step.
+
+Users should be able to edit subtitles without creating a recap.
+
+Users should be able to render a video without using Gemini.
+
+Users should be able to import an existing SRT and MP3 directly.
+
+---
+
+15. TECHNICAL ARCHITECTURE
+
+Choose a maintainable Android architecture.
+
+Flutter is preferred for the UI, provided all essential Android functionality can be implemented reliably.
+
+Use native Android/Kotlin plugins where necessary for:
+
+- Android sharing.
+- Gemini handoff.
+- File selection.
+- Media access.
+- Video processing.
+- Local speech recognition.
+- Text-to-speech.
+- Notifications and long-running processing.
+
+Suggested architecture:
+
+- Flutter frontend.
+- Local SQLite database.
+- Local file storage.
+- Android platform channels.
+- Modular video processing service.
+- Modular subtitle engine.
+- Gemini handoff service.
+
+Do not introduce Firebase or a cloud backend unless a feature genuinely requires it.
+
+The app must not require account registration.
+
+No mandatory subscription.
+
+No mandatory API keys.
+
+Before selecting dependencies, verify that they are currently maintained, compatible with the target Android version, and have suitable licenses.
+
+Document all third-party dependencies and their licenses.
+
+---
+
+16. PERFORMANCE AND DEVICE COMPATIBILITY
+
+Target device: Redmi Note 12 Pro+.
+
+Optimize for:
+
+- Limited RAM.
+- Battery usage.
+- Storage usage.
+- Heat management.
+- Long-running video rendering.
+- Background task interruptions.
+- Android permission changes.
+
+Do not load entire large videos into RAM.
+
+Use streaming and file-based processing.
+
+Use background workers or foreground services when appropriate.
+
+Show clear warnings before operations that may consume significant storage or battery.
+
+Support recovery after an interrupted processing task wherever possible.
+
+---
+
+17. SECURITY AND PRIVACY
+
+This is a personal-use app.
+
+Requirements:
+
+- Local-first storage.
+- No unnecessary data collection.
+- No hidden uploading of user media.
+- No advertising SDK requirement.
+- No account registration.
+- No secret API keys.
+- No unauthorized access to Gemini conversations.
+- No uploading videos to third-party services without explicit user action.
+
+Clearly explain when an operation requires internet access.
+
+---
+
+18. TESTING AND QUALITY ASSURANCE
+
+Do not stop after designing the interface.
+
+Test the real application.
+
+Required tests:
+
+1. Import MP4 video.
+2. Create video segments.
+3. Import Chinese SRT.
+4. Edit subtitle text.
+5. Preserve timestamps.
+6. Split long text for Gemini.
+7. Copy prompt and transcript.
+8. Return translated text from Gemini.
+9. Merge translated SRT chunks.
+10. Import MP3.
+11. Record voice.
+12. Preview subtitle overlay.
+13. Render a test MP4.
+14. Save output to Gallery.
+15. Close and reopen the application.
+16. Restore an unfinished project.
+17. Handle insufficient storage.
+18. Handle missing permissions.
+19. Handle failed or interrupted rendering.
+
+Fix errors before declaring the project complete.
+
+Provide a feature completion report with:
+
+- Completed.
+- Partially completed.
+- Not implemented.
+- Known limitations.
+- Required future improvements.
+
+Never mark a feature as completed merely because its screen exists.
+
+---
+
+19. REQUIRED DELIVERABLES
+
+Provide the following:
+
+1. Complete Android source code.
+2. Complete project folder structure.
+3. Installable APK if compilation is supported.
+4. Build instructions.
+5. Installation instructions.
+6. User manual in simple language.
+7. Dependency and license list.
+8. Testing report.
+9. Known limitations.
+10. Future improvement roadmap.
+
+If the project is too large to generate in one response, work in organized stages.
+
+Do not replace complete files with unexplained snippets.
+
+When modifying a file, provide the complete updated file or a precise patch.
+
+Keep a project checklist and maintain consistency across all modules.
+
+Do not claim to have compiled or tested an APK unless you actually did so.
+
+---
+
+20. DEVELOPMENT ORDER
+
+Follow this implementation sequence:
+
+PHASE 1:
+
+- Project setup.
+- Design system.
+- Home Dashboard.
+- Navigation.
+- Local database.
+- Project management.
+
+PHASE 2:
+
+- Drama Library.
+- Video Import.
+- Video Index.
+- Segment management.
+
+PHASE 3:
+
+- Gemini handoff.
+- Prompt templates.
+- Copy/share workflow.
+- Chunk management.
+- Returned response import.
+
+PHASE 4:
+
+- Subtitle Studio.
+- SRT/VTT/TXT parsing.
+- Burmese font support.
+- Subtitle preview.
+- Terminology dictionary.
+
+PHASE 5:
+
+- Speech-to-text.
+- TTS.
+- MP3 management.
+- Audio recording.
+
+PHASE 6:
+
+- Studio Editor.
+- Timeline.
+- Audio mixing.
+- Subtitle synchronization.
+
+PHASE 7:
+
+- Render Center.
+- MP4 export.
+- Gallery saving.
+- Export history.
+
+PHASE 8:
+
+- YouTube Copyright & Fair Use Assistant.
+- Final QA.
+- Performance optimization.
+- APK build.
+
+At the end of each phase:
+
+- Run tests.
+- Fix errors.
+- Update the project checklist.
+- Explain what is actually working.
+- Continue to the next phase.
+
+---
+
+FINAL INSTRUCTION
+
+I want a genuinely useful, professional Android application that I can use for my own Chines
