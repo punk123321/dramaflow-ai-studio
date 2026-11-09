@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
+import 'library_screen.dart';
 import 'placeholder_screen.dart';
 import 'workflow_screen.dart';
 
@@ -20,9 +21,12 @@ class _ShellState extends State<Shell> {
       body: IndexedStack(
         index: _index,
         children: [
-          HomeScreen(onOpenWorkflow: () => setState(() => _index = 1)),
+          HomeScreen(
+            onOpenWorkflow: () => setState(() => _index = 1),
+            onOpenLibrary: () => setState(() => _index = 2),
+          ),
           const WorkflowScreen(),
-          const PlaceholderScreen(title: 'Drama Library', phase: 2),
+          const LibraryScreen(),
           const PlaceholderScreen(title: 'Settings', phase: 4),
         ],
       ),

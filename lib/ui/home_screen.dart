@@ -9,30 +9,34 @@ import '../state/project_store.dart';
 import 'dialogs.dart';
 import 'widgets.dart';
 
+enum _Action { none, workflow, library }
+
 class _Module {
-  const _Module(this.code, this.title, this.sub, this.color, this.phase);
+  const _Module(this.code, this.title, this.sub, this.color, this.phase, [this.action = _Action.none]);
   final String code;
   final String title;
   final String sub;
   final Color color;
   final int phase;
+  final _Action action;
 }
 
 const _modules = <_Module>[
-  _Module('VI', 'Video Index', 'အပိုင်းခွဲ', Color(0xFFFF9F43), 2),
+  _Module('VI', 'Video Index', 'အပိုင်းခွဲ', Color(0xFFFF9F43), 2, _Action.workflow),
   _Module('GM', 'Recap Studio', 'Gemini handoff', Color(0xFF3DDC84), 3),
   _Module('ST', 'Subtitle Studio', 'SRT / VTT / TXT', Color(0xFF5B8CFF), 4),
   _Module('TT', 'TTS / MP3', 'အသံ ထုတ်/ဖမ်း', Color(0xFF5B8CFF), 5),
   _Module('ED', 'Video Editor', 'Timeline', Color(0xFFA46BFF), 6),
   _Module('RN', 'Render Center', 'MP4 ထုတ်', Color(0xFFF2C94C), 7),
-  _Module('DL', 'Drama Library', 'ဇာတ်လမ်း၊ အပိုင်း', Color(0xFFFF9F43), 2),
+  _Module('DL', 'Drama Library', 'ဇာတ်လမ်း၊ အပိုင်း', Color(0xFFFF9F43), 2, _Action.library),
   _Module('FU', 'Copyright & Fair Use', 'Upload မတင်ခင် စစ်', Color(0xFFF2C94C), 8),
 ];
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.onOpenWorkflow});
+  const HomeScreen({super.key, required this.onOpenWorkflow, required this.onOpenLibrary});
 
   final VoidCallback onOpenWorkflow;
+  final VoidCallback onOpenLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +87,11 @@ class HomeScreen extends StatelessWidget {
                     crossAxisSpacing: 10,
                     mainAxisExtent: 112,
                   ),
-                  itemBuilder: (_, i) => _ModuleTile(module: _modules[i]),
+                  itemBuilder: (_, i) => _ModuleTile(
+                    module: _modules[i],
+                    onOpenWorkflow: onOpenWorkflow,
+                    onOpenLibrary: onOpenLibrary,
+                  ),
                 ),
                 if (store.items.isNotEmpty) ...[
                   const SectionTitle('Project များ'),
@@ -195,9 +203,36 @@ class _ResumeCard extends StatelessWidget {
 }
 
 class _ModuleTile extends StatelessWidget {
-  const _ModuleTile({required this.module});
+  const _ModuleTile({
+    required this.module,
+    required this.onOpenWorkflow,
+    required this.onOpenLibrary,
+  });
 
   final _Module module;
+  final VoidCallback onOpenWorkflow;
+  final VoidCallback onOpenLibrary;
+
+  void _tap(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    switch (module.action) {
+      case _Action.library:
+        onOpenLibrary();
+      case _Action.workflow:
+        final store = context.read<ProjectStore>();
+        final target = store.current ?? store.resumeCandidate ?? (store.items.isNotEmpty ? store.items.first : null);
+        if (target == null) {
+          messenger.showSnackBar(const SnackBar(content: Text('Project တစ်ခု အရင်ဖန်တီးပါ။')));
+        } else {
+          store.open(target);
+          onOpenWorkflow();
+        }
+      case _Action.none:
+        messenger.showSnackBar(SnackBar(
+          content: Text('${module.title} ကို Phase ${module.phase} မှာ ရေးမယ်။ အခု မရသေးပါဘူး။'),
+        ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -210,13 +245,7 @@ class _ModuleTile extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(
-              content: Text('${module.title} ကို Phase ${module.phase} မှာ ရေးမယ်။ အခု မရသေးပါဘူး။'),
-            ));
-        },
+        onTap: () => _tap(context),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -236,7 +265,7 @@ class _ModuleTile extends StatelessWidget {
                     child: Text(module.code, style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
                   const Spacer(),
-                  Text('Phase ${module.phase}', style: const TextStyle(color: DfColors.muted, fontSize: 11)),
+                  Text(module.action == _Action.none ? 'Phase ${module.phase}' : 'သုံးလို့ရ', style: TextStyle(color: module.action == _Action.none ? DfColors.muted : DfColors.ok, fontSize: 11)),
                 ],
               ),
               const Spacer(),

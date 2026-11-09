@@ -1,6 +1,8 @@
 import 'package:aistudio/core/format.dart';
 import 'package:aistudio/core/stage.dart';
+import 'package:aistudio/data/drama.dart';
 import 'package:aistudio/data/project.dart';
+import 'package:aistudio/data/video_info.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Project fresh() => const Project(
@@ -52,11 +54,62 @@ void main() {
     expect(back.updatedAt, 5);
   });
 
+  videoTests();
+
   test('formatWhen shows time today and a date otherwise', () {
     final now = DateTime(2026, 11, 8, 12, 0);
     final today = DateTime(2026, 11, 8, 9, 14).millisecondsSinceEpoch;
     final older = DateTime(2026, 11, 5, 9, 14).millisecondsSinceEpoch;
     expect(formatWhen(today, now: now), 'ယနေ့ 09:14');
     expect(formatWhen(older, now: now), '5/11/2026');
+  });
+}
+
+void videoTests() {
+  test('withVideo stores the video and clears the Video index stage only', () {
+    var p = fresh();
+    p = p.withStage(Stage.videoIndex, true, 2).withStage(Stage.copy, true, 3);
+    const v = VideoInfo(
+      uri: 'content://x/1',
+      name: 'ep12.mp4',
+      sizeBytes: 1288490188,
+      durationMs: 2900000,
+      width: 1920,
+      height: 1080,
+      thumbnailPath: '/data/t.jpg',
+    );
+    final q = p.withVideo(v, 9);
+    expect(q.hasVideo, true);
+    expect(q.videoName, 'ep12.mp4');
+    expect(q.isDone(Stage.videoIndex), false);
+    expect(q.isDone(Stage.copy), true);
+    expect(q.updatedAt, 9);
+  });
+
+  test('video fields survive a map round trip', () {
+    const v = VideoInfo(uri: 'content://x/1', name: 'a.mp4', sizeBytes: 5, durationMs: 1000, width: 1, height: 2);
+    final p = fresh().withVideo(v, 5).copyWith(dramaId: 3);
+    final back = Project.fromMap({...p.toMap(), 'id': 1});
+    expect(back.sourceVideoUri, 'content://x/1');
+    expect(back.videoDurationMs, 1000);
+    expect(back.videoWidth, 1);
+    expect(back.dramaId, 3);
+  });
+
+  test('copyWith keeps the video fields', () {
+    const v = VideoInfo(uri: 'content://x/1', name: 'a.mp4', sizeBytes: 5, durationMs: 1000, width: 1, height: 2);
+    final p = fresh().withVideo(v, 5).copyWith(name: 'Renamed');
+    expect(p.name, 'Renamed');
+    expect(p.videoName, 'a.mp4');
+    expect(p.hasVideo, true);
+  });
+
+  test('drama status comes from episodes', () {
+    expect(dramaStatus(const []), DramaStatus.none);
+    expect(
+      dramaStatus(const [Episode(dramaId: 1, number: 1, completed: true), Episode(dramaId: 1, number: 2)]),
+      DramaStatus.ongoing,
+    );
+    expect(dramaStatus(const [Episode(dramaId: 1, number: 1, completed: true)]), DramaStatus.done);
   });
 }

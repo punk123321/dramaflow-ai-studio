@@ -24,9 +24,13 @@ class ProjectRepo {
     );
   }
 
-  /// Removes the project record only. Original video files are never touched.
+  /// Removes the project record and its video index. Original video files
+  /// are never touched.
   Future<void> delete(int id) async {
     final db = await AppDb.get();
-    await db.delete('projects', where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      await txn.delete('video_segments', where: 'project_id = ?', whereArgs: [id]);
+      await txn.delete('projects', where: 'id = ?', whereArgs: [id]);
+    });
   }
 }

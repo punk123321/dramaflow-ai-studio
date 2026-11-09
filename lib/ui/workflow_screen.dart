@@ -5,6 +5,7 @@ import '../core/stage.dart';
 import '../core/theme.dart';
 import '../data/project.dart';
 import '../state/project_store.dart';
+import 'video_index_panel.dart';
 import 'widgets.dart';
 
 class WorkflowScreen extends StatefulWidget {
@@ -135,17 +136,21 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   children: [
                     const Divider(color: DfColors.line, height: 1),
                     const SizedBox(height: 10),
-                    Text(
-                      'ဒီအဆင့်ရဲ့ တကယ့်လုပ်ဆောင်ချက်ကို Phase ${s.phase} မှာ ရေးမယ်။ အခုတော့ ပြီးကြောင်း မှတ်ထားလို့ရပါတယ်။',
-                      style: const TextStyle(color: DfColors.muted, fontSize: 13),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: done,
-                      onChanged: (v) => store.setStageDone(p, s, v),
-                      title: const Text('ဒီအဆင့် ပြီးပြီ'),
-                    ),
-                    const FilledButton(onPressed: null, child: Text('လုပ်ဆောင်ချက် (မကြာမီ)')),
+                    if (s == Stage.videoIndex)
+                      VideoIndexPanel(project: p)
+                    else ...[
+                      Text(
+                        'ဒီအဆင့်ရဲ့ တကယ့်လုပ်ဆောင်ချက်ကို Phase ${s.phase} မှာ ရေးမယ်။ အခုတော့ ပြီးကြောင်း မှတ်ထားလို့ရပါတယ်။',
+                        style: const TextStyle(color: DfColors.muted, fontSize: 13),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: done,
+                        onChanged: (v) => store.setStageDone(p, s, v),
+                        title: const Text('ဒီအဆင့် ပြီးပြီ'),
+                      ),
+                      const FilledButton(onPressed: null, child: Text('လုပ်ဆောင်ချက် (မကြာမီ)')),
+                    ],
                   ],
                 ),
               ),

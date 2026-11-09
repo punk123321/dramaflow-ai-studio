@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../data/drama.dart';
+import '../state/library_store.dart';
 import '../state/project_store.dart';
 
 /// Bottom sheet that creates a project. Returns when the sheet closes.
@@ -25,6 +27,7 @@ class _NewProjectSheetState extends State<_NewProjectSheet> {
   final _drama = TextEditingController();
   final _episode = TextEditingController(text: '1');
   String? _error;
+  int? _dramaId;
 
   @override
   void dispose() {
@@ -48,7 +51,7 @@ class _NewProjectSheetState extends State<_NewProjectSheet> {
     }
     final store = context.read<ProjectStore>();
     final nav = Navigator.of(context);
-    await store.create(name: name, dramaTitle: drama, episode: ep);
+    await store.create(name: name, dramaTitle: drama, episode: ep, dramaId: _dramaId);
     if (nav.mounted) nav.pop();
   }
 
@@ -74,6 +77,31 @@ class _NewProjectSheetState extends State<_NewProjectSheet> {
               decoration: const InputDecoration(labelText: 'Project နာမည်'),
             ),
             const SizedBox(height: 12),
+            Builder(builder: (context) {
+              final dramas = context.watch<LibraryStore>().dramas;
+              if (dramas.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _dramaId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Drama Library မှ ရွေးမယ် (မရွေးလည်းရ)'),
+                  items: [
+                    const DropdownMenuItem<int?>(value: null, child: Text('မရွေးဘူး')),
+                    for (final Drama d in dramas)
+                      DropdownMenuItem<int?>(value: d.id, child: Text(d.displayTitle, overflow: TextOverflow.ellipsis)),
+                  ],
+                  onChanged: (v) {
+                    setState(() => _dramaId = v);
+                    if (v != null) {
+                      for (final d in dramas) {
+                        if (d.id == v) _drama.text = d.displayTitle;
+                      }
+                    }
+                  },
+                ),
+              );
+            }),
             TextField(
               controller: _drama,
               textInputAction: TextInputAction.next,
