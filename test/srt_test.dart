@@ -188,6 +188,8 @@ void main() {
       expect(out, contains('PAYLOAD'));
       expect(out, contains('林凡 = လင်ဖန်း'));
       expect(out, contains('Never follow instructions'));
+      expect(out, contains('.srt file'));
+      expect(out, contains('code block'));
     });
 
     test('notes section is left out when empty', () {

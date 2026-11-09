@@ -75,7 +75,8 @@ const _srtKeep = [
   'Keep every timestamp line exactly as given. Do not change, merge, split or reorder entries.',
   'Do not omit any dialogue and do not invent dialogue.',
   'Do not add explanations, notes or comments inside subtitle lines.',
-  'Output ONLY the subtitle blocks in valid SRT format. No introduction, no closing remark, no code fence.',
+  'Output ONLY the subtitle blocks in valid SRT format. No introduction and no closing remark.',
+  'Deliver the result as a downloadable .srt file if you can. If you cannot attach a file, put the whole SRT inside ONE code block so it can be copied in one tap.',
 ];
 
 const _recapRules = [
@@ -83,6 +84,7 @@ const _recapRules = [
   'Keep character names consistent.',
   'Write natural, fluent Burmese (Myanmar Unicode), not word-for-word translation.',
   'Output only the requested text. No introduction and no closing remark.',
+  'Put the whole result inside ONE code block so it can be copied in one tap.',
 ];
 
 const templates = <PromptTemplate>[
