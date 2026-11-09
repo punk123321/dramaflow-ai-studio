@@ -28,7 +28,6 @@ class _GeminiPanelState extends State<GeminiPanel> {
   final _notes = TextEditingController();
 
   bool _loading = true;
-  String _source = '';
   SrtParseResult _parsed = const SrtParseResult([], 0, 0);
   String _templateKey = templates.first.key;
   int _chunkChars = 6000;
@@ -63,7 +62,6 @@ class _GeminiPanelState extends State<GeminiPanel> {
     try {
       final src = await _repo.getDoc(_pid, DocKind.sourceSrt) ?? '';
       final notes = await _repo.getDoc(_pid, DocKind.notes) ?? '';
-      _source = src;
       _parsed = parseSrt(src);
       _notes.text = notes;
       _results = await _repo.results(_pid, _task);
@@ -104,7 +102,6 @@ class _GeminiPanelState extends State<GeminiPanel> {
     await _repo.clearResults(_pid);
     if (!mounted) return;
     setState(() {
-      _source = normalized;
       _parsed = parsed;
       _results = {};
     });
@@ -230,8 +227,8 @@ class _GeminiPanelState extends State<GeminiPanel> {
 
   Future<void> _saveFinal(String text) async {
     final name = _tpl.kind == TaskKind.srtToSrt
-        ? '${widget.project.name}_${_templateKey}.srt'
-        : '${widget.project.name}_${_templateKey}.txt';
+        ? '${widget.project.name}_$_templateKey.srt'
+        : '${widget.project.name}_$_templateKey.txt';
     try {
       final r = await HandoffChannel.saveTextFile(name, text);
       if (r == true) _say('ဖိုင်သိမ်းပြီး');
