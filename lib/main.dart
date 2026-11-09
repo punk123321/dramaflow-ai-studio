@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'core/theme.dart';
 import 'data/drama_repo.dart';
+import 'data/handoff_repo.dart';
 import 'data/project_repo.dart';
 import 'data/segment_repo.dart';
 import 'state/library_store.dart';
@@ -15,7 +16,7 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => ProjectStore(ProjectRepo(), SegmentRepo())..load(),
+          create: (_) => ProjectStore(ProjectRepo(), SegmentRepo(), HandoffRepo())..load(),
         ),
         ChangeNotifierProvider(
           create: (_) => LibraryStore(DramaRepo())..load(),

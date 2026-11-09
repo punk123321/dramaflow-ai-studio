@@ -30,6 +30,8 @@ class ProjectRepo {
     final db = await AppDb.get();
     await db.transaction((txn) async {
       await txn.delete('video_segments', where: 'project_id = ?', whereArgs: [id]);
+      await txn.delete('documents', where: 'project_id = ?', whereArgs: [id]);
+      await txn.delete('handoff_results', where: 'project_id = ?', whereArgs: [id]);
       await txn.delete('projects', where: 'id = ?', whereArgs: [id]);
     });
   }

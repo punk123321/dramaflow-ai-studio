@@ -50,9 +50,24 @@ Known limits of Phase 2:
 - Video Index lives inside workflow step 1. There is no separate Video Index screen yet.
 - The picked video is kept as a link. If the file is moved or deleted, a later phase must show a clear "file missing" message (not built yet).
 
+## Phase 3 - Gemini handoff (written, awaiting CI and phone test)
+
+| Item | Automated test | Phone test |
+|---|---|---|
+| SRT parse/write, BOM, CRLF, dot ms, missing numbers | yes (CI) | - |
+| Chunking never loses or splits an entry | yes (CI) | - |
+| Merge keeps source numbers and timestamps even if Gemini changes them | yes (CI) | - |
+| Reply cleanup (code fences, chatter) and chunk report | yes (CI) | - |
+| 10 prompt templates | content tested | quality with real Gemini: not tested |
+| DB v3 tables, v2 to v3 upgrade, delete/copy with project | yes (CI) | - |
+| Share to Gemini app (package com.google.android.apps.bard), chooser fallback | no | needs phone |
+| Import SRT file, save final SRT file | no | needs phone |
+| Burmese text round trip through Gemini | text round trip tested | needs phone |
+
+Known limits: results are checked by number and time, not by translation quality. Share is refused above 200,000 characters.
+
 ## Not started
 
-- Phase 3: Gemini handoff, prompt templates, chunking, import of results
 - Phase 4: Subtitle Studio, terminology dictionary, subtitle preview
 - Phase 5: speech-to-text, TTS, MP3, voice recording
 - Phase 6: Studio editor, timeline

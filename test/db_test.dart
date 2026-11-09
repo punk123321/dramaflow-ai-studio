@@ -2,6 +2,7 @@ import 'package:aistudio/core/segments.dart';
 import 'package:aistudio/data/app_db.dart';
 import 'package:aistudio/data/drama.dart';
 import 'package:aistudio/data/drama_repo.dart';
+import 'package:aistudio/data/handoff_repo.dart';
 import 'package:aistudio/data/project.dart';
 import 'package:aistudio/data/project_repo.dart';
 import 'package:aistudio/data/segment_repo.dart';
@@ -130,6 +131,71 @@ void main() {
     final tables = (await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
         .map((r) => r['name'])
         .toList();
-    expect(tables, containsAll(['projects', 'dramas', 'episodes', 'video_segments']));
+    expect(tables, containsAll(['projects', 'dramas', 'episodes', 'video_segments', 'documents', 'handoff_results']));
+  });
+
+  test('handoff: documents and results are saved, replaced, copied and removed with the project', () async {
+    final prepo = ProjectRepo();
+    final h = HandoffRepo();
+    final a = await prepo.insert(_project('A'));
+    final id = a.id!;
+
+    expect(await h.getDoc(id, DocKind.sourceSrt), isNull);
+    await h.setDoc(id, DocKind.sourceSrt, 'one');
+    await h.setDoc(id, DocKind.sourceSrt, 'two');
+    expect(await h.getDoc(id, DocKind.sourceSrt), 'two');
+
+    await h.saveResult(id, 'zh_my:6000', 0, 'မြန်မာ');
+    await h.saveResult(id, 'zh_my:6000', 1, 'b');
+    await h.saveResult(id, 'zh_my:6000', 1, 'c');
+    await h.saveResult(id, 'recap_short:12000', 0, 'other task');
+    expect(await h.results(id, 'zh_my:6000'), {0: 'မြန်မာ', 1: 'c'});
+    expect((await h.results(id, 'recap_short:12000')).length, 1);
+
+    await h.deleteResult(id, 'zh_my:6000', 0);
+    expect((await h.results(id, 'zh_my:6000')).keys, [1]);
+
+    final b = await prepo.insert(_project('B'));
+    await h.copyProject(id, b.id!);
+    expect(await h.getDoc(b.id!, DocKind.sourceSrt), 'two');
+    expect((await h.results(b.id!, 'zh_my:6000')).keys, [1]);
+
+    await prepo.delete(id);
+    expect(await h.getDoc(id, DocKind.sourceSrt), isNull);
+    expect(await h.results(id, 'zh_my:6000'), isEmpty);
+    expect(await h.getDoc(b.id!, DocKind.sourceSrt), 'two');
+  });
+
+  test('upgrade v2 -> v3 keeps data and adds handoff tables', () async {
+    final path = await _dbPath();
+    final old = await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 2,
+        onCreate: (db, v) async {
+          await db.execute(
+            "CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, "
+            "drama_title TEXT NOT NULL, episode INTEGER NOT NULL, done_mask INTEGER NOT NULL DEFAULT 0, "
+            "status TEXT NOT NULL DEFAULT 'idle', source_video_uri TEXT, created_at INTEGER NOT NULL, "
+            "updated_at INTEGER NOT NULL, drama_id INTEGER, video_name TEXT, video_size INTEGER, "
+            "video_duration_ms INTEGER, video_width INTEGER, video_height INTEGER, video_thumb TEXT)",
+          );
+        },
+      ),
+    );
+    await old.insert('projects', {
+      'name': 'V2',
+      'drama_title': 'T',
+      'episode': 1,
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await old.close();
+
+    final h = HandoffRepo();
+    final id = (await ProjectRepo().all()).single.id!;
+    await h.setDoc(id, DocKind.notes, 'n');
+    expect(await h.getDoc(id, DocKind.notes), 'n');
+    expect((await ProjectRepo().all()).single.name, 'V2');
   });
 }

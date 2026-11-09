@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 ///
 /// Version 1: projects.
 /// Version 2: video fields on projects, dramas, episodes, video_segments.
+/// Version 3: documents and handoff_results (Gemini handoff).
 class AppDb {
   static Database? _db;
 
@@ -14,13 +15,15 @@ class AppDb {
     final dir = await getDatabasesPath();
     final db = await openDatabase(
       p.join(dir, 'dramaflow.db'),
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await _createV1(db);
         await _upgradeToV2(db);
+        await _upgradeToV3(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _upgradeToV2(db);
+        if (oldVersion < 3) await _upgradeToV3(db);
       },
     );
     _db = db;
@@ -91,5 +94,24 @@ CREATE TABLE video_segments (
 )''');
     await db.execute('CREATE INDEX idx_segments_project ON video_segments(project_id)');
     await db.execute('CREATE INDEX idx_episodes_drama ON episodes(drama_id)');
+  }
+
+  static Future<void> _upgradeToV3(Database db) async {
+    await db.execute('''
+CREATE TABLE documents (
+  project_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (project_id, kind)
+)''');
+    await db.execute('''
+CREATE TABLE handoff_results (
+  project_id INTEGER NOT NULL,
+  task TEXT NOT NULL,
+  chunk_idx INTEGER NOT NULL,
+  result TEXT NOT NULL,
+  PRIMARY KEY (project_id, task, chunk_idx)
+)''');
   }
 }

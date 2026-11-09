@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../core/segments.dart';
 import '../core/stage.dart';
 import '../data/project.dart';
+import '../data/handoff_repo.dart';
 import '../data/project_repo.dart';
 import '../data/segment_repo.dart';
 import '../data/video_info.dart';
@@ -10,10 +11,11 @@ import '../data/video_info.dart';
 /// App-wide project state. Every change is written to SQLite first, then
 /// reflected in memory, so closing and reopening the app restores it.
 class ProjectStore extends ChangeNotifier {
-  ProjectStore(this._repo, this._segRepo);
+  ProjectStore(this._repo, this._segRepo, [this._handoff]);
 
   final ProjectRepo _repo;
   final SegmentRepo _segRepo;
+  final HandoffRepo? _handoff;
 
   List<Project> items = [];
   int? currentId;
@@ -123,6 +125,7 @@ class ProjectStore extends ChangeNotifier {
       if (p.id != null && saved.id != null) {
         final segs = await _segRepo.load(p.id!);
         if (segs.isNotEmpty) await _segRepo.replaceAll(saved.id!, segs);
+        await _handoff?.copyProject(p.id!, saved.id!);
       }
       items = [saved, ...items];
     });
