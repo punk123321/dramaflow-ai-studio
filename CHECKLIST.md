@@ -66,9 +66,21 @@ Known limits of Phase 2:
 
 Known limits: results are checked by number and time, not by translation quality. Share is refused above 200,000 characters.
 
+## Phase 4 - Subtitle Studio (written, awaiting CI and phone test)
+
+Scope: edit line by line, split, merge, delete, shift time, fix overlaps, problem finder, terminology list, preview, undo, export. VTT/TXT import and a video-synced preview are NOT built yet.
+
+| Item | Automated test | Phone test |
+|---|---|---|
+| merge / split / delete / shift / overlap fix keep numbering and valid times | yes (CI) | - |
+| time field parsing | yes (CI) | - |
+| problem finder (fast, short, empty, overlap, long line) | yes (CI) | - |
+| terminology list apply | yes (CI) | - |
+| Studio screen, edit sheet, preview, undo, persistence after restart | no | needs phone |
+| Burmese text in list and preview | no | needs phone |
+
 ## Not started
 
-- Phase 4: Subtitle Studio, terminology dictionary, subtitle preview
 - Phase 5: speech-to-text, TTS, MP3, voice recording
 - Phase 6: Studio editor, timeline
 - Phase 7: Render Center, Gallery save, export history
@@ -82,3 +94,9 @@ Known limits: results are checked by number and time, not by translation quality
 - The first CI build found one real error (enum value `index` clashed with Dart's built-in `index`). It was renamed to `videoIndex` and the second build passed.
 - Dependency versions and licenses are not verified against pub.dev.
 - Module tiles on Home only show a "later phase" message.
+
+## Ideas for later (from the user, not scheduled yet)
+
+- Thumbnail Studio (idea from aifunmyanmar/Audiobook-Studio, no code copied; that repo has no license): title, episode, 6 layouts, frame from the video as background, drawn on a Flutter canvas. Fits next to Phase 7.
+- Gemini cover-art prompt through the same share flow as Phase 3.
+- Not planned: YouTube audio download (yt-dlp).

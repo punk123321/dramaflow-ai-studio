@@ -6,6 +6,9 @@ import 'app_db.dart';
 class DocKind {
   static const sourceSrt = 'source_srt';
   static const notes = 'notes';
+
+  /// The subtitles being edited in the Subtitle Studio.
+  static const studioSrt = 'studio_srt';
 }
 
 /// Source subtitles, name/term notes and the replies brought back from Gemini.

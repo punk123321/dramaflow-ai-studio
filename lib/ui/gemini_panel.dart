@@ -10,6 +10,7 @@ import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/handoff_channel.dart';
 import '../state/project_store.dart';
+import 'subtitle_studio_screen.dart';
 
 /// Stage 2: hand subtitle chunks to the Gemini app and bring the replies back.
 /// There is no API. Text goes out by Android share or copy, and comes back by
@@ -237,6 +238,35 @@ class _GeminiPanelState extends State<GeminiPanel> {
     }
   }
 
+  void _openStudio() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubtitleStudioScreen(project: widget.project)));
+  }
+
+  /// Puts the merged result into the Studio. Asks first when the Studio
+  /// already holds edits, so nothing is overwritten silently.
+  Future<void> _sendToStudio(String text) async {
+    final existing = await _repo.getDoc(_pid, DocKind.studioSrt);
+    if (existing != null && existing.trim().isNotEmpty && existing != _source0()) {
+      if (!mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Studio ထဲမှာ ပြင်ထားတာ ရှိတယ်'),
+          content: const Text('အစားထိုးရင် အဲဒါတွေ ပျောက်မယ်။'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('မလုပ်ဘူး')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('အစားထိုး')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await _repo.setDoc(_pid, DocKind.studioSrt, text);
+    if (mounted) _openStudio();
+  }
+
+  String _source0() => serializeSrt(_parsed.entries);
+
   Future<void> _useAsSource(String text) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -292,6 +322,8 @@ class _GeminiPanelState extends State<GeminiPanel> {
         Wrap(spacing: 8, children: [
           OutlinedButton.icon(onPressed: _importFile, icon: const Icon(Icons.file_open, size: 18), label: const Text('ဖိုင်ကထည့်')),
           OutlinedButton.icon(onPressed: _pasteSource, icon: const Icon(Icons.paste, size: 18), label: const Text('ကူးထည့်')),
+          if (hasSource)
+            OutlinedButton.icon(onPressed: _openStudio, icon: const Icon(Icons.edit_note, size: 18), label: const Text('Studio ဖွင့်')),
         ]),
         if (hasSource) ...[
           const SizedBox(height: 14),
@@ -351,6 +383,8 @@ class _GeminiPanelState extends State<GeminiPanel> {
               FilledButton.tonalIcon(onPressed: () => _saveFinal(fin.text), icon: const Icon(Icons.save_alt, size: 18), label: const Text('ဖိုင်သိမ်း')),
               if (_tpl.kind == TaskKind.srtToSrt)
                 OutlinedButton(onPressed: () => _useAsSource(fin.text), child: const Text('Source အသစ်လုပ်')),
+              if (_tpl.kind == TaskKind.srtToSrt)
+                FilledButton.tonal(onPressed: () => _sendToStudio(fin.text), child: const Text('Studio မှာ ပြင်')),
             ]),
           ],
         ],
