@@ -192,6 +192,14 @@ void main() {
       expect(out, contains('code block'));
     });
 
+    test('SRT prompts ask for a .srt file or one code block', () {
+      for (final t in templates.where((t) => t.kind == TaskKind.srtToSrt)) {
+        final out = t.build(const PromptContext(chunkNumber: 1, chunkTotal: 1, payload: 'x'));
+        expect(out, contains('.srt file'));
+        expect(out, contains('ONE code block'));
+      }
+    });
+
     test('notes section is left out when empty', () {
       final out = templateByKey('zh_my').build(const PromptContext(chunkNumber: 1, chunkTotal: 1, payload: 'x'));
       expect(out.contains('PREFERENCES'), isFalse);
