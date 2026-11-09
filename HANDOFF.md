@@ -27,9 +27,13 @@ Key rules from the spec: Flutter + Kotlin, local SQLite, no Gemini or OpenAI API
 
 The three HTML pages were published as private artifacts in the previous account. They do not move between accounts. To use them again, publish these files as new artifacts. They need the `sample` capability (Recap Studio also needs `{images: true}` and `downloads`).
 
+## Update (Phase 2)
+
+Phase 2 is written and builds in CI with 29 passing tests (see CHECKLIST.md). It is not yet checked on a phone. The repo is `punk123321/dramaflow-ai-studio`; APKs come from the Build APK workflow.
+
 ## Not done
 
-Phase 2 onward: Drama Library, video import and index, Gemini handoff and prompt templates, subtitle studio, speech-to-text, TTS and audio, editor, render, copyright assistant, backup and restore. See the checklist.
+Phase 3 onward: Gemini handoff and prompt templates, subtitle studio, speech-to-text, TTS and audio, editor, render, copyright assistant, backup and restore. See the checklist.
 
 ## Known limits
 
