@@ -6,7 +6,9 @@ import 'data/drama_repo.dart';
 import 'data/handoff_repo.dart';
 import 'data/project_repo.dart';
 import 'data/segment_repo.dart';
+import 'data/export_item.dart';
 import 'state/library_store.dart';
+import 'state/render_store.dart';
 import 'state/project_store.dart';
 import 'ui/shell.dart';
 
@@ -18,6 +20,7 @@ void main() {
         ChangeNotifierProvider(
           create: (_) => ProjectStore(ProjectRepo(), SegmentRepo(), HandoffRepo())..load(),
         ),
+        ChangeNotifierProvider(lazy: false, create: (_) => RenderStore(ExportRepo())),
         ChangeNotifierProvider(
           create: (_) => LibraryStore(DramaRepo())..load(),
         ),

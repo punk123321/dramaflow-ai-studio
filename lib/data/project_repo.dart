@@ -33,6 +33,7 @@ class ProjectRepo {
       await txn.delete('documents', where: 'project_id = ?', whereArgs: [id]);
       await txn.delete('handoff_results', where: 'project_id = ?', whereArgs: [id]);
       await txn.delete('audio_clips', where: 'project_id = ?', whereArgs: [id]);
+      await txn.delete('exports', where: 'project_id = ?', whereArgs: [id]);
       await txn.delete('projects', where: 'id = ?', whereArgs: [id]);
     });
   }

@@ -116,10 +116,29 @@ Not built (honest): preview does NOT play narration or music together with the v
 
 Stage 3 (TTS) now has "Gemini ကို Recap narration ရေးခိုင်း": a TTS-friendly narration prompt (spoken Burmese, no symbols, numbers in words), a target length in minutes split across chunks by dialogue time, copy/share to the Gemini app, paste the reply back, then "Recap ရလဒ်ကယူ" fills the script. Prompt text is tested; how well Gemini follows the length target needs the phone.
 
+## Phase 7 - Render Center, MP4 export, Gallery, export history (written, awaiting CI and phone test)
+
+Library choice: AndroidX Media3 Transformer 1.5.1 (maintained by Google, Android native, Apache 2.0). No FFmpeg, so no extra licence questions. It is added to the generated Android project by native/patch_gradle.py in CI.
+
+Built: pieces cut from the original and joined, narration (with gaps and overlap lanes) and background music mixed with volumes, optional original sound, subtitles burned in (remapped to the edit timeline), 720p or 1080p, 24/25/30 fps, progress, safe cancel, free-space check, size estimate, writes NAME.part.mp4 and renames only when finished (an interrupted render leaves no fake video), keeps the screen on while rendering, export history, save to Gallery (Movies/DramaFlow, Android 10+) or as a file (any Android), delete.
+
+Honest limits:
+- Nothing here has been run on a phone. Media3 compiles in CI but real rendering, audio mixing, gaps and Burmese subtitle shaping are NOT verified.
+- The render needs the app open. There is no background service yet, so if Android kills the app the render stops (the unfinished file is removed on the next start).
+- The output is as long as the video pieces; narration or music longer than the video is cut.
+- Subtitle look is fixed (white text on a dark band at the bottom). Font and style options are not built.
+- Speed depends on the phone. A long video can take longer than its own length.
+
+| Item | Automated test | Phone test |
+|---|---|---|
+| Size estimate, voice lanes, job JSON, blockers, file name | yes (CI) | - |
+| exports table, history order, delete with project | yes (CI) | - |
+| Media3 build, render of a 30 second test, audio mixing, subtitles, cancel, low storage | no | needs phone |
+| Save to Gallery, save as file | no | needs phone |
+
 ## Not started
 
 - Phase 5 leftovers: speech-to-text, MP3 encoding
-- Phase 7: Render Center, Gallery save, export history
 - Phase 8: Copyright and Fair Use assistant, final QA
 - Backup and restore, project history
 - Burmese UI language switch (the text is Burmese only for now)

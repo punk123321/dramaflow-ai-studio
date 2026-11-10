@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 /// Version 2: video fields on projects, dramas, episodes, video_segments.
 /// Version 3: documents and handoff_results (Gemini handoff).
 /// Version 4: audio_clips (TTS, microphone, imported audio).
+/// Version 5: exports (finished renders and export history).
 class AppDb {
   static Database? _db;
 
@@ -16,17 +17,19 @@ class AppDb {
     final dir = await getDatabasesPath();
     final db = await openDatabase(
       p.join(dir, 'dramaflow.db'),
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await _createV1(db);
         await _upgradeToV2(db);
         await _upgradeToV3(db);
         await _upgradeToV4(db);
+        await _upgradeToV5(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) await _upgradeToV2(db);
         if (oldVersion < 3) await _upgradeToV3(db);
         if (oldVersion < 4) await _upgradeToV4(db);
+        if (oldVersion < 5) await _upgradeToV5(db);
       },
     );
     _db = db;
@@ -132,5 +135,21 @@ CREATE TABLE audio_clips (
   created_at INTEGER NOT NULL
 )''');
     await db.execute('CREATE INDEX idx_audio_project ON audio_clips(project_id)');
+  }
+
+  static Future<void> _upgradeToV5(Database db) async {
+    await db.execute('''
+CREATE TABLE exports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  path TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  in_gallery INTEGER NOT NULL DEFAULT 0
+)''');
+    await db.execute('CREATE INDEX idx_exports_project ON exports(project_id)');
   }
 }

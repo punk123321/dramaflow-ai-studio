@@ -55,6 +55,7 @@ class MainActivity : FlutterActivity() {
     private var pendingMicResult: MethodChannel.Result? = null
     private var pendingMicName: String? = null
     private var channel: MethodChannel? = null
+    private var render: RenderEngine? = null
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -68,6 +69,12 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
         channel = ch
+        val rch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dramaflow.aistudio/render")
+        val engine = RenderEngine(this, rch)
+        render = engine
+        rch.setMethodCallHandler { call, result ->
+            if (!engine.handle(call.method, call.arguments as? Map<*, *>, result)) result.notImplemented()
+        }
         ch.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickVideo" -> startPickVideo(result)

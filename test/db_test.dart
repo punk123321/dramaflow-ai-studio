@@ -3,6 +3,7 @@ import 'package:aistudio/data/app_db.dart';
 import 'package:aistudio/data/audio_clip.dart';
 import 'package:aistudio/data/drama.dart';
 import 'package:aistudio/data/drama_repo.dart';
+import 'package:aistudio/data/export_item.dart';
 import 'package:aistudio/data/handoff_repo.dart';
 import 'package:aistudio/data/project.dart';
 import 'package:aistudio/data/project_repo.dart';
@@ -132,7 +133,7 @@ void main() {
     final tables = (await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
         .map((r) => r['name'])
         .toList();
-    expect(tables, containsAll(['projects', 'dramas', 'episodes', 'video_segments', 'documents', 'handoff_results', 'audio_clips']));
+    expect(tables, containsAll(['projects', 'dramas', 'episodes', 'video_segments', 'documents', 'handoff_results', 'audio_clips', 'exports']));
   });
 
   test('handoff: documents and results are saved, replaced, copied and removed with the project', () async {
@@ -242,5 +243,36 @@ void main() {
     await h.saveResult(a.id!, 'zh_recap:12000', 1, 'y');
     await h.saveResult(a.id!, 'yt_script:12000', 0, 'z');
     expect(await h.resultTasks(a.id!), {'zh_recap:12000': 2, 'yt_script:12000': 1});
+  });
+
+  test('exports: history, newest first, gallery flag, delete with the project', () async {
+    final prepo = ProjectRepo();
+    final erepo = ExportRepo();
+    final a = await prepo.insert(_project('A'));
+    ExportItem item(String n, int at) => ExportItem(
+          projectId: a.id!,
+          name: n,
+          path: '/r/$n.mp4',
+          sizeBytes: 1000,
+          durationMs: 60000,
+          height: 720,
+          createdAt: at,
+        );
+    await erepo.insert(item('one', 1));
+    final two = await erepo.insert(item('two', 2));
+    var list = await erepo.forProject(a.id!);
+    expect(list.map((e) => e.name), ['two', 'one']);
+    expect(list.first.inGallery, isFalse);
+
+    await erepo.markInGallery(two.id!);
+    list = await erepo.forProject(a.id!);
+    expect(list.first.inGallery, isTrue);
+    expect(list.last.inGallery, isFalse);
+
+    await erepo.delete(two.id!);
+    expect((await erepo.forProject(a.id!)).length, 1);
+
+    await prepo.delete(a.id!);
+    expect(await erepo.forProject(a.id!), isEmpty);
   });
 }
