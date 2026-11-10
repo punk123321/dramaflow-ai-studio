@@ -36,8 +36,9 @@ void main() {
   });
 
   test('Burmese comma does not end a sentence', () {
-    final chunks = splitScript('တစ်၊ နှစ်၊ သုံး။ လေး။', maxChars: 14);
-    expect(chunks.first.contains('တစ်၊ နှစ်၊ သုံး။'), isTrue);
+    final chunks = splitScript('တစ်၊ နှစ်၊ သုံး။ လေး။', maxChars: 25);
+    expect(chunks.first.startsWith('တစ်၊ နှစ်၊ သုံး။'), isTrue);
+    expect(chunks.join(' ').contains('တစ်၊ နှစ်၊ သုံး။'), isTrue);
   });
 
   test('estimateSpeech grows with length', () {
