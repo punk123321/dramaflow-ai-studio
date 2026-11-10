@@ -136,6 +136,13 @@ Honest limits:
 | Media3 build, render of a 30 second test, audio mixing, subtitles, cancel, low storage | no | needs phone |
 | Save to Gallery, save as file | no | needs phone |
 
+## Next: Phase 7b - look options (asked by the user)
+
+- Subtitle style: font size, text color, background on/off, top or bottom position.
+- Logo image: pick a picture, choose corner, size, opacity.
+- Text badges in the corners, for example "translate by Brutal Knockout": text, corner, size, color.
+- Shown in the editor preview and burned into the render.
+
 ## Not started
 
 - Phase 5 leftovers: speech-to-text, MP3 encoding
