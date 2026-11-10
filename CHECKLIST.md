@@ -118,7 +118,7 @@ Stage 3 (TTS) now has "Gemini ကို Recap narration ရေးခိုင်
 
 ## Phase 7 - Render Center, MP4 export, Gallery, export history (written, awaiting CI and phone test)
 
-Library choice: AndroidX Media3 Transformer 1.5.1 (maintained by Google, Android native, Apache 2.0). No FFmpeg, so no extra licence questions. It is added to the generated Android project by native/patch_gradle.py in CI.
+Library choice: AndroidX Media3 Transformer 1.8.0 (maintained by Google, Android native, Apache 2.0). No FFmpeg, so no extra licence questions. It is added to the generated Android project by native/patch_gradle.py in CI.
 
 Built: pieces cut from the original and joined, narration (with gaps and overlap lanes) and background music mixed with volumes, optional original sound, subtitles burned in (remapped to the edit timeline), 720p or 1080p, 24/25/30 fps, progress, safe cancel, free-space check, size estimate, writes NAME.part.mp4 and renames only when finished (an interrupted render leaves no fake video), keeps the screen on while rendering, export history, save to Gallery (Movies/DramaFlow, Android 10+) or as a file (any Android), delete.
 

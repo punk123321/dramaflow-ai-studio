@@ -3,7 +3,7 @@ import os
 import sys
 
 app = sys.argv[1]
-V = "1.5.1"
+V = "1.8.0"
 mods = ["media3-transformer", "media3-effect", "media3-common"]
 
 for name, kts in (("build.gradle.kts", True), ("build.gradle", False)):
