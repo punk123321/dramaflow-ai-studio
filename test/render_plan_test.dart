@@ -9,8 +9,8 @@ void main() {
   group('size estimate', () {
     test('720p 30 fps: about 4 Mbps video + 128 kbps audio', () {
       final b = estimateBytes(60000, const RenderSettings());
-      // (4,000,000 + 128,000) bits/s * 60 s / 8 * 1.05 = 32,466,000
-      expect(b, closeTo(32466000, 100));
+      // (4,000,000 + 128,000) bits/s * 60 s / 8 * 1.05 = 32,508,000
+      expect(b, closeTo(32508000, 100));
     });
     test('1080p is bigger than 720p and a longer video is bigger', () {
       expect(estimateBytes(60000, const RenderSettings(height: 1080)), greaterThan(estimateBytes(60000, const RenderSettings())));
