@@ -195,7 +195,8 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         val lanes = job.optJSONArray("voiceLanes") ?: JSONArray()
         for (l in 0 until lanes.length()) {
             val lane = lanes.getJSONArray(l)
-            val seq = EditedMediaItemSequence.Builder()
+            // The lane may start with a gap, so say it is an audio track.
+            val seq = EditedMediaItemSequence.Builder().setForceAudioTrack(true)
             var cursorMs = 0L
             for (i in 0 until lane.length()) {
                 val v = lane.getJSONObject(i)
@@ -218,7 +219,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 .setRemoveVideo(true)
                 .setEffects(Effects(listOf(volume(music.optDouble("vol", 0.25).toFloat())), emptyList<Effect>()))
                 .build()
-            val seq = EditedMediaItemSequence.Builder()
+            val seq = EditedMediaItemSequence.Builder().setForceAudioTrack(true)
             seq.addItem(item)
             seq.setIsLooping(music.optBoolean("loop", true))
             sequences.add(seq.build())
