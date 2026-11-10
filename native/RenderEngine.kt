@@ -303,7 +303,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     }
 
     /** corner: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right. */
-    private fun cornerSettings(corner: Int): OverlaySettings {
+    private fun cornerSettings(corner: Int): StaticOverlaySettings {
         val left = corner == 0 || corner == 2
         val top = corner == 0 || corner == 1
         return StaticOverlaySettings.Builder()
@@ -326,8 +326,6 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             null
         }
     }
-
-    private class Sub(val startMs: Long, val endMs: Long, val text: String)
 
     private class SubtitleOverlay(
         private val subs: List<Sub>,
