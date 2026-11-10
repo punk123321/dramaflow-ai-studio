@@ -46,7 +46,17 @@ class _AudioPanelState extends State<AudioPanel> {
   StreamSubscription<void>? _sub;
 
   int get _pid => widget.project.id!;
-  List<String> get _chunks => splitScript(_script, maxChars: _maxChars);
+  List<String> get _chunks {
+    final real = splitScript(_script, maxChars: _maxChars);
+    if (real.isNotEmpty) return real;
+    // No script: still allow recording or importing your own voice. Each slot
+    // is an empty "free" chunk, and a new empty one appears after the last.
+    var last = -1;
+    for (final c in _clips) {
+      if (c.chunkIdx > last) last = c.chunkIdx;
+    }
+    return List.filled(last + 2, '');
+  }
 
   @override
   void initState() {
@@ -203,8 +213,9 @@ class _AudioPanelState extends State<AudioPanel> {
   }
 
   Future<void> _maybeDone() async {
-    final total = _chunks.length;
-    if (total == 0) return;
+    // Without a script the last slot is always the empty "next recording" slot.
+    final total = _script.trim().isEmpty ? _chunks.length - 1 : _chunks.length;
+    if (total <= 0) return;
     for (var i = 0; i < total; i++) {
       if (_clipOf(i) == null) return;
     }
@@ -388,7 +399,7 @@ class _AudioPanelState extends State<AudioPanel> {
           ),
           const SizedBox(height: 14),
           _section('၃။ Chunk ${chunks.length} ခု · အသံ $haveClips/${chunks.length}${totalMs > 0 ? ' · ${formatTime(totalMs)}' : ''}'),
-          if (_tts?.burmese == true)
+          if (_tts?.burmese == true && _script.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: FilledButton.tonalIcon(
@@ -438,7 +449,7 @@ class _AudioPanelState extends State<AudioPanel> {
     final recordingThis = _recording == i;
     final busyThis = _busy == i;
     final otherBusy = (_busy != null && _busy != i) || (_recording != null && _recording != i);
-    final canTts = _tts?.burmese == true;
+    final canTts = _tts?.burmese == true && text.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -455,7 +466,7 @@ class _AudioPanelState extends State<AudioPanel> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Chunk ${i + 1} · ${text.length} လုံး'
+                (text.isEmpty ? 'အသံ ${i + 1} (script မလို)' : 'Chunk ${i + 1} · ${text.length} လုံး')
                 '${clip != null ? ' · ${clip.label} ${formatTime(clip.durationMs)}' : ''}',
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
@@ -463,7 +474,7 @@ class _AudioPanelState extends State<AudioPanel> {
             if (busyThis) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
           ]),
           const SizedBox(height: 4),
-          Text(text, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: DfColors.muted, fontSize: 13)),
+          if (text.isNotEmpty) Text(text, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: DfColors.muted, fontSize: 13)),
           const SizedBox(height: 6),
           Wrap(spacing: 4, runSpacing: 2, children: [
             if (canTts)
@@ -473,6 +484,7 @@ class _AudioPanelState extends State<AudioPanel> {
               child: Text(recordingThis ? '■ ရပ်' : '● Mic'),
             ),
             TextButton(onPressed: (busyThis || recordingThis || otherBusy) ? null : () => _importAudio(i), child: const Text('ဖိုင်ထည့်')),
+            if (text.isNotEmpty)
             TextButton(
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: text));
