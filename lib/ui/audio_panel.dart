@@ -12,6 +12,7 @@ import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
+import 'gemini_panel.dart';
 import '../state/project_store.dart';
 
 /// Stage 3: turn the narration script into audio. Three ways, all local:
@@ -323,6 +324,22 @@ class _AudioPanelState extends State<AudioPanel> {
             ),
             child: Text(_msg!, style: const TextStyle(fontSize: 13)),
           ),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Gemini ကို Recap narration ရေးခိုင်း', style: TextStyle(fontWeight: FontWeight.w600, color: DfColors.accent)),
+            subtitle: const Text('ပြီးရင် အောက်က "Recap ရလဒ်ကယူ" နဲ့ Script ထဲ ထည့်', style: TextStyle(fontSize: 12, color: DfColors.muted)),
+            children: [
+              GeminiPanel(
+                project: widget.project,
+                onlyKeys: const ['narration', 'yt_script', 'recap_short', 'recap_medium', 'recap_long'],
+                initialKey: 'narration',
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
         _section('၁။ Script (အသံဖတ်ရမယ့်စာ)'),
         Text(
           _script.trim().isEmpty

@@ -16,9 +16,13 @@ import 'subtitle_studio_screen.dart';
 /// There is no API. Text goes out by Android share or copy, and comes back by
 /// paste or file import.
 class GeminiPanel extends StatefulWidget {
-  const GeminiPanel({super.key, required this.project});
+  const GeminiPanel({super.key, required this.project, this.onlyKeys, this.initialKey});
 
   final Project project;
+
+  /// Limits the task list (the audio stage only shows narration tasks).
+  final List<String>? onlyKeys;
+  final String? initialKey;
 
   @override
   State<GeminiPanel> createState() => _GeminiPanelState();
@@ -30,7 +34,8 @@ class _GeminiPanelState extends State<GeminiPanel> {
 
   bool _loading = true;
   SrtParseResult _parsed = const SrtParseResult([], 0, 0);
-  String _templateKey = templates.first.key;
+  late String _templateKey = widget.initialKey ?? widget.onlyKeys?.first ?? templates.first.key;
+  double _minutes = 5;
   int _chunkChars = 6000;
   Map<int, String> _results = {};
   String? _msg;
@@ -89,8 +94,17 @@ class _GeminiPanelState extends State<GeminiPanel> {
         chunkNumber: i + 1,
         chunkTotal: chunks.length,
         payload: _payload(chunks[i]),
-        notes: _notes.text,
+        notes: _notesFor(i, chunks),
       ));
+
+  String _notesFor(int i, List<List<SrtEntry>> chunks) {
+    if (_templateKey != 'narration' || _parsed.entries.isEmpty) return _notes.text;
+    final all = _parsed.entries;
+    final total = all.last.endMs - all.first.startMs;
+    final span = chunks[i].last.endMs - chunks[i].first.startMs;
+    final line = narrationTargetNote(_minutes, span, total);
+    return [if (line.isNotEmpty) line, _notes.text].where((t) => t.trim().isNotEmpty).join('\n');
+  }
 
   Future<void> _setSource(String text) async {
     if (!looksLikeSrt(text)) {
@@ -331,13 +345,26 @@ class _GeminiPanelState extends State<GeminiPanel> {
           DropdownButtonFormField<String>(
             initialValue: _templateKey,
             isExpanded: true,
-            items: [for (final t in templates) DropdownMenuItem(value: t.key, child: Text(t.title, overflow: TextOverflow.ellipsis))],
+            items: [for (final t in templates.where((t) => widget.onlyKeys == null || widget.onlyKeys!.contains(t.key))) DropdownMenuItem(value: t.key, child: Text(t.title, overflow: TextOverflow.ellipsis))],
             onChanged: (v) => v == null ? null : _switch(key: v, chars: templateByKey(v).defaultChunkChars),
           ),
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(_tpl.hint, style: const TextStyle(color: DfColors.muted, fontSize: 12)),
           ),
+          if (_templateKey == 'narration') ...[
+            const SizedBox(height: 8),
+            DropdownButtonFormField<double>(
+              key: ValueKey('min$_minutes'),
+              initialValue: _minutes,
+              decoration: const InputDecoration(labelText: 'Narration စုစုပေါင်း အရှည် (မိနစ်)'),
+              items: const [
+                for (final m in [1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0])
+                  DropdownMenuItem(value: m, child: Text('ခန့် ${m == m.roundToDouble() ? m.round() : m} မိနစ်')),
+              ],
+              onChanged: (v) => setState(() => _minutes = v ?? _minutes),
+            ),
+          ],
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
             key: ValueKey('chars$_chunkChars'),

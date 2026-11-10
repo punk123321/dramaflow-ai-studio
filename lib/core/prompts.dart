@@ -89,6 +89,20 @@ const _recapRules = [
 
 const templates = <PromptTemplate>[
   PromptTemplate(
+    key: 'narration',
+    title: 'Recap narration (အသံဖတ်ဖို့)',
+    hint: 'TTS နဲ့ ဖတ်ဖို့ ပြင်ဆင်ထားတဲ့ ပြောပြစာ',
+    kind: TaskKind.srtToText,
+    defaultChunkChars: 12000,
+    intro: 'You are writing narration for a drama recap video that will be read aloud by a text-to-speech voice. From the dialogue below, write the narration for this part of the drama in natural spoken Burmese (Myanmar Unicode), as if a storyteller is telling the story to a friend.',
+    rules: [
+      ..._recapRules,
+      'Write plain spoken text only: no headings, no bullet points, no emoji, no brackets, no stage directions, no timestamps.',
+      'Use short sentences that end with "။". Write numbers in words. Spell out any symbols.',
+      'Do not include any note about the text itself. The whole output will be read aloud.',
+    ],
+  ),
+  PromptTemplate(
     key: 'zh_my',
     title: 'တရုတ် → မြန်မာ ဘာသာပြန်',
     hint: 'SRT ကို အချိန်၊ နံပါတ် မပျက်ဘဲ မြန်မာလို ပြန်',
@@ -204,6 +218,18 @@ const templates = <PromptTemplate>[
     ],
   ),
 ];
+
+/// A line that tells Gemini how long one chunk of narration should be, so the
+/// narration of all chunks adds up to [totalMinutes]. The share of each chunk
+/// follows how much of the drama's dialogue time it covers.
+String narrationTargetNote(double totalMinutes, int chunkSpanMs, int totalSpanMs) {
+  if (totalMinutes <= 0 || totalSpanMs <= 0 || chunkSpanMs <= 0) return '';
+  final share = (chunkSpanMs / totalSpanMs).clamp(0.0, 1.0);
+  final mins = totalMinutes * share;
+  final shown = mins < 1 ? mins.toStringAsFixed(1) : mins.round().toString();
+  return 'LENGTH: write about $shown minute(s) of narration for this chunk when read aloud at a normal pace '
+      '(the whole video narration is about ${totalMinutes.round()} minutes).';
+}
 
 PromptTemplate templateByKey(String key) =>
     templates.firstWhere((t) => t.key == key, orElse: () => templates.first);

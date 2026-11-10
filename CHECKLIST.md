@@ -112,6 +112,10 @@ Not built (honest): preview does NOT play narration or music together with the v
 | Video preview from the picked file, subtitle overlay, play all | no | needs phone |
 | Music import, voice from Stage 3 | no | needs phone |
 
+## Added after Phase 6: Recap narration inside the TTS stage
+
+Stage 3 (TTS) now has "Gemini ကို Recap narration ရေးခိုင်း": a TTS-friendly narration prompt (spoken Burmese, no symbols, numbers in words), a target length in minutes split across chunks by dialogue time, copy/share to the Gemini app, paste the reply back, then "Recap ရလဒ်ကယူ" fills the script. Prompt text is tested; how well Gemini follows the length target needs the phone.
+
 ## Not started
 
 - Phase 5 leftovers: speech-to-text, MP3 encoding

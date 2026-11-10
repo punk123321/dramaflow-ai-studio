@@ -175,9 +175,9 @@ void main() {
   });
 
   group('prompts', () {
-    test('there are ten templates with unique keys', () {
-      expect(templates.length, 10);
-      expect(templates.map((t) => t.key).toSet().length, 10);
+    test('there are eleven templates with unique keys', () {
+      expect(templates.length, 11);
+      expect(templates.map((t) => t.key).toSet().length, 11);
     });
 
     test('SRT prompt contains chunk numbering, rules, payload and notes', () {
@@ -198,6 +198,22 @@ void main() {
         expect(out, contains('.srt file'));
         expect(out, contains('ONE code block'));
       }
+    });
+
+    test('narration template is TTS friendly', () {
+      final out = templateByKey('narration').build(const PromptContext(chunkNumber: 1, chunkTotal: 2, payload: 'x'));
+      expect(out, contains('read aloud'));
+      expect(out, contains('no headings'));
+      expect(out, contains('Write numbers in words'));
+    });
+
+    test('narration target splits the total minutes by chunk share', () {
+      final a = narrationTargetNote(10, 30 * 60000, 60 * 60000);
+      expect(a, contains('about 5 minute'));
+      expect(a, contains('about 10 minutes'));
+      expect(narrationTargetNote(2, 15 * 60000, 60 * 60000), contains('0.5'));
+      expect(narrationTargetNote(0, 1000, 1000), '');
+      expect(narrationTargetNote(5, 0, 1000), '');
     });
 
     test('notes section is left out when empty', () {
