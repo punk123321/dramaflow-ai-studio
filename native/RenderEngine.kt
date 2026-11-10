@@ -29,6 +29,7 @@ import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.TextOverlay
+import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
@@ -234,7 +235,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 val s = subs.getJSONObject(i)
                 list.add(Sub(s.getLong("s"), s.getLong("e"), s.getString("t")))
             }
-            videoEffects.add(OverlayEffect(ImmutableList.of(SubtitleOverlay(list, height))))
+            videoEffects.add(OverlayEffect(ImmutableList.of<TextureOverlay>(SubtitleOverlay(list, height))))
         }
 
         return Composition.Builder(sequences)
