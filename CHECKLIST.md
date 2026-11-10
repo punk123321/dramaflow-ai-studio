@@ -97,10 +97,24 @@ Honest scope:
 | Microphone record, permission prompt, playback | no | needs phone |
 | Import audio, export saved file | no | needs phone |
 
+## Phase 6 - Studio Editor (written, awaiting CI and phone test)
+
+What it is: an edit DESCRIPTION saved in the database (video pieces, narration, music, subtitle options). It never changes the original video. The new MP4 is made in Phase 7.
+
+Built: pieces from Video Index, add/trim/split/move/delete, narration from Stage 3 in sequence with volume and start time, background music with volume and loop, subtitle remap to the edit timeline with offset, original-sound volume, checks (errors and warnings), preview of a piece or all pieces with subtitle overlay.
+
+Not built (honest): preview does NOT play narration or music together with the video, only the video and subtitles; no drag-on-timeline UI, only lists and time fields; no sound waveform; no transitions or effects.
+
+| Item | Automated test | Phone test |
+|---|---|---|
+| trim/split/move/remove, positions, subtitle remap across cuts, save/load, checks | yes (CI) | - |
+| Editor screen, lists, dialogs, sliders | no | needs phone |
+| Video preview from the picked file, subtitle overlay, play all | no | needs phone |
+| Music import, voice from Stage 3 | no | needs phone |
+
 ## Not started
 
 - Phase 5 leftovers: speech-to-text, MP3 encoding
-- Phase 6: Studio editor, timeline
 - Phase 7: Render Center, Gallery save, export history
 - Phase 8: Copyright and Fair Use assistant, final QA
 - Backup and restore, project history

@@ -12,6 +12,9 @@ class DocKind {
 
   /// The narration text that is turned into audio (Stage 3).
   static const script = 'script';
+
+  /// The edit description (clips, voice, music, subtitle options) as JSON.
+  static const timeline = 'timeline';
 }
 
 /// Source subtitles, name/term notes and the replies brought back from Gemini.
