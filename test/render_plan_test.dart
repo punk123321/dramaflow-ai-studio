@@ -64,8 +64,8 @@ void main() {
       expect(j['height'], 1080);
       expect(j['fps'], 25);
       expect(j['pieces'], [
-        {'s': 0, 'e': 10000},
-        {'s': 20000, 'e': 30000},
+        {'s': 0, 'e': 10000, 'z': 0},
+        {'s': 20000, 'e': 30000, 'z': 0},
       ]);
       final lanes = j['voiceLanes'] as List;
       expect(lanes.length, 1);
@@ -79,6 +79,25 @@ void main() {
       expect((s.first as Map)['s'], 11100); // 21000 -> piece 2 at 10000 +1000 +100 offset
       expect((s.first as Map)['t'], 'မင်္ဂလာပါ');
       expect(j['estimateBytes'], estimateBytes(20000, const RenderSettings(height: 1080, fps: 25)));
+    });
+
+    test('style, corner texts, logo, zoom and aspect go into the job', () {
+      const t = Timeline(
+        pieces: [VideoPiece(0, 10000, ZoomMode.zoomIn)],
+        style: SubStyle(size: 0.08, color: 0xFFFFFF00, top: true),
+        corners: [CornerText(text: 'my channel', corner: Corner.topLeft), CornerText(text: '   ')],
+        logo: LogoItem(path: '/a/logo.png', corner: Corner.bottomRight),
+      );
+      final j = buildRenderJob(name: 'n', videoUri: 'v', timeline: t, sourceSubtitles: const [], settings: const RenderSettings(), aspect: 9 / 16);
+      expect((j['pieces'] as List).first, {'s': 0, 'e': 10000, 'z': 1});
+      expect(j['aspect'], 9 / 16);
+      expect((j['subStyle'] as Map)['size'], 0.08);
+      expect((j['subStyle'] as Map)['top'], isTrue);
+      final c = j['corners'] as List;
+      expect(c.length, 1); // the blank one is dropped
+      expect((c.first as Map)['t'], 'my channel');
+      expect((c.first as Map)['c'], Corner.topLeft.index);
+      expect((j['logo'] as Map)['path'], '/a/logo.png');
     });
 
     test('no music means null', () {

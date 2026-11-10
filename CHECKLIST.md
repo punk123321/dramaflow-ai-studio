@@ -143,6 +143,14 @@ Honest limits:
 - Text badges in the corners, for example "translate by Brutal Knockout": text, corner, size, color.
 - Shown in the editor preview and burned into the render.
 
+## Added after Phase 7: subtitle style, own logo, corner text, zoom
+
+Built: subtitle size, colour, dark band on/off, top or bottom; your own logo picture in any corner (size, opacity); your own corner texts (any text, 4 corners, colour, size); slow zoom in or out per video piece (100% to 115%). All saved in the edit description and sent to the renderer.
+
+Decided NOT to build (by design, and in the original spec): removing or covering other people's watermarks or logos, and tricks meant to avoid copyright detection (Content ID). Zoom here is for framing only and does not protect against copyright claims. Phase 8 adds a Fair Use assistant instead.
+
+Needs phone testing: how the corner texts, logo and zoom look in a real render, and whether Burmese corner text shapes correctly. Zoom timing assumes the effect clock starts at zero for each piece; if a later piece zooms from the wrong point, report it.
+
 ## Not started
 
 - Phase 5 leftovers: speech-to-text, MP3 encoding

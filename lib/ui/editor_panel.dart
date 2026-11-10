@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -322,6 +324,32 @@ class _EditorPanelState extends State<EditorPanel> {
     }
   }
 
+  Future<void> _pickLogo() async {
+    try {
+      final path = await AudioChannel.pickImage();
+      if (path == null) return;
+      final old = _tl.logo;
+      await _set(_tl.copyWith(logo: (old ?? const LogoItem(path: '')).copyWith(path: path)), msg: 'Logo ထည့်ပြီး');
+    } catch (e) {
+      setState(() => _error = 'ပုံယူလို့မရပါ: $e');
+    }
+  }
+
+  Future<void> _editCorner(int? i) async {
+    final r = await showDialog<CornerText>(
+      context: context,
+      builder: (_) => _CornerDialog(initial: i == null ? const CornerText(text: '') : _tl.corners[i]),
+    );
+    if (r == null || r.text.trim().isEmpty) return;
+    final list = [..._tl.corners];
+    if (i == null) {
+      list.add(r);
+    } else {
+      list[i] = r;
+    }
+    await _set(_tl.copyWith(corners: list));
+  }
+
   Future<void> _subOffset() async {
     final v = await _askSeconds('စာတန်း အချိန်ရွှေ့ (စက္ကန့်၊ + နောက်ကျ / − စော)', _tl.subtitleOffsetMs / 1000);
     if (v == null) return;
@@ -420,6 +448,57 @@ class _EditorPanelState extends State<EditorPanel> {
           ),
         ]),
         const SizedBox(height: 12),
+        _title('စာတန်း style'),
+        _slider('အရွယ်', _tl.style.size, (v) => _set(_tl.copyWith(style: _tl.style.copyWith(size: v))), min: 0.03, max: 0.09),
+        _ColorRow(selected: _tl.style.color, onPick: (c) => _set(_tl.copyWith(style: _tl.style.copyWith(color: c)))),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('အမည်းနောက်ခံ'),
+          value: _tl.style.background,
+          onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(background: v))),
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('အပေါ်မှာ ထား (မဟုတ်ရင် အောက်)'),
+          value: _tl.style.top,
+          onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(top: v))),
+        ),
+        const SizedBox(height: 12),
+        _title('Logo (ကိုယ်ပိုင်ပုံ)'),
+        if (_tl.logo == null)
+          OutlinedButton(onPressed: _pickLogo, child: const Text('Logo ရွေး'))
+        else ...[
+          Row(children: [
+            ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.file(File(_tl.logo!.path), width: 44, height: 44, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))),
+            const SizedBox(width: 10),
+            TextButton(onPressed: _pickLogo, child: const Text('ပြောင်း')),
+            TextButton(onPressed: () => _set(_tl.copyWith(clearLogo: true)), child: const Text('ဖျက်')),
+          ]),
+          _CornerPicker(selected: _tl.logo!.corner, onPick: (c) => _set(_tl.copyWith(logo: _tl.logo!.copyWith(corner: c)))),
+          _slider('အရွယ်', _tl.logo!.size, (v) => _set(_tl.copyWith(logo: _tl.logo!.copyWith(size: v))), min: 0.05, max: 0.4),
+          _slider('ထင်ရှားမှု', _tl.logo!.opacity, (v) => _set(_tl.copyWith(logo: _tl.logo!.copyWith(opacity: v))), min: 0.1, max: 1),
+        ],
+        const SizedBox(height: 12),
+        _title('ထောင့်စာတမ်း · ${_tl.corners.length} ခု'),
+        OutlinedButton(onPressed: () => _editCorner(null), child: const Text('+ စာတမ်းထည့်')),
+        for (var i = 0; i < _tl.corners.length; i++)
+          Card(
+            color: DfColors.surface,
+            margin: const EdgeInsets.only(top: 6),
+            child: ListTile(
+              dense: true,
+              onTap: () => _editCorner(i),
+              title: Text(_tl.corners[i].text, style: TextStyle(color: Color(_tl.corners[i].color))),
+              subtitle: Text(const ['ဘယ်အပေါ်', 'ညာအပေါ်', 'ဘယ်အောက်', 'ညာအောက်'][_tl.corners[i].corner.index], style: const TextStyle(fontSize: 12)),
+              trailing: IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () => _set(_tl.copyWith(corners: [..._tl.corners]..removeAt(i))),
+              ),
+            ),
+          ),
+        const SizedBox(height: 12),
         _title('၅။ မူရင်းဗီဒီယို အသံ'),
         _slider('အသံ', _tl.originalVolume, (v) => _set(_tl.copyWith(originalVolume: v))),
         const SizedBox(height: 12),
@@ -446,7 +525,8 @@ class _EditorPanelState extends State<EditorPanel> {
         child: Text(t, style: const TextStyle(fontWeight: FontWeight.w600, color: DfColors.accent)),
       );
 
-  Widget _slider(String label, double v, ValueChanged<double> onEnd) => _Vol(label: label, value: v, onEnd: onEnd);
+  Widget _slider(String label, double v, ValueChanged<double> onEnd, {double min = 0, double max = 1}) =>
+      _Vol(label: label, value: v, onEnd: onEnd, min: min, max: max);
 
   Widget _preview() {
     final c = _vc;
@@ -498,6 +578,12 @@ class _EditorPanelState extends State<EditorPanel> {
             ),
           ),
           IconButton(visualDensity: VisualDensity.compact, onPressed: () => _playPiece(i), icon: const Icon(Icons.play_arrow)),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Zoom',
+            onPressed: () => _set(_tl.copyWith(pieces: setZoom(_tl.pieces, i, ZoomMode.values[(p.zoom.index + 1) % ZoomMode.values.length])), msg: 'Zoom: ${const ['မရှိ', 'ဆွဲချဲ့ (in)', 'ပြန်ချုံ့ (out)'][(p.zoom.index + 1) % 3]}'),
+            icon: Icon(p.zoom == ZoomMode.zoomIn ? Icons.zoom_in : p.zoom == ZoomMode.zoomOut ? Icons.zoom_out : Icons.crop_free, size: 18, color: p.zoom == ZoomMode.none ? null : DfColors.accent),
+          ),
           IconButton(visualDensity: VisualDensity.compact, onPressed: () => _splitHere(i), icon: const Icon(Icons.content_cut, size: 18)),
           IconButton(visualDensity: VisualDensity.compact, onPressed: i == 0 ? null : () => _set(_tl.copyWith(pieces: movePiece(_tl.pieces, i, -1))), icon: const Icon(Icons.arrow_upward, size: 18)),
           IconButton(visualDensity: VisualDensity.compact, onPressed: i == _tl.pieces.length - 1 ? null : () => _set(_tl.copyWith(pieces: movePiece(_tl.pieces, i, 1))), icon: const Icon(Icons.arrow_downward, size: 18)),
@@ -542,31 +628,134 @@ class _EditorPanelState extends State<EditorPanel> {
 /// A volume slider that moves smoothly while dragging and saves once, when
 /// the finger lifts.
 class _Vol extends StatefulWidget {
-  const _Vol({required this.label, required this.value, required this.onEnd});
+  const _Vol({required this.label, required this.value, required this.onEnd, this.min = 0, this.max = 1});
 
   final String label;
   final double value;
   final ValueChanged<double> onEnd;
+  final double min;
+  final double max;
 
   @override
   State<_Vol> createState() => _VolState();
 }
 
 class _VolState extends State<_Vol> {
-  late double _v = widget.value.clamp(0.0, 1.0);
+  late double _v = widget.value.clamp(widget.min, widget.max);
 
   @override
   void didUpdateWidget(_Vol old) {
     super.didUpdateWidget(old);
-    if (old.value != widget.value) _v = widget.value.clamp(0.0, 1.0);
+    if (old.value != widget.value) _v = widget.value.clamp(widget.min, widget.max);
   }
 
   @override
   Widget build(BuildContext context) {
     return Row(children: [
       SizedBox(width: 84, child: Text(widget.label, style: const TextStyle(fontSize: 13))),
-      Expanded(child: Slider(value: _v, onChanged: (x) => setState(() => _v = x), onChangeEnd: widget.onEnd)),
+      Expanded(child: Slider(value: _v, min: widget.min, max: widget.max, onChanged: (x) => setState(() => _v = x), onChangeEnd: widget.onEnd)),
       Text('${(_v * 100).round()}%', style: const TextStyle(fontSize: 12, color: DfColors.muted)),
     ]);
+  }
+}
+
+const _palette = <int>[0xFFFFFFFF, 0xFFFFE066, 0xFF7CFC9A, 0xFF66E0FF, 0xFFFF8AD8, 0xFFFFA94D, 0xFFFF5C5C, 0xFF000000];
+
+class _ColorRow extends StatelessWidget {
+  const _ColorRow({required this.selected, required this.onPick});
+
+  final int selected;
+  final ValueChanged<int> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Wrap(spacing: 10, children: [
+        for (final c in _palette)
+          GestureDetector(
+            onTap: () => onPick(c),
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: Color(c),
+                shape: BoxShape.circle,
+                border: Border.all(color: c == selected ? DfColors.accent : DfColors.line, width: c == selected ? 3 : 1),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+class _CornerPicker extends StatelessWidget {
+  const _CornerPicker({required this.selected, required this.onPick});
+
+  final Corner selected;
+  final ValueChanged<Corner> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<Corner>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: Corner.topLeft, label: Text('↖')),
+        ButtonSegment(value: Corner.topRight, label: Text('↗')),
+        ButtonSegment(value: Corner.bottomLeft, label: Text('↙')),
+        ButtonSegment(value: Corner.bottomRight, label: Text('↘')),
+      ],
+      selected: {selected},
+      onSelectionChanged: (s) => onPick(s.first),
+    );
+  }
+}
+
+class _CornerDialog extends StatefulWidget {
+  const _CornerDialog({required this.initial});
+
+  final CornerText initial;
+
+  @override
+  State<_CornerDialog> createState() => _CornerDialogState();
+}
+
+class _CornerDialogState extends State<_CornerDialog> {
+  late final _text = TextEditingController(text: widget.initial.text);
+  late Corner _corner = widget.initial.corner;
+  late int _color = widget.initial.color;
+  late double _size = widget.initial.size;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('ထောင့်စာတမ်း'),
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(controller: _text, decoration: const InputDecoration(hintText: 'ဥပမာ: translate by brutal knock out')),
+          const SizedBox(height: 10),
+          _CornerPicker(selected: _corner, onPick: (c) => setState(() => _corner = c)),
+          _ColorRow(selected: _color, onPick: (c) => setState(() => _color = c)),
+          Row(children: [
+            const Text('အရွယ်', style: TextStyle(fontSize: 13)),
+            Expanded(child: Slider(value: _size, min: 0.02, max: 0.08, onChanged: (v) => setState(() => _size = v))),
+          ]),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('မလုပ်ဘူး')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, CornerText(text: _text.text.trim(), corner: _corner, color: _color, size: _size)),
+          child: const Text('အတည်ပြု'),
+        ),
+      ],
+    );
   }
 }

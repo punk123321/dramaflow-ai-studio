@@ -9,23 +9,34 @@ import 'srt.dart';
 /// and the render step (Phase 7) turns this description into a new MP4.
 /// Pure Dart, no Flutter.
 
+/// Slow zoom on one video piece (framing and emphasis only).
+enum ZoomMode { none, zoomIn, zoomOut }
+
 class VideoPiece {
-  const VideoPiece(this.startMs, this.endMs);
+  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none]);
 
   /// Range inside the ORIGINAL video.
   final int startMs;
   final int endMs;
+  final ZoomMode zoom;
 
   int get lengthMs => endMs - startMs;
 
-  @override
-  bool operator ==(Object other) => other is VideoPiece && other.startMs == startMs && other.endMs == endMs;
+  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom);
+  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z);
 
   @override
-  int get hashCode => Object.hash(startMs, endMs);
+  bool operator ==(Object other) =>
+      other is VideoPiece && other.startMs == startMs && other.endMs == endMs && other.zoom == zoom;
 
-  Map<String, Object?> toJson() => {'s': startMs, 'e': endMs};
-  static VideoPiece fromJson(Map<String, Object?> m) => VideoPiece(m['s'] as int, m['e'] as int);
+  @override
+  int get hashCode => Object.hash(startMs, endMs, zoom);
+
+  Map<String, Object?> toJson() => {'s': startMs, 'e': endMs, if (zoom != ZoomMode.none) 'z': zoom.index};
+  static VideoPiece fromJson(Map<String, Object?> m) {
+    final z = (m['z'] as int?) ?? 0;
+    return VideoPiece(m['s'] as int, m['e'] as int, z >= 0 && z < ZoomMode.values.length ? ZoomMode.values[z] : ZoomMode.none);
+  }
 }
 
 class VoiceItem {
@@ -103,6 +114,92 @@ class MusicTrack {
       );
 }
 
+enum Corner { topLeft, topRight, bottomLeft, bottomRight }
+
+Corner _corner(Object? v, Corner d) {
+  final i = v is int ? v : -1;
+  return i >= 0 && i < Corner.values.length ? Corner.values[i] : d;
+}
+
+/// How subtitles look. [size] is a fraction of the video height.
+class SubStyle {
+  const SubStyle({this.size = 0.05, this.color = 0xFFFFFFFF, this.background = true, this.top = false});
+
+  final double size;
+
+  /// ARGB colour.
+  final int color;
+  final bool background;
+  final bool top;
+
+  SubStyle copyWith({double? size, int? color, bool? background, bool? top}) => SubStyle(
+        size: size ?? this.size,
+        color: color ?? this.color,
+        background: background ?? this.background,
+        top: top ?? this.top,
+      );
+
+  Map<String, Object?> toJson() => {'size': size, 'color': color, 'bg': background, 'top': top};
+  static SubStyle fromJson(Map<String, Object?> m) => SubStyle(
+        size: ((m['size'] as num?)?.toDouble() ?? 0.05).clamp(0.02, 0.12),
+        color: (m['color'] as int?) ?? 0xFFFFFFFF,
+        background: (m['bg'] as bool?) ?? true,
+        top: (m['top'] as bool?) ?? false,
+      );
+}
+
+/// The user's own text in a corner of the video, such as a channel or credit
+/// line. [size] is a fraction of the video height.
+class CornerText {
+  const CornerText({required this.text, this.corner = Corner.bottomRight, this.size = 0.035, this.color = 0xFFFFFFFF});
+
+  final String text;
+  final Corner corner;
+  final double size;
+  final int color;
+
+  CornerText copyWith({String? text, Corner? corner, double? size, int? color}) => CornerText(
+        text: text ?? this.text,
+        corner: corner ?? this.corner,
+        size: size ?? this.size,
+        color: color ?? this.color,
+      );
+
+  Map<String, Object?> toJson() => {'t': text, 'c': corner.index, 'size': size, 'color': color};
+  static CornerText fromJson(Map<String, Object?> m) => CornerText(
+        text: (m['t'] as String?) ?? '',
+        corner: _corner(m['c'], Corner.bottomRight),
+        size: ((m['size'] as num?)?.toDouble() ?? 0.035).clamp(0.02, 0.12),
+        color: (m['color'] as int?) ?? 0xFFFFFFFF,
+      );
+}
+
+/// The user's own logo picture. [size] is a fraction of the video width.
+class LogoItem {
+  const LogoItem({required this.path, this.corner = Corner.topRight, this.size = 0.15, this.opacity = 0.9});
+
+  /// A copy of the picture kept inside the app.
+  final String path;
+  final Corner corner;
+  final double size;
+  final double opacity;
+
+  LogoItem copyWith({String? path, Corner? corner, double? size, double? opacity}) => LogoItem(
+        path: path ?? this.path,
+        corner: corner ?? this.corner,
+        size: size ?? this.size,
+        opacity: opacity ?? this.opacity,
+      );
+
+  Map<String, Object?> toJson() => {'path': path, 'c': corner.index, 'size': size, 'op': opacity};
+  static LogoItem fromJson(Map<String, Object?> m) => LogoItem(
+        path: m['path'] as String,
+        corner: _corner(m['c'], Corner.topRight),
+        size: ((m['size'] as num?)?.toDouble() ?? 0.15).clamp(0.05, 0.5),
+        opacity: ((m['op'] as num?)?.toDouble() ?? 0.9).clamp(0.1, 1.0),
+      );
+}
+
 class Timeline {
   const Timeline({
     this.pieces = const [],
@@ -111,6 +208,9 @@ class Timeline {
     this.subtitleOffsetMs = 0,
     this.burnSubtitles = true,
     this.originalVolume = 0.0,
+    this.style = const SubStyle(),
+    this.corners = const [],
+    this.logo,
   });
 
   final List<VideoPiece> pieces;
@@ -125,6 +225,10 @@ class Timeline {
   /// replace it with narration, so the default is silent.
   final double originalVolume;
 
+  final SubStyle style;
+  final List<CornerText> corners;
+  final LogoItem? logo;
+
   int get videoMs => pieces.fold(0, (a, p) => a + p.lengthMs);
 
   int get voiceEndMs => voices.fold(0, (a, v) => v.endMs > a ? v.endMs : a);
@@ -137,6 +241,10 @@ class Timeline {
     int? subtitleOffsetMs,
     bool? burnSubtitles,
     double? originalVolume,
+    SubStyle? style,
+    List<CornerText>? corners,
+    LogoItem? logo,
+    bool clearLogo = false,
   }) =>
       Timeline(
         pieces: pieces ?? this.pieces,
@@ -145,6 +253,9 @@ class Timeline {
         subtitleOffsetMs: subtitleOffsetMs ?? this.subtitleOffsetMs,
         burnSubtitles: burnSubtitles ?? this.burnSubtitles,
         originalVolume: originalVolume ?? this.originalVolume,
+        style: style ?? this.style,
+        corners: corners ?? this.corners,
+        logo: clearLogo ? null : (logo ?? this.logo),
       );
 
   String encode() => jsonEncode({
@@ -155,6 +266,9 @@ class Timeline {
         'subOff': subtitleOffsetMs,
         'burn': burnSubtitles,
         'origVol': originalVolume,
+        'style': style.toJson(),
+        'corners': [for (final c in corners) c.toJson()],
+        'logo': logo?.toJson(),
       });
 
   /// Returns an empty timeline when [raw] is empty or damaged, so a broken
@@ -170,6 +284,9 @@ class Timeline {
         subtitleOffsetMs: (m['subOff'] as int?) ?? 0,
         burnSubtitles: (m['burn'] as bool?) ?? true,
         originalVolume: (m['origVol'] as num?)?.toDouble() ?? 0.0,
+        style: m['style'] == null ? const SubStyle() : SubStyle.fromJson((m['style'] as Map).cast()),
+        corners: [for (final c in (m['corners'] as List? ?? const [])) CornerText.fromJson((c as Map).cast())],
+        logo: m['logo'] == null ? null : LogoItem.fromJson((m['logo'] as Map).cast()),
       );
     } catch (_) {
       return const Timeline();
@@ -188,7 +305,7 @@ List<VideoPiece>? trimPiece(List<VideoPiece> p, int i, int startMs, int endMs, i
   if (i < 0 || i >= p.length) return null;
   if (startMs < 0 || endMs <= startMs || endMs > sourceMs) return null;
   final out = [...p];
-  out[i] = VideoPiece(startMs, endMs);
+  out[i] = p[i].withRange(startMs, endMs);
   return out;
 }
 
@@ -198,6 +315,13 @@ List<VideoPiece> movePiece(List<VideoPiece> p, int i, int delta) {
   final out = [...p];
   final x = out.removeAt(i);
   out.insert(j, x);
+  return out;
+}
+
+List<VideoPiece> setZoom(List<VideoPiece> p, int i, ZoomMode z) {
+  if (i < 0 || i >= p.length) return p;
+  final out = [...p];
+  out[i] = out[i].withZoom(z);
   return out;
 }
 
@@ -213,8 +337,8 @@ List<VideoPiece> splitPiece(List<VideoPiece> p, int i, int atMs, {int minMs = 50
   final x = p[i];
   if (atMs - x.startMs < minMs || x.endMs - atMs < minMs) return p;
   final out = [...p];
-  out[i] = VideoPiece(x.startMs, atMs);
-  out.insert(i + 1, VideoPiece(atMs, x.endMs));
+  out[i] = x.withRange(x.startMs, atMs);
+  out.insert(i + 1, x.withRange(atMs, x.endMs));
   return out;
 }
 

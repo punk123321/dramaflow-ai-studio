@@ -44,6 +44,7 @@ class MainActivity : FlutterActivity() {
     private val saveTextCode = 4103
     private val pickAudioCode = 4104
     private val exportFileCode = 4105
+    private val pickImageCode = 4106
     private val micPermissionCode = 4201
     private val geminiPackage = "com.google.android.apps.bard"
     private val maxShareChars = 200_000
@@ -98,6 +99,7 @@ class MainActivity : FlutterActivity() {
                         (call.argument<Double>("pitch") ?: 1.0).toFloat()
                     )
                     "pickAudio" -> startPickAudio(result)
+                    "pickImage" -> startPickImage(result)
                     "playAudio" -> playAudio(result, call.argument<String>("source") ?: "")
                     "stopAudio" -> {
                         stopPlayer()
@@ -282,6 +284,20 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+            pickImageCode -> {
+                if (resultCode != Activity.RESULT_OK || uri == null) {
+                    result.success(null)
+                    return
+                }
+                worker.execute {
+                    try {
+                        val path = copyLogo(uri)
+                        runOnUiThread { result.success(path) }
+                    } catch (e: Exception) {
+                        runOnUiThread { result.error("read_failed", e.message ?: "Cannot read this picture", null) }
+                    }
+                }
+            }
             exportFileCode -> {
                 val src = pendingExportPath
                 pendingExportPath = null
@@ -325,6 +341,30 @@ class MainActivity : FlutterActivity() {
             )
         }
         launch(pickAudioCode, intent)
+    }
+
+    private fun startPickImage(result: MethodChannel.Result) {
+        if (!claim(pickImageCode, result)) return
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        launch(pickImageCode, intent)
+    }
+
+    /** Keeps a small copy of the picked picture inside the app, so the logo still works later. */
+    private fun copyLogo(uri: Uri): String {
+        val dir = File(filesDir, "logos").apply { mkdirs() }
+        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+        var sample = 1
+        while (opts.outWidth / sample > 1024) sample *= 2
+        val dec = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+        val bmp = contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, dec) }
+            ?: throw IllegalStateException("Cannot read this picture")
+        val out = File(dir, "logo_" + System.currentTimeMillis() + ".png")
+        FileOutputStream(out).use { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        return out.absolutePath
     }
 
     private fun startExport(result: MethodChannel.Result, path: String, name: String, mime: String) {

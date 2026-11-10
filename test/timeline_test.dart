@@ -180,4 +180,65 @@ void main() {
       expect(r.every((i) => i.severity == Severity.warning), isTrue);
     });
   });
+
+  group('style, corners, logo, zoom', () {
+    test('defaults are sensible', () {
+      const t = Timeline();
+      expect(t.style.size, 0.05);
+      expect(t.style.background, isTrue);
+      expect(t.style.top, isFalse);
+      expect(t.corners, isEmpty);
+      expect(t.logo, isNull);
+    });
+
+    test('round trip keeps style, corner texts, logo and piece zoom', () {
+      const t = Timeline(
+        pieces: [VideoPiece(0, 5000, ZoomMode.zoomIn), VideoPiece(5000, 9000)],
+        style: SubStyle(size: 0.07, color: 0xFFFFE066, background: false, top: true),
+        corners: [CornerText(text: 'translate by brutal knock out', corner: Corner.topLeft, size: 0.04, color: 0xFF00FF00)],
+        logo: LogoItem(path: '/app/logos/a.png', corner: Corner.bottomLeft, size: 0.2, opacity: 0.5),
+      );
+      final b = Timeline.decode(t.encode());
+      expect(b.pieces[0].zoom, ZoomMode.zoomIn);
+      expect(b.pieces[1].zoom, ZoomMode.none);
+      expect(b.style.size, 0.07);
+      expect(b.style.color, 0xFFFFE066);
+      expect(b.style.background, isFalse);
+      expect(b.style.top, isTrue);
+      expect(b.corners.single.text, 'translate by brutal knock out');
+      expect(b.corners.single.corner, Corner.topLeft);
+      expect(b.corners.single.color, 0xFF00FF00);
+      expect(b.logo!.path, '/app/logos/a.png');
+      expect(b.logo!.corner, Corner.bottomLeft);
+      expect(b.logo!.opacity, 0.5);
+    });
+
+    test('an old save without the new fields still opens', () {
+      final b = Timeline.decode('{"v":1,"pieces":[{"s":0,"e":1000}],"voices":[],"music":null}');
+      expect(b.pieces.single.zoom, ZoomMode.none);
+      expect(b.style.size, 0.05);
+      expect(b.corners, isEmpty);
+    });
+
+    test('out of range values are clamped, bad corner falls back', () {
+      final b = Timeline.decode('{"pieces":[],"style":{"size":9},"corners":[{"t":"x","c":99,"size":0}],"logo":{"path":"p","size":5,"op":0}}');
+      expect(b.style.size, 0.12);
+      expect(b.corners.single.corner, Corner.bottomRight);
+      expect(b.corners.single.size, 0.02);
+      expect(b.logo!.size, 0.5);
+      expect(b.logo!.opacity, 0.1);
+    });
+
+    test('trim and split keep the zoom, setZoom changes only one piece', () {
+      const p = [VideoPiece(0, 10000, ZoomMode.zoomOut), VideoPiece(10000, 20000)];
+      expect(trimPiece(p, 0, 1000, 9000, 30000)![0].zoom, ZoomMode.zoomOut);
+      final s = splitPiece(p, 0, 5000);
+      expect(s[0].zoom, ZoomMode.zoomOut);
+      expect(s[1].zoom, ZoomMode.zoomOut);
+      final z = setZoom(p, 1, ZoomMode.zoomIn);
+      expect(z[0].zoom, ZoomMode.zoomOut);
+      expect(z[1].zoom, ZoomMode.zoomIn);
+      expect(p[1].zoom, ZoomMode.none);
+    });
+  });
 }

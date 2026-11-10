@@ -74,6 +74,7 @@ Map<String, Object?> buildRenderJob({
   required Timeline timeline,
   required List<SrtEntry> sourceSubtitles,
   required RenderSettings settings,
+  double aspect = 16 / 9,
 }) {
   final subs = remapSubtitles(sourceSubtitles, timeline.pieces, offsetMs: timeline.subtitleOffsetMs);
   final lanes = assignVoiceLanes(timeline.voices);
@@ -86,7 +87,11 @@ Map<String, Object?> buildRenderJob({
     'bitrate': videoBitrate(settings),
     'estimateBytes': estimateBytes(dur, settings),
     'originalVolume': timeline.originalVolume,
-    'pieces': [for (final p in timeline.pieces) {'s': p.startMs, 'e': p.endMs}],
+    'pieces': [for (final p in timeline.pieces) {'s': p.startMs, 'e': p.endMs, 'z': p.zoom.index}],
+    'aspect': aspect,
+    'subStyle': timeline.style.toJson(),
+    'corners': [for (final c in timeline.corners) if (c.text.trim().isNotEmpty) c.toJson()],
+    'logo': timeline.logo?.toJson(),
     'voiceLanes': [
       for (final lane in lanes)
         [

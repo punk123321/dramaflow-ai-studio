@@ -2,7 +2,12 @@ package com.dramaflow.aistudio
 
 import android.app.Activity
 import android.content.ContentValues
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.Paint
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -24,7 +29,9 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.FrameDropEffect
+import androidx.media3.effect.MatrixTransformation
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
 import androidx.media3.effect.Presentation
@@ -181,11 +188,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 )
                 .build()
             val b = EditedMediaItem.Builder(item)
-            if (origVol <= 0f) {
-                b.setRemoveAudio(true)
-            } else {
-                b.setEffects(Effects(listOf(volume(origVol)), emptyList<Effect>()))
-            }
+            if (origVol <= 0f) b.setRemoveAudio(true)
+            val audioFx = if (origVol <= 0f) emptyList<AudioProcessor>() else listOf(volume(origVol))
+            val zoom = p.optInt("z", 0)
+            val pieceUs = (p.getLong("e") - p.getLong("s")) * 1000L
+            val videoFx = ArrayList<Effect>()
+            if (zoom == 1 || zoom == 2) videoFx.add(zoomEffect(zoom == 1, pieceUs))
+            if (audioFx.isNotEmpty() || videoFx.isNotEmpty()) b.setEffects(Effects(audioFx, videoFx))
             vSeq.addItem(b.build())
         }
         val sequences = ArrayList<EditedMediaItemSequence>()
@@ -230,6 +239,10 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         val videoEffects = ArrayList<Effect>()
         videoEffects.add(Presentation.createForHeight(height))
         videoEffects.add(FrameDropEffect.createDefaultFrameDropEffect(fps.toFloat()))
+        val aspect = job.optDouble("aspect", 16.0 / 9.0).let { if (it > 0.2 && it < 5.0) it else 16.0 / 9.0 }
+        val outW = height * aspect
+        val overlays = ArrayList<TextureOverlay>()
+
         val subs = job.optJSONArray("subtitles")
         if (job.optBoolean("burn", true) && subs != null && subs.length() > 0) {
             val list = ArrayList<Sub>()
@@ -237,7 +250,32 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 val s = subs.getJSONObject(i)
                 list.add(Sub(s.getLong("s"), s.getLong("e"), s.getString("t")))
             }
-            videoEffects.add(OverlayEffect(ImmutableList.of<TextureOverlay>(SubtitleOverlay(list, height))))
+            val st = job.optJSONObject("subStyle")
+            val sizePx = ((st?.optDouble("size", 0.05) ?: 0.05) * height).toInt().coerceAtLeast(14)
+            val color = (st?.optLong("color", 0xFFFFFFFFL) ?: 0xFFFFFFFFL).toInt()
+            overlays.add(SubtitleOverlay(list, sizePx, color, st?.optBoolean("bg", true) ?: true, st?.optBoolean("top", false) ?: false))
+        }
+
+        val corners = job.optJSONArray("corners")
+        if (corners != null) {
+            for (i in 0 until corners.length()) {
+                val c = corners.getJSONObject(i)
+                val text = c.optString("t", "")
+                if (text.isBlank()) continue
+                val px = (c.optDouble("size", 0.035) * height).toInt().coerceAtLeast(12)
+                overlays.add(CornerTextOverlay(text, c.optLong("color", 0xFFFFFFFFL).toInt(), px, c.optInt("c", 3)))
+            }
+        }
+
+        val logo = job.optJSONObject("logo")
+        if (logo != null) {
+            val bmp = loadLogo(logo.getString("path"), (logo.optDouble("size", 0.15) * outW).toInt(), logo.optDouble("op", 0.9).toFloat())
+            if (bmp != null) {
+                overlays.add(BitmapOverlay.createStaticBitmapOverlay(bmp, cornerSettings(logo.optInt("c", 1))))
+            }
+        }
+        if (overlays.isNotEmpty()) {
+            videoEffects.add(OverlayEffect(ImmutableList.copyOf(overlays)))
         }
 
         return Composition.Builder(sequences)
@@ -255,24 +293,93 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
 
     private class Sub(val startMs: Long, val endMs: Long, val text: String)
 
-    private class SubtitleOverlay(private val subs: List<Sub>, private val height: Int) : TextOverlay() {
+    /** Slow zoom over one video piece: 100% to 115% (in) or 115% to 100% (out). */
+    private fun zoomEffect(zoomIn: Boolean, pieceUs: Long): Effect {
+        return MatrixTransformation { us ->
+            val p = if (pieceUs > 0) ((us % pieceUs).toFloat() / pieceUs.toFloat()).coerceIn(0f, 1f) else 0f
+            val scale = if (zoomIn) 1f + 0.15f * p else 1.15f - 0.15f * p
+            Matrix().apply { postScale(scale, scale) }
+        }
+    }
+
+    /** corner: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right. */
+    private fun cornerSettings(corner: Int): OverlaySettings {
+        val left = corner == 0 || corner == 2
+        val top = corner == 0 || corner == 1
+        return StaticOverlaySettings.Builder()
+            .setOverlayFrameAnchor(if (left) -1f else 1f, if (top) 1f else -1f)
+            .setBackgroundFrameAnchor(if (left) -0.96f else 0.96f, if (top) 0.94f else -0.94f)
+            .build()
+    }
+
+    private fun loadLogo(path: String, targetW: Int, opacity: Float): Bitmap? {
+        return try {
+            val src = BitmapFactory.decodeFile(path) ?: return null
+            val w = targetW.coerceIn(24, 2000)
+            val h = (src.height.toFloat() * w / src.width).toInt().coerceAtLeast(1)
+            val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            paint.alpha = (opacity.coerceIn(0.05f, 1f) * 255).toInt()
+            Canvas(out).drawBitmap(src, null, android.graphics.Rect(0, 0, w, h), paint)
+            out
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private class Sub(val startMs: Long, val endMs: Long, val text: String)
+
+    private class SubtitleOverlay(
+        private val subs: List<Sub>,
+        private val sizePx: Int,
+        private val color: Int,
+        private val background: Boolean,
+        private val top: Boolean
+    ) : TextOverlay() {
         override fun getText(presentationTimeUs: Long): SpannableString {
             val ms = presentationTimeUs / 1000L
             val line = subs.firstOrNull { ms >= it.startMs && ms < it.endMs }?.text ?: " "
             val s = SpannableString(line)
-            val size = (height / 20).coerceAtLeast(18)
-            s.setSpan(AbsoluteSizeSpan(size), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-            s.setSpan(ForegroundColorSpan(Color.WHITE), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-            s.setSpan(BackgroundColorSpan(Color.argb(150, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            if (background) {
+                s.setSpan(BackgroundColorSpan(Color.argb(150, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            }
             return s
         }
 
         override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
             return StaticOverlaySettings.Builder()
-                .setOverlayFrameAnchor(0f, -1f)
-                .setBackgroundFrameAnchor(0f, -0.88f)
+                .setOverlayFrameAnchor(0f, if (top) 1f else -1f)
+                .setBackgroundFrameAnchor(0f, if (top) 0.88f else -0.88f)
                 .build()
         }
+    }
+
+    private class CornerTextOverlay(
+        private val text: String,
+        private val color: Int,
+        private val sizePx: Int,
+        private val corner: Int
+    ) : TextOverlay() {
+        private val settings: OverlaySettings by lazy {
+            val left = corner == 0 || corner == 2
+            val top = corner == 0 || corner == 1
+            StaticOverlaySettings.Builder()
+                .setOverlayFrameAnchor(if (left) -1f else 1f, if (top) 1f else -1f)
+                .setBackgroundFrameAnchor(if (left) -0.96f else 0.96f, if (top) 0.94f else -0.94f)
+                .build()
+        }
+
+        override fun getText(presentationTimeUs: Long): SpannableString {
+            val s = SpannableString(text)
+            s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            s.setSpan(BackgroundColorSpan(Color.argb(110, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            return s
+        }
+
+        override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings = settings
     }
 
     // ---- progress, finish, cancel ----

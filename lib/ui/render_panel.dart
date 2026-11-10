@@ -69,6 +69,7 @@ class _RenderPanelState extends State<RenderPanel> {
       timeline: _tl,
       sourceSubtitles: _subs,
       settings: _settings,
+      aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
     );
     await context.read<RenderStore>().start(_pid, name, job);
   }

@@ -69,6 +69,10 @@ class AudioChannel {
     );
   }
 
+  /// Picks a picture (for a logo). A small copy is kept inside the app and its
+  /// path is returned. Null when the user cancels.
+  static Future<String?> pickImage() => _channel.invokeMethod<String>('pickImage');
+
   static Future<void> play(String source) => _channel.invokeMethod('playAudio', {'source': source});
 
   static Future<void> stop() => _channel.invokeMethod('stopAudio');
