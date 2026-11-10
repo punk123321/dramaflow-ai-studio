@@ -170,3 +170,16 @@ Needs phone testing: how the corner texts, logo and zoom look in a real render, 
 - Thumbnail Studio (idea from aifunmyanmar/Audiobook-Studio, no code copied; that repo has no license): title, episode, 6 layouts, frame from the video as background, drawn on a Flutter canvas. Fits next to Phase 7.
 - Gemini cover-art prompt through the same share flow as Phase 3.
 - Not planned: YouTube audio download (yt-dlp).
+
+## Phase 8 — Copyright & Fair Use assistant
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Measures reuse share, narration share, longest bare stretch (`fair_use.dart`) | yes (fair_use_test) | no |
+| Source / rights holder / permission record saved per project | yes (JSON round-trip) | no |
+| Self-declared checklist + findings + risk label | yes | no |
+| Description text (credits, facts the maker entered only) | yes | no |
+| Home tiles FU and RN open their screens | no | no |
+
+Rules of thumb only, not legal advice. No feature hides material from platform
+copyright checks, and none will be added.

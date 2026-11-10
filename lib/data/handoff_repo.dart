@@ -15,6 +15,9 @@ class DocKind {
 
   /// The edit description (clips, voice, music, subtitle options) as JSON.
   static const timeline = 'timeline';
+
+  /// Source, permission and fair-use checklist answers as JSON.
+  static const fairUse = 'fair_use';
 }
 
 /// Source subtitles, name/term notes and the replies brought back from Gemini.

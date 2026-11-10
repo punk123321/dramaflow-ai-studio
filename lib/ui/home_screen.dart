@@ -7,10 +7,11 @@ import '../core/theme.dart';
 import '../data/project.dart';
 import '../state/project_store.dart';
 import 'dialogs.dart';
+import 'fair_use_screen.dart';
 import 'subtitle_studio_screen.dart';
 import 'widgets.dart';
 
-enum _Action { none, workflow, library, studio }
+enum _Action { none, workflow, library, studio, fairUse }
 
 class _Module {
   const _Module(this.code, this.title, this.sub, this.color, this.phase, [this.action = _Action.none]);
@@ -28,9 +29,9 @@ const _modules = <_Module>[
   _Module('ST', 'Subtitle Studio', 'SRT ပြင်၊ စစ်', Color(0xFF5B8CFF), 4, _Action.studio),
   _Module('TT', 'TTS / MP3', 'အသံ ထုတ်/ဖမ်း', Color(0xFF5B8CFF), 5, _Action.workflow),
   _Module('ED', 'Video Editor', 'Timeline', Color(0xFFA46BFF), 6, _Action.workflow),
-  _Module('RN', 'Render Center', 'MP4 ထုတ်', Color(0xFFF2C94C), 7),
+  _Module('RN', 'Render Center', 'MP4 ထုတ်', Color(0xFFF2C94C), 7, _Action.workflow),
   _Module('DL', 'Drama Library', 'ဇာတ်လမ်း၊ အပိုင်း', Color(0xFFFF9F43), 2, _Action.library),
-  _Module('FU', 'Copyright & Fair Use', 'Upload မတင်ခင် စစ်', Color(0xFFF2C94C), 8),
+  _Module('FU', 'Copyright & Fair Use', 'Upload မတင်ခင် စစ်', Color(0xFFF2C94C), 8, _Action.fairUse),
 ];
 
 class HomeScreen extends StatelessWidget {
@@ -235,6 +236,14 @@ class _ModuleTile extends StatelessWidget {
           messenger.showSnackBar(const SnackBar(content: Text('Project တစ်ခု အရင်ဖန်တီးပါ။')));
         } else {
           Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => SubtitleStudioScreen(project: target)));
+        }
+      case _Action.fairUse:
+        final store = context.read<ProjectStore>();
+        final target = store.current ?? store.resumeCandidate ?? (store.items.isNotEmpty ? store.items.first : null);
+        if (target == null || target.id == null) {
+          messenger.showSnackBar(const SnackBar(content: Text('Project တစ်ခု အရင်ဖန်တီးပါ။')));
+        } else {
+          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => FairUseScreen(project: target)));
         }
       case _Action.none:
         messenger.showSnackBar(SnackBar(
