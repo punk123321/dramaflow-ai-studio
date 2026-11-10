@@ -358,7 +358,7 @@ class _GeminiPanelState extends State<GeminiPanel> {
               key: ValueKey('min$_minutes'),
               initialValue: _minutes,
               decoration: const InputDecoration(labelText: 'Narration စုစုပေါင်း အရှည် (မိနစ်)'),
-              items: const [
+              items: [
                 for (final m in [1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0, 20.0])
                   DropdownMenuItem(value: m, child: Text('ခန့် ${m == m.roundToDouble() ? m.round() : m} မိနစ်')),
               ],
