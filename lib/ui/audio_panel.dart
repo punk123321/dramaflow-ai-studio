@@ -466,7 +466,7 @@ class _AudioPanelState extends State<AudioPanel> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                (text.isEmpty ? 'အသံ ${i + 1} (script မလို)' : 'Chunk ${i + 1} · ${text.length} လုံး')
+                '${text.isEmpty ? 'အသံ ${i + 1} (script မလို)' : 'Chunk ${i + 1} · ${text.length} လုံး'}'
                 '${clip != null ? ' · ${clip.label} ${formatTime(clip.durationMs)}' : ''}',
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
