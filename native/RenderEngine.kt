@@ -28,6 +28,7 @@ import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
 import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
@@ -267,7 +268,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         }
 
         override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
-            return OverlaySettings.Builder()
+            return StaticOverlaySettings.Builder()
                 .setOverlayFrameAnchor(0f, -1f)
                 .setBackgroundFrameAnchor(0f, -0.88f)
                 .build()
