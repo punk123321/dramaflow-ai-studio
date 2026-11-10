@@ -1,5 +1,6 @@
 import 'package:aistudio/core/segments.dart';
 import 'package:aistudio/data/app_db.dart';
+import 'package:aistudio/data/audio_clip.dart';
 import 'package:aistudio/data/drama.dart';
 import 'package:aistudio/data/drama_repo.dart';
 import 'package:aistudio/data/handoff_repo.dart';
@@ -131,7 +132,7 @@ void main() {
     final tables = (await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
         .map((r) => r['name'])
         .toList();
-    expect(tables, containsAll(['projects', 'dramas', 'episodes', 'video_segments', 'documents', 'handoff_results']));
+    expect(tables, containsAll(['projects', 'dramas', 'episodes', 'video_segments', 'documents', 'handoff_results', 'audio_clips']));
   });
 
   test('handoff: documents and results are saved, replaced, copied and removed with the project', () async {
@@ -197,5 +198,49 @@ void main() {
     await h.setDoc(id, DocKind.notes, 'n');
     expect(await h.getDoc(id, DocKind.notes), 'n');
     expect((await ProjectRepo().all()).single.name, 'V2');
+  });
+
+  test('audio clips: save, list in order, delete with the project', () async {
+    final prepo = ProjectRepo();
+    final arepo = AudioRepo();
+    final a = await prepo.insert(_project('A'));
+    final b = await prepo.insert(_project('B'));
+    AudioClip clip(int pid, int chunk, ClipKind k) => AudioClip(
+          projectId: pid,
+          chunkIdx: chunk,
+          kind: k,
+          label: 'c$chunk',
+          source: '/x/$chunk.wav',
+          durationMs: 1500,
+          sizeBytes: 100,
+          createdAt: 1,
+        );
+    await arepo.insert(clip(a.id!, 2, ClipKind.tts));
+    final first = await arepo.insert(clip(a.id!, 1, ClipKind.mic));
+    await arepo.insert(clip(a.id!, 3, ClipKind.imported));
+    await arepo.insert(clip(b.id!, 1, ClipKind.tts));
+    expect(first.id, isNotNull);
+
+    final list = await arepo.forProject(a.id!);
+    expect(list.map((c) => c.chunkIdx), [1, 2, 3]);
+    expect(list.map((c) => c.kind), [ClipKind.mic, ClipKind.tts, ClipKind.imported]);
+    expect(list.first.ownsFile, isTrue);
+    expect(list.last.ownsFile, isFalse);
+
+    await arepo.delete(first.id!);
+    expect((await arepo.forProject(a.id!)).length, 2);
+
+    await prepo.delete(a.id!);
+    expect(await arepo.forProject(a.id!), isEmpty);
+    expect((await arepo.forProject(b.id!)).length, 1);
+  });
+
+  test('handoff: resultTasks counts saved chunks per task', () async {
+    final h = HandoffRepo();
+    final a = await ProjectRepo().insert(_project('A'));
+    await h.saveResult(a.id!, 'zh_recap:12000', 0, 'x');
+    await h.saveResult(a.id!, 'zh_recap:12000', 1, 'y');
+    await h.saveResult(a.id!, 'yt_script:12000', 0, 'z');
+    expect(await h.resultTasks(a.id!), {'zh_recap:12000': 2, 'yt_script:12000': 1});
   });
 }

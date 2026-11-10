@@ -5,6 +5,7 @@ import '../core/stage.dart';
 import '../core/theme.dart';
 import '../data/project.dart';
 import '../state/project_store.dart';
+import 'audio_panel.dart';
 import 'gemini_panel.dart';
 import 'video_index_panel.dart';
 import 'widgets.dart';
@@ -141,6 +142,8 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                       VideoIndexPanel(project: p)
                     else if (s == Stage.copy)
                       GeminiPanel(project: p)
+                    else if (s == Stage.tts)
+                      AudioPanel(project: p)
                     else ...[
                       Text(
                         'ဒီအဆင့်ရဲ့ တကယ့်လုပ်ဆောင်ချက်ကို Phase ${s.phase} မှာ ရေးမယ်။ အခုတော့ ပြီးကြောင်း မှတ်ထားလို့ရပါတယ်။',

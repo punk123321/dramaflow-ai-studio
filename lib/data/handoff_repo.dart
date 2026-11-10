@@ -9,6 +9,9 @@ class DocKind {
 
   /// The subtitles being edited in the Subtitle Studio.
   static const studioSrt = 'studio_srt';
+
+  /// The narration text that is turned into audio (Stage 3).
+  static const script = 'script';
 }
 
 /// Source subtitles, name/term notes and the replies brought back from Gemini.
@@ -45,6 +48,16 @@ class HandoffRepo {
       whereArgs: [projectId, task],
     );
     return {for (final r in rows) r['chunk_idx'] as int: r['result'] as String};
+  }
+
+  /// Tasks that have saved results, with how many chunks each has.
+  Future<Map<String, int>> resultTasks(int projectId) async {
+    final db = await AppDb.get();
+    final rows = await db.rawQuery(
+      'SELECT task, COUNT(*) AS n FROM handoff_results WHERE project_id = ? GROUP BY task',
+      [projectId],
+    );
+    return {for (final r in rows) r['task'] as String: r['n'] as int};
   }
 
   Future<void> saveResult(int projectId, String task, int chunk, String text) async {

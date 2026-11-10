@@ -79,9 +79,27 @@ Scope: edit line by line, split, merge, delete, shift time, fix overlaps, proble
 | Studio screen, edit sheet, preview, undo, persistence after restart | no | needs phone |
 | Burmese text in list and preview | no | needs phone |
 
+## Phase 5 - Audio: TTS, microphone, audio import (written, awaiting CI and phone test)
+
+Honest scope:
+- TTS uses the phone's own Android text-to-speech engine. Whether it has a Burmese voice depends on the phone; the app checks and says so. No internet, no API.
+- Microphone recording and importing an audio file (from any other app) are the other two ways to get narration audio.
+- Output is WAV (TTS) and M4A/AAC (microphone). MP3 encoding is NOT built.
+- Speech-to-text (audio to subtitles) is NOT built: Android has no offline file transcription without an extra model or an API.
+- The script is split into chunks at sentence ends so long scripts work.
+
+| Item | Automated test | Phone test |
+|---|---|---|
+| Script splitting (no lost text, limits, Burmese sentence ends) | yes (CI) | - |
+| audio_clips table, ordering, delete with project, v3 to v4 | yes (CI) | - |
+| Burmese voice present on the phone | no | needs phone |
+| TTS to WAV, playback, long script | no | needs phone |
+| Microphone record, permission prompt, playback | no | needs phone |
+| Import audio, export saved file | no | needs phone |
+
 ## Not started
 
-- Phase 5: speech-to-text, TTS, MP3, voice recording
+- Phase 5 leftovers: speech-to-text, MP3 encoding
 - Phase 6: Studio editor, timeline
 - Phase 7: Render Center, Gallery save, export history
 - Phase 8: Copyright and Fair Use assistant, final QA

@@ -36,6 +36,8 @@ jobs:
           f=$(find android/app/src/main -name MainActivity.kt | head -n 1)
           echo "Replacing $f"
           cp native/MainActivity.kt "$f"
+          python3 native/patch_manifest.py android/app/src/main/AndroidManifest.xml
+          grep -n "RECORD_AUDIO\|TTS_SERVICE" android/app/src/main/AndroidManifest.xml
 
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
