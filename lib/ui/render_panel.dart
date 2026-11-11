@@ -9,6 +9,8 @@ import '../core/srt.dart';
 import '../core/stage.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
+import '../core/te_compile.dart';
+import '../core/transformative_plan.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/render_channel.dart';
@@ -36,6 +38,7 @@ class _RenderPanelState extends State<RenderPanel> {
   final _repo = HandoffRepo();
   bool _loading = true;
   Timeline _tl = const Timeline();
+  TransformativePlan _plan = const TransformativePlan();
   List<SrtEntry> _subs = [];
   RenderSettings _settings = const RenderSettings();
   int _free = 0;
@@ -52,6 +55,7 @@ class _RenderPanelState extends State<RenderPanel> {
   Future<void> _load() async {
     try {
       _tl = Timeline.decode(await _repo.getDoc(_pid, DocKind.timeline));
+      _plan = TransformativePlan.decode(await _repo.getDoc(_pid, DocKind.transformativePlan));
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
@@ -66,7 +70,8 @@ class _RenderPanelState extends State<RenderPanel> {
     final job = buildRenderJob(
       name: name,
       videoUri: p.sourceVideoUri!,
-      timeline: _tl,
+      // Approved TE operations are applied to a copy; the saved timeline stays as it is.
+      timeline: _tl.copyWith(pieces: compileOps(_tl.pieces, _plan.ops).pieces),
       sourceSubtitles: _subs,
       settings: _settings,
       aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
@@ -85,6 +90,7 @@ class _RenderPanelState extends State<RenderPanel> {
     final otherRunning = rs.running && !mine;
     final blockers = renderBlockers(hasVideo: p.hasVideo, timeline: _tl, sourceMs: p.videoDurationMs ?? 0);
     final dur = outputDurationMs(_tl);
+    final te = compileOps(_tl.pieces, _plan.ops);
     final est = estimateBytes(dur, _settings);
     final lowSpace = _free > 0 && est > 0 && _free < est + est ~/ 5 + 50 * 1048576;
     final done = rs.lastDone;
@@ -109,6 +115,12 @@ class _RenderPanelState extends State<RenderPanel> {
         const SizedBox(height: 10),
         _row('အရှည်', dur > 0 ? _dur(dur) : '—'),
         _row('အပိုင်း', '${_tl.pieces.length}'),
+        if (te.applied.isNotEmpty) _row('TE Crop/Reframe', '${te.applied.length} ခု ပါမယ်'),
+        for (final n in te.notes)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('TE: $n', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
+          ),
         _row('အသံ / music', '${_tl.voices.length} / ${_tl.music == null ? 'မရှိ' : 'ရှိ'}'),
         _row('စာတန်း', _tl.burnSubtitles ? 'ထည့်ရိုက်မယ်' : 'မထည့်'),
         const SizedBox(height: 8),

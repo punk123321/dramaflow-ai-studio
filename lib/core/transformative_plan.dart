@@ -38,6 +38,9 @@ enum ToolStatus {
 
   /// Works in the Studio Editor (Stage 4), not through TE yet.
   inStudio,
+
+  /// Approved operations of this tool are applied when a video is rendered.
+  rendered,
 }
 
 extension TransformToolLabel on TransformTool {
@@ -70,6 +73,7 @@ extension TransformToolLabel on TransformTool {
   /// What exists in the app today (see CHECKLIST.md). TE itself renders none
   /// of these yet.
   ToolStatus get status => switch (this) {
+        TransformTool.cropReframe => ToolStatus.rendered,
         TransformTool.commentaryVoiceOver ||
         TransformTool.sceneReordering ||
         TransformTool.criticalCommentary =>

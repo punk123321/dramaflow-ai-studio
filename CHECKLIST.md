@@ -200,3 +200,15 @@ copyright checks, and none will be added.
 | Branch CI artifact name differs from main | CI only | n/a |
 
 TE itself still renders nothing: operations are records. No AI is connected.
+
+## TE-2: Crop & Reframe (branch claude/te-2-crop-reframe)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved Crop & Reframe operations compile into video pieces (split, fold tiny leftovers, later wins) | yes (te_compile_test) | no |
+| Render job carries the crop; saved timeline is not changed | yes | no |
+| Native crop (Media3 MatrixTransformation, kept area centred on cx,cy) | compiles on CI | no |
+| Render screen lists TE operations that are applied or left out, with the reason | no | no |
+
+Other TE tools are still records only. Crop is a still frame crop; picture
+quality drops at high zoom because the video is enlarged, not re-shot.

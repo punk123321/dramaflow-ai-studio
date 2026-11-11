@@ -12,30 +12,83 @@ import 'srt.dart';
 /// Slow zoom on one video piece (framing and emphasis only).
 enum ZoomMode { none, zoomIn, zoomOut }
 
+/// A still crop of one video piece: [zoom] 1.0 = whole picture, 2.0 = half the
+/// width and height. [cx], [cy] is the centre of the kept area, 0 to 1 from the
+/// top-left corner. It only changes framing; the original is never changed.
+class CropFrame {
+  const CropFrame(this.zoom, this.cx, this.cy);
+
+  static const minZoom = 1.0;
+  static const maxZoom = 4.0;
+
+  final double zoom;
+  final double cx;
+  final double cy;
+
+  /// Zoom limited to the allowed range and the centre pushed inside the
+  /// picture so no empty border can show.
+  CropFrame get fitted {
+    final z = zoom.isNaN ? 1.0 : zoom.clamp(minZoom, maxZoom).toDouble();
+    final half = 0.5 / z;
+    double c(double v) => (v.isNaN ? 0.5 : v).clamp(half, 1 - half).toDouble();
+    return CropFrame(z, c(cx), c(cy));
+  }
+
+  List<double> toJson() => [zoom, cx, cy];
+
+  static CropFrame? fromJson(Object? v) {
+    if (v is! List || v.length != 3 || v.any((e) => e is! num)) return null;
+    return CropFrame((v[0] as num).toDouble(), (v[1] as num).toDouble(), (v[2] as num).toDouble()).fitted;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is CropFrame && other.zoom == zoom && other.cx == cx && other.cy == cy;
+
+  @override
+  int get hashCode => Object.hash(zoom, cx, cy);
+}
+
 class VideoPiece {
-  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none]);
+  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop]);
 
   /// Range inside the ORIGINAL video.
   final int startMs;
   final int endMs;
   final ZoomMode zoom;
+  final CropFrame? crop;
 
   int get lengthMs => endMs - startMs;
 
-  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom);
-  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z);
+  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop);
+  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop);
+  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c);
 
   @override
   bool operator ==(Object other) =>
-      other is VideoPiece && other.startMs == startMs && other.endMs == endMs && other.zoom == zoom;
+      other is VideoPiece &&
+      other.startMs == startMs &&
+      other.endMs == endMs &&
+      other.zoom == zoom &&
+      other.crop == crop;
 
   @override
-  int get hashCode => Object.hash(startMs, endMs, zoom);
+  int get hashCode => Object.hash(startMs, endMs, zoom, crop);
 
-  Map<String, Object?> toJson() => {'s': startMs, 'e': endMs, if (zoom != ZoomMode.none) 'z': zoom.index};
+  Map<String, Object?> toJson() => {
+        's': startMs,
+        'e': endMs,
+        if (zoom != ZoomMode.none) 'z': zoom.index,
+        if (crop != null) 'c': crop!.toJson(),
+      };
   static VideoPiece fromJson(Map<String, Object?> m) {
     final z = (m['z'] as int?) ?? 0;
-    return VideoPiece(m['s'] as int, m['e'] as int, z >= 0 && z < ZoomMode.values.length ? ZoomMode.values[z] : ZoomMode.none);
+    return VideoPiece(
+      m['s'] as int,
+      m['e'] as int,
+      z >= 0 && z < ZoomMode.values.length ? ZoomMode.values[z] : ZoomMode.none,
+      CropFrame.fromJson(m['c']),
+    );
   }
 }
 

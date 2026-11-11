@@ -203,7 +203,11 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
               onChanged: (value) => _toggle(tool, value ?? false),
               title: Text(tool.title, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(
-                '${tool.description}\n${tool.status == ToolStatus.inStudio ? 'Studio Editor မှာ အသုံးပြုလို့ရပြီ (TE ကနေ မချိတ်ရသေး)' : 'မဖြစ်သေး — မှတ်တမ်းသာ ထားနိုင်တယ်'}',
+                '${tool.description}\n${switch (tool.status) {
+                  ToolStatus.rendered => 'Render မှာ ပါပြီ — ခွင့်ပြုထားတဲ့ လုပ်ဆောင်ချက်တွေ MP4 ထဲ ဝင်မယ် (ဖုန်းမစမ်းရသေး)',
+                  ToolStatus.inStudio => 'Studio Editor မှာ အသုံးပြုလို့ရပြီ (TE ကနေ မချိတ်ရသေး)',
+                  ToolStatus.planned => 'မဖြစ်သေး — မှတ်တမ်းသာ ထားနိုင်တယ်',
+                }}',
                 style: const TextStyle(fontSize: 12),
               ),
               isThreeLine: true,
@@ -213,7 +217,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           _sectionTitle('Edit လုပ်ဆောင်ချက် စာရင်း'),
           const Text(
             'AI အကြံပြုချက် (နောက်ပိုင်း) တွေက “စောင့်ဆိုင်း” အနေနဲ့သာ ဝင်လာမယ်။ ခွင့်ပြုမှသာ အသုံးပြုမယ်။ '
-            'ဒီအဆင့်မှာ စာရင်းကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ် — render ကို မချိတ်ရသေးပါ။',
+            'ခွင့်ပြုထားတဲ့ Crop & Reframe တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
             style: TextStyle(color: DfColors.muted, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -350,6 +354,9 @@ class _OpDialogState extends State<_OpDialog> {
   final _from = TextEditingController(text: '0');
   final _to = TextEditingController(text: '5');
   final _note = TextEditingController();
+  double _zoom = 1.5;
+  double _cx = 0.5;
+  double _cy = 0.5;
   String? _err;
 
   @override
@@ -375,10 +382,25 @@ class _OpDialogState extends State<_OpDialog> {
         startMs: (a * 1000).round(),
         endMs: (b * 1000).round(),
         note: _note.text.trim(),
+        params: _tool == TransformTool.cropReframe
+            ? {
+                'zoom': double.parse(_zoom.toStringAsFixed(2)),
+                'cx': double.parse(_cx.toStringAsFixed(2)),
+                'cy': double.parse(_cy.toStringAsFixed(2)),
+              }
+            : const {},
         status: OpStatus.approved,
       ),
     );
   }
+
+  Widget _slider(String label, double v, double min, double max, void Function(double) set) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13)),
+          Slider(value: v, min: min, max: max, onChanged: (x) => setState(() => set(x))),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -414,6 +436,15 @@ class _OpDialogState extends State<_OpDialog> {
                 ),
               ],
             ),
+            if (_tool == TransformTool.cropReframe) ...[
+              _slider('Zoom ×${_zoom.toStringAsFixed(2)}', _zoom, 1.0, 3.0, (v) => _zoom = v),
+              _slider('ဘယ်-ညာ ${(_cx * 100).round()}%', _cx, 0.0, 1.0, (v) => _cx = v),
+              _slider('အပေါ်-အောက် ${(_cy * 100).round()}%', _cy, 0.0, 1.0, (v) => _cy = v),
+              const Text(
+                'အစွန်းတွေမှာ အလွတ်မပေါ်အောင် နေရာကို အလိုအလျောက် ညှိမယ်။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
             TextField(controller: _note, decoration: const InputDecoration(labelText: 'မှတ်ချက်')),
             if (_err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_err!, style: const TextStyle(color: DfColors.danger))),
           ],

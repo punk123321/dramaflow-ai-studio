@@ -99,6 +99,7 @@ void main() {
 
   test('tool status says only what exists today', () {
     expect(TransformTool.freezeFrame.status, ToolStatus.planned);
+    expect(TransformTool.cropReframe.status, ToolStatus.rendered);
     expect(TransformTool.pictureInPicture.status, ToolStatus.planned);
     expect(TransformTool.commentaryVoiceOver.status, ToolStatus.inStudio);
   });

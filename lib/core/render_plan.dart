@@ -87,7 +87,15 @@ Map<String, Object?> buildRenderJob({
     'bitrate': videoBitrate(settings),
     'estimateBytes': estimateBytes(dur, settings),
     'originalVolume': timeline.originalVolume,
-    'pieces': [for (final p in timeline.pieces) {'s': p.startMs, 'e': p.endMs, 'z': p.zoom.index}],
+    'pieces': [
+      for (final p in timeline.pieces)
+        {
+          's': p.startMs,
+          'e': p.endMs,
+          'z': p.zoom.index,
+          if (p.crop != null) 'c': p.crop!.toJson(),
+        }
+    ],
     'aspect': aspect,
     'subStyle': timeline.style.toJson(),
     'corners': [for (final c in timeline.corners) if (c.text.trim().isNotEmpty) c.toJson()],

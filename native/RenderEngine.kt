@@ -193,6 +193,10 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val zoom = p.optInt("z", 0)
             val pieceUs = (p.getLong("e") - p.getLong("s")) * 1000L
             val videoFx = ArrayList<Effect>()
+            val crop = p.optJSONArray("c")
+            if (crop != null && crop.length() == 3) {
+                videoFx.add(cropEffect(crop.getDouble(0).toFloat(), crop.getDouble(1).toFloat(), crop.getDouble(2).toFloat()))
+            }
             if (zoom == 1 || zoom == 2) videoFx.add(zoomEffect(zoom == 1, pieceUs))
             if (audioFx.isNotEmpty() || videoFx.isNotEmpty()) b.setEffects(Effects(audioFx, videoFx))
             vSeq.addItem(b.build())
@@ -292,6 +296,22 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     }
 
     private class Sub(val startMs: Long, val endMs: Long, val text: String)
+
+    /**
+     * Still crop: keeps the area of size 1/zoom centred on (cx, cy), both 0..1
+     * from the top-left. Screen coordinates here run -1..1 with y up.
+     */
+    private fun cropEffect(zoom: Float, cx: Float, cy: Float): Effect {
+        val z = zoom.coerceIn(1f, 4f)
+        val tx = 2f * cx.coerceIn(0f, 1f) - 1f
+        val ty = 1f - 2f * cy.coerceIn(0f, 1f)
+        return MatrixTransformation {
+            Matrix().apply {
+                postTranslate(-tx, -ty)
+                postScale(z, z)
+            }
+        }
+    }
 
     /** Slow zoom over one video piece: 100% to 115% (in) or 115% to 100% (out). */
     private fun zoomEffect(zoomIn: Boolean, pieceUs: Long): Effect {
