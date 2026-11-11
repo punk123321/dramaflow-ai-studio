@@ -103,6 +103,7 @@ class TransformOp {
     this.params = const {},
     this.status = OpStatus.proposed,
     this.source = OpSource.manual,
+    this.extra = const {},
   });
 
   /// A suggestion that waits for the user. AI suggestions must be made this
@@ -137,6 +138,9 @@ class TransformOp {
   final OpStatus status;
   final OpSource source;
 
+  /// Fields this app does not know, kept so saving does not drop them.
+  final Map<String, Object?> extra;
+
   bool get valid => startMs >= 0 && endMs >= startMs;
 
   /// Only approved operations may ever be executed.
@@ -151,9 +155,11 @@ class TransformOp {
         params: params,
         status: s,
         source: source,
+        extra: extra,
       );
 
   Map<String, Object?> toJson() => {
+        ...extra,
         'id': id,
         'tool': tool.name,
         's': startMs,
@@ -183,9 +189,15 @@ class TransformOp {
       // An unknown or missing status is the safe one: not approved.
       status: _byName(OpStatus.values, raw['status']) ?? OpStatus.proposed,
       source: _byName(OpSource.values, raw['src']) ?? OpSource.manual,
+      extra: {
+        for (final e in raw.entries)
+          if (!_opKnown.contains(e.key)) e.key.toString(): e.value,
+      },
     );
   }
 }
+
+const _opKnown = {'id', 'tool', 's', 'e', 'note', 'params', 'status', 'src'};
 
 T? _byName<T extends Enum>(List<T> values, Object? name) {
   if (name is! String) return null;

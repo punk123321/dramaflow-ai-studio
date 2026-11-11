@@ -70,6 +70,18 @@ void main() {
     expect(out['instructions'], 'edited');
   });
 
+  test('unknown fields inside a known operation survive a load and save', () {
+    const raw = '{"version":2,"mode":"manual","tools":[],"instructions":"","ops":[{"id":"a","tool":"smartCut","s":0,"e":1000,'
+        '"status":"approved","src":"ai","futureField":{"k":1},"conf":0.9}]}';
+    final d = TransformativePlan.decode(raw);
+    final approved = d.setOpStatus('a', OpStatus.rejected);
+    final out = jsonDecode(approved.encode()) as Map;
+    final op = (out['ops'] as List).single as Map;
+    expect(op['futureField'], {'k': 1});
+    expect(op['conf'], 0.9);
+    expect(op['status'], 'rejected');
+  });
+
   test('approval: proposals and unknown statuses are never runnable', () {
     final p = TransformOp.proposal(id: 'p', tool: TransformTool.smartCut, startMs: 0, endMs: 1000);
     expect(p.status, OpStatus.proposed);

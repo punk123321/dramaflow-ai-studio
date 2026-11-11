@@ -282,9 +282,11 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     } else if (next.isEmpty) {
       notes.add('$name — ဗီဒီယိုအားလုံး ပျောက်သွားမှာမို့ ချန်ထားတယ်');
     } else {
-      cur = next;
       applied.add(op);
-      cutMs += op.endMs - op.startMs;
+      // What was really removed (overlapping cuts are not counted twice).
+      cutMs += cur.where((p) => !p.freeze).fold<int>(0, (a, p) => a + p.lengthMs) -
+          next.where((p) => !p.freeze).fold<int>(0, (a, p) => a + p.lengthMs);
+      cur = next;
     }
   }
 

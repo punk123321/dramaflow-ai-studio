@@ -365,7 +365,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           ),
           const SizedBox(height: 12),
           const Text(
-            'မှတ်ချက် — ဒီအဆင့်မှာ TE Plan ကို Project ထဲ သိမ်းဆည်းနိုင်ပါပြီ။ AI Scene Analysis၊ PIP၊ Freeze Frame၊ Split Screen နဲ့ Motion Graphics တို့ရဲ့ Render လုပ်ဆောင်ချက်တွေကို နောက်အဆင့်တွေမှာ တစ်ခုချင်း ချိတ်ဆက်မယ်။',
+            'မှတ်ချက် — Smart Cut၊ Crop & Reframe၊ Freeze Frame၊ Picture-in-Picture (ပုံ)၊ Motion Graphics နဲ့ Sound Design တို့ကို ခွင့်ပြုထားရင် Render မှာ ပါပါမယ် (ဖုန်းမှာ မစမ်းရသေးပါ)။ Split Screen၊ ဒုတိယဗီဒီယို PiP နဲ့ AI ကိုယ်တိုင်ချိတ်ဆက်တာတွေ မရှိသေးပါ။',
             style: TextStyle(color: DfColors.muted, fontSize: 12),
           ),
         ],

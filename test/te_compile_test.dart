@@ -364,6 +364,13 @@ void main() {
       expect(compileOps(base, [cut('c', 3000, 6000, status: OpStatus.proposed)]).pieces, base);
     });
 
+    test('overlapping cuts are counted once in the message', () {
+      final r = compileOps(const [VideoPiece(0, 20000)], [cut('a', 2000, 8000), cut('b', 5000, 11000)]);
+      expect(r.pieces.fold<int>(0, (a, p) => a + p.lengthMs), 11000); // 0-2 s and 11-20 s
+      final info = r.infos.firstWhere((i) => i.contains('Smart Cut'));
+      expect(info.contains('0:09'), isTrue);
+    });
+
     test('other operations follow the cut: a label after it moves earlier', () {
       final r = compileOps(base, [cut('c', 3000, 6000), motion('m', 7000, 9000, label)]);
       expect(r.overlays.single.startMs, 4000);
