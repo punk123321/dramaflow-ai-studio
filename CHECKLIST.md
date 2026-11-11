@@ -297,3 +297,16 @@ Split Screen and second-video picture-in-picture need Media3 multi-input composi
 
 Mirror/flip is NOT built: its purpose here would be to get past platform
 copyright checks, and it also reverses any text in the video.
+
+## TE-10: Split Screen, EXPERIMENTAL (branch claude/te-10-split-screen)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved split ops become output-time windows (second picture = another moment of the SAME video) | yes (te_compile_test) | no |
+| Render job carries the windows | yes | no |
+| Native: second video sequence + Media3 VideoCompositorSettings (both pictures at half size) | compiles on CI | no |
+
+Written from the Media3 documentation without a phone to test on. Unknown until
+tested: which input index is which, whether the half-size pictures are
+positioned as intended, whether a gap in the second sequence stays invisible.
+Not built: a second video FILE, more than two panels. If a render fails or looks
+wrong with a split operation, remove that operation; other tools are unaffected.

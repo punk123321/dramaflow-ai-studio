@@ -12,6 +12,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.util.Size
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
@@ -39,6 +40,7 @@ import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.MatrixTransformation
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
+import androidx.media3.common.VideoCompositorSettings
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.StaticOverlaySettings
 import androidx.media3.effect.TextOverlay
@@ -247,6 +249,37 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         val sequences = ArrayList<EditedMediaItemSequence>()
         sequences.add(vSeq.build())
 
+        // 1b. Split screen (experimental): a second picture of the same video,
+        //     shown only inside the windows. Both pictures are drawn at half size.
+        var compositor: VideoCompositorSettings? = null
+        val splits = job.optJSONArray("splits")
+        if (splits != null && splits.length() > 0) {
+            val sSeq = EditedMediaItemSequence.Builder().experimentalSetForceVideoTrack(true)
+            val wins = ArrayList<SplitWin>()
+            var cursorMs = 0L
+            for (i in 0 until splits.length()) {
+                val w = splits.getJSONObject(i)
+                val s0 = w.getLong("s")
+                val e0 = w.getLong("e")
+                val src = w.getLong("src")
+                if (s0 > cursorMs) sSeq.addGap((s0 - cursorMs) * 1000L)
+                val clip = MediaItem.Builder()
+                    .setUri(videoUri)
+                    .setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(src)
+                            .setEndPositionMs(src + (e0 - s0))
+                            .build()
+                    )
+                    .build()
+                sSeq.addItem(EditedMediaItem.Builder(clip).setRemoveAudio(true).build())
+                cursorMs = e0
+                wins.add(SplitWin(s0, e0, w.optString("layout") == "topBottom"))
+            }
+            sequences.add(sSeq.build())
+            compositor = SplitCompositor(wins)
+        }
+
         // 2. Narration. Each lane is played one after another with gaps, and
         //    lanes are mixed on top of each other.
         val lanes = job.optJSONArray("voiceLanes") ?: JSONArray()
@@ -358,9 +391,10 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             videoEffects.add(OverlayEffect(ImmutableList.copyOf(overlays)))
         }
 
-        return Composition.Builder(sequences)
+        val builder = Composition.Builder(sequences)
             .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
-            .build()
+        if (compositor != null) builder.setVideoCompositorSettings(compositor)
+        return builder.build()
     }
 
     /** Fails early, naming the file, when an audio file cannot be read. */
@@ -588,6 +622,34 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             return StaticOverlaySettings.Builder()
                 .setOverlayFrameAnchor(0f, if (top) 1f else -1f)
                 .setBackgroundFrameAnchor(0f, if (top) 0.88f else -0.88f)
+                .build()
+        }
+    }
+
+    private class SplitWin(val startMs: Long, val endMs: Long, val topBottom: Boolean)
+
+    /**
+     * Input 0 is the edit, input 1 the second picture. Inside a window both are
+     * drawn at half size side by side (or one above the other); outside it the
+     * edit fills the frame and the second picture is invisible.
+     */
+    private class SplitCompositor(private val wins: List<SplitWin>) : VideoCompositorSettings {
+        override fun getOutputSize(inputSizes: List<Size>): Size = inputSizes[0]
+
+        override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
+            val ms = presentationTimeUs / 1000L
+            val w = wins.firstOrNull { ms >= it.startMs && ms < it.endMs }
+            if (w == null) {
+                return if (inputId == 0) StaticOverlaySettings.Builder().build()
+                else StaticOverlaySettings.Builder().setAlphaScale(0f).build()
+            }
+            val first = inputId == 0
+            val x = if (w.topBottom) 0f else if (first) -0.5f else 0.5f
+            val y = if (w.topBottom) (if (first) 0.5f else -0.5f) else 0f
+            return StaticOverlaySettings.Builder()
+                .setScale(0.5f, 0.5f)
+                .setOverlayFrameAnchor(0f, 0f)
+                .setBackgroundFrameAnchor(x, y)
                 .build()
         }
     }

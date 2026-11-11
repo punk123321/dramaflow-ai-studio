@@ -290,6 +290,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
               title: Text(tool.title, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(
                 '${tool.description}\n${switch (tool.status) {
+                  ToolStatus.experimental => 'Render မှာ ပါတယ် — စမ်းသပ်ဆဲ (ဖုန်းမှာ မစမ်းရသေးလို့ ပုံမှန်မဖြစ်နိုင်)',
                   ToolStatus.rendered => 'Render မှာ ပါပြီ — ခွင့်ပြုထားတဲ့ လုပ်ဆောင်ချက်တွေ MP4 ထဲ ဝင်မယ် (ဖုန်းမစမ်းရသေး)',
                   ToolStatus.inStudio => 'Studio Editor မှာ အသုံးပြုလို့ရပြီ (TE ကနေ မချိတ်ရသေး)',
                   ToolStatus.planned => 'မဖြစ်သေး — မှတ်တမ်းသာ ထားနိုင်တယ်',
@@ -465,6 +466,8 @@ class _OpDialogState extends State<_OpDialog> {
   final _note = TextEditingController();
   double _zoom = 1.5;
   double _hold = 3.0;
+  final _second = TextEditingController(text: '0');
+  String _layout = 'leftRight';
   double _bright = 0.15;
   double _contrast = 0.0;
   String? _imgPath;
@@ -490,6 +493,7 @@ class _OpDialogState extends State<_OpDialog> {
     _to.dispose();
     _note.dispose();
     _text.dispose();
+    _second.dispose();
     super.dispose();
   }
 
@@ -524,6 +528,8 @@ class _OpDialogState extends State<_OpDialog> {
       case TransformTool.soundDesign:
         final f = _sound;
         return f == null ? const {} : {'src': f.source, 'name': f.name, 'dur': f.durationMs, 'vol': r(_svol)};
+      case TransformTool.splitScreen:
+        return {'second': double.tryParse(_second.text.trim()) ?? -1, 'layout': _layout};
       case TransformTool.colorGrade:
         return {'brightness': r(_bright), 'contrast': r(_contrast)};
       case TransformTool.cropReframe:
@@ -620,6 +626,27 @@ class _OpDialogState extends State<_OpDialog> {
                 ),
               ],
             ),
+            if (_tool == TransformTool.splitScreen) ...[
+              const SizedBox(height: 4),
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: 'leftRight', label: Text('ဘယ်|ညာ')),
+                  ButtonSegment(value: 'topBottom', label: Text('အပေါ်|အောက်')),
+                ],
+                selected: {_layout},
+                onSelectionChanged: (v) => setState(() => _layout = v.first),
+              ),
+              TextField(
+                controller: _second,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'ဒုတိယပိုင်း စမယ့် အချိန် (မူရင်းဗီဒီယို၊ စက္ကန့်)'),
+              ),
+              const Text(
+                'ပထမပိုင်းက edit ကို ဆက်ပြမယ်၊ ဒုတိယပိုင်းက မူရင်းဗီဒီယိုရဲ့ တခြားအချိန်ကနေ တစ်ပြိုင်နက် ပြမယ်။ ပုံနှစ်ခုက တစ်ဝက်အရွယ်ဖြစ်မယ်။ စမ်းသပ်ဆဲ — ဖုန်းမှာ မစမ်းရသေးပါ။ တခြားဗီဒီယိုဖိုင် ထည့်တာ မရသေးပါ။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
             if (_tool == TransformTool.colorGrade) ...[
               _slider('အလင်း ${(_bright * 100).round()}% (အနှုတ် = မှောင်)', _bright, -0.6, 0.6, (v) => _bright = v),
               _slider('Contrast ${(_contrast * 100).round()}%', _contrast, -0.6, 0.6, (v) => _contrast = v),

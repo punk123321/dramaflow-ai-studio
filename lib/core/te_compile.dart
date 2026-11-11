@@ -11,7 +11,7 @@ import 'transformative_plan.dart';
 /// reported as "not rendered" so nothing is silently skipped.
 
 class CompileResult {
-  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const [], this.sounds = const []]);
+  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const [], this.sounds = const [], this.splits = const []]);
 
   final List<VideoPiece> pieces;
 
@@ -31,6 +31,9 @@ class CompileResult {
   /// Sound effects placed on the OUTPUT time. The render mixes them in with
   /// the narration lanes.
   final List<VoiceItem> sounds;
+
+  /// Split-screen windows on the OUTPUT time (experimental).
+  final List<SplitItem> splits;
 }
 
 /// Shortest piece the compiler will create. Anything shorter is folded into
@@ -46,6 +49,34 @@ CropFrame? cropFromParams(Map<String, Object?> params) {
   if (x < 0 || x > 1 || y < 0 || y > 1) return null;
   return CropFrame(z.toDouble(), x.toDouble(), y.toDouble()).fitted;
 }
+
+enum SplitLayout { leftRight, topBottom }
+
+/// For [startMs]..[endMs] of the OUTPUT the picture is split in two. The
+/// first half keeps playing the edit; the second half plays the ORIGINAL
+/// video from [secondMs] (a different moment of the same video).
+class SplitItem {
+  const SplitItem({required this.startMs, required this.endMs, required this.secondMs, required this.layout});
+
+  final int startMs;
+  final int endMs;
+  final int secondMs;
+  final SplitLayout layout;
+
+  Map<String, Object?> toJson() => {'s': startMs, 'e': endMs, 'src': secondMs, 'layout': layout.name};
+}
+
+/// Null when the parameters are not usable.
+({int secondMs, SplitLayout layout})? splitFromParams(Map<String, Object?> p) {
+  final sec = p['second'];
+  if (sec is! num || !sec.isFinite || sec < 0) return null;
+  final layout = SplitLayout.values.where((l) => l.name == p['layout']).firstOrNull;
+  if (layout == null) return null;
+  return (secondMs: (sec * 1000).round(), layout: layout);
+}
+
+/// Shortest split-screen window.
+const minSplitMs = 1000;
 
 enum MotionKind { label, arrow, image }
 
@@ -251,6 +282,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   final freezes = <TransformOp>[];
   final motions = <TransformOp>[];
   final cuts = <TransformOp>[];
+  final splitOps = <TransformOp>[];
   final sounds = <TransformOp>[];
   for (final op in approved) {
     final name = op.tool.title;
@@ -264,6 +296,8 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       motions.add(op);
     } else if (op.tool == TransformTool.smartCut) {
       cuts.add(op);
+    } else if (op.tool == TransformTool.splitScreen) {
+      splitOps.add(op);
     } else if (op.tool == TransformTool.soundDesign) {
       sounds.add(op);
     } else {
@@ -390,6 +424,34 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     applied.add(op);
   }
 
+  // Split screen (experimental): one window per operation on the output time.
+  final splitItems = <SplitItem>[];
+  for (final op in splitOps) {
+    final name = op.tool.title;
+    final sp = splitFromParams(op.params);
+    if (sp == null) {
+      notes.add('$name — ဒုတိယပိုင်း အချိန်/ပုံစံ မမှန်လို့ ချန်ထားတယ်');
+      continue;
+    }
+    final ranges = outputRanges(cur, op.startMs, op.endMs);
+    if (ranges.length != 1) {
+      notes.add('$name — ဖြတ်/ရွှေ့ထားလို့ အချိန်ပိုင်း တစ်ဆက်တည်း မဖြစ်တော့ဘူး၊ ချန်ထားတယ်');
+      continue;
+    }
+    final r = ranges.single;
+    if (r.$2 - r.$1 < minSplitMs) {
+      notes.add('$name — ၁ စက္ကန့်ထက် တိုလို့ ချန်ထားတယ်');
+      continue;
+    }
+    if (splitItems.any((x) => r.$1 < x.endMs && r.$2 > x.startMs)) {
+      notes.add('$name — တခြား Split Screen နဲ့ ထပ်နေလို့ ချန်ထားတယ်');
+      continue;
+    }
+    splitItems.add(SplitItem(startMs: r.$1, endMs: r.$2, secondMs: sp.secondMs, layout: sp.layout));
+    applied.add(op);
+  }
+  splitItems.sort((a, b) => a.startMs.compareTo(b.startMs));
+
   // Sound effects, placed on the final output time.
   final soundItems = <VoiceItem>[];
   final total = cur.fold<int>(0, (a, p) => a + p.lengthMs);
@@ -427,7 +489,10 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   if (cutMs > 0) {
     infos.add('Smart Cut: မူရင်းအချိန် ${_clock(cutMs)} လောက် ဖြတ်ထုတ်မယ်။ နောက်ပိုင်း အပိုင်းတွေ စောလာမယ်၊ Narration အချိန်ကို ကိုယ်တိုင် ညှိပါ');
   }
-  return CompileResult(cur, applied, notes, infos, overlays, soundItems);
+  if (splitItems.isNotEmpty) {
+    infos.add('Split Screen (စမ်းသပ်ဆဲ): ${splitItems.length} နေရာ။ ပုံနှစ်ခုက တစ်ဝက်အရွယ်နဲ့ ပြမယ်');
+  }
+  return CompileResult(cur, applied, notes, infos, overlays, soundItems, splitItems);
 }
 
 /// Files that the compiled result needs but that are not there. Only app

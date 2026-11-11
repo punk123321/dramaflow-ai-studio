@@ -42,6 +42,10 @@ enum ToolStatus {
 
   /// Approved operations of this tool are applied when a video is rendered.
   rendered,
+
+  /// Applied at render time, but written without a phone to test on. It may
+  /// not look right yet.
+  experimental,
 }
 
 extension TransformToolLabel on TransformTool {
@@ -68,7 +72,7 @@ extension TransformToolLabel on TransformTool {
         TransformTool.sceneReordering => 'Scene အစီအစဉ်ကို ပြန်စီရန်',
         TransformTool.motionGraphics => 'စာသား၊ မြား၊ Label နဲ့ Infographic ထည့်ရန်',
         TransformTool.soundDesign => 'အသံအကျိုးသက်ရောက်မှုနဲ့ Background Audio ချိန်ရန်',
-        TransformTool.splitScreen => 'မျက်နှာပြင်ကို နှစ်ပိုင်း သို့မဟုတ် အများပိုင်းခွဲရန်',
+        TransformTool.splitScreen => 'မျက်နှာပြင်ကို နှစ်ပိုင်းခွဲပြီး မူရင်းဗီဒီယိုရဲ့ အချိန်နှစ်ခု တစ်ပြိုင်နက်ပြရန် (စမ်းသပ်ဆဲ)',
         TransformTool.criticalCommentary => 'ဇာတ်လမ်းကို ကိုယ်ပိုင်ဝေဖန်ချက်နဲ့ အသစ်ပြန်တင်ပြရန်',
         TransformTool.colorGrade => 'အလင်း/အမှောင်၊ ကွဲလွဲမှု (contrast) ကို အချိန်ပိုင်းအလိုက် ညှိရန် (ပုံသဏ္ဍာန်/mood အတွက်)',
       };
@@ -76,6 +80,7 @@ extension TransformToolLabel on TransformTool {
   /// What exists in the app today (see CHECKLIST.md). TE itself renders none
   /// of these yet.
   ToolStatus get status => switch (this) {
+        TransformTool.splitScreen => ToolStatus.experimental,
         TransformTool.colorGrade ||
         TransformTool.smartCut ||
         TransformTool.pictureInPicture ||

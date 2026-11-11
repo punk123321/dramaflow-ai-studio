@@ -501,4 +501,62 @@ void main() {
       expect(((job['pieces'] as List).first as Map)['l'], [-0.3, 0.2]);
     });
   });
+
+  TransformOp split(String id, int s, int e, Map<String, Object?> params, {OpStatus status = OpStatus.approved}) =>
+      TransformOp(id: id, tool: TransformTool.splitScreen, startMs: s, endMs: e, status: status, params: params);
+  const lr = {'second': 40.0, 'layout': 'leftRight'};
+
+  group('split screen (experimental)', () {
+    test('a window on the output time with the second picture start', () {
+      final r = compileOps(base, [split('s', 22000, 26000, lr)]);
+      final w = r.splits.single;
+      expect(w.startMs, 12000);
+      expect(w.endMs, 16000);
+      expect(w.secondMs, 40000);
+      expect(w.layout, SplitLayout.leftRight);
+      expect(r.pieces, base);
+      expect(r.applied.length, 1);
+      expect(r.infos.any((i) => i.contains('Split Screen')), isTrue);
+    });
+
+    test('bad values, too short, overlap, cut in the middle, proposal: left out with a note', () {
+      final r = compileOps(base, [
+        split('1', 1000, 5000, const {'second': -1, 'layout': 'leftRight'}),
+        split('2', 1000, 5000, const {'second': 3, 'layout': 'diagonal'}),
+        split('3', 1000, 1500, lr),
+        split('4', 2000, 6000, lr),
+        split('5', 3000, 7000, lr),
+        split('6', 1000, 5000, lr, status: OpStatus.proposed),
+      ]);
+      expect(r.splits.length, 1);
+      expect(r.splits.single.startMs, 2000);
+      expect(r.notes.length, 4);
+      final cutMid = compileOps(base, [cut('c', 3000, 6000), split('s', 1000, 9000, lr)]);
+      expect(cutMid.splits, isEmpty);
+      expect(cutMid.notes.length, 1);
+    });
+
+    test('goes into the render job; no splits means no key', () {
+      final r = compileOps(base, [split('s', 1000, 4000, const {'second': 12.5, 'layout': 'topBottom'})]);
+      final job = buildRenderJob(
+        name: 'n',
+        videoUri: 'content://v',
+        timeline: Timeline(pieces: r.pieces),
+        sourceSubtitles: const [],
+        settings: const RenderSettings(),
+        splits: [for (final x in r.splits) x.toJson()],
+      );
+      final list = job['splits'] as List;
+      expect((list.single as Map)['src'], 12500);
+      expect((list.single as Map)['layout'], 'topBottom');
+      final none = buildRenderJob(
+        name: 'n',
+        videoUri: 'content://v',
+        timeline: Timeline(pieces: base),
+        sourceSubtitles: const [],
+        settings: const RenderSettings(),
+      );
+      expect(none.containsKey('splits'), isFalse);
+    });
+  });
 }
