@@ -49,18 +49,52 @@ class CropFrame {
   int get hashCode => Object.hash(zoom, cx, cy);
 }
 
+/// Brightness and contrast of one video piece, each -0.6 to 0.6 (0 = as
+/// shot). Only changes how the picture looks; the original is never changed.
+class LookAdjust {
+  const LookAdjust(this.brightness, this.contrast);
+
+  static const limit = 0.6;
+
+  final double brightness;
+  final double contrast;
+
+  bool get isNeutral => brightness == 0 && contrast == 0;
+
+  LookAdjust get fitted => LookAdjust(
+        brightness.isNaN ? 0 : brightness.clamp(-limit, limit).toDouble(),
+        contrast.isNaN ? 0 : contrast.clamp(-limit, limit).toDouble(),
+      );
+
+  List<double> toJson() => [brightness, contrast];
+
+  static LookAdjust? fromJson(Object? v) {
+    if (v is! List || v.length != 2 || v.any((e) => e is! num)) return null;
+    final l = LookAdjust((v[0] as num).toDouble(), (v[1] as num).toDouble()).fitted;
+    return l.isNeutral ? null : l;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LookAdjust && other.brightness == brightness && other.contrast == contrast;
+
+  @override
+  int get hashCode => Object.hash(brightness, contrast);
+}
+
 class VideoPiece {
-  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false]);
+  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false, this.look]);
 
   /// A still frame of the original at [atMs], held for [holdMs]. Only the
   /// render step creates these (from approved Freeze Frame operations); they
   /// are never saved in the timeline.
-  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c])
+  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c, LookAdjust? l])
       : startMs = atMs,
         endMs = atMs + holdMs,
         zoom = ZoomMode.none,
         crop = c,
-        freeze = true;
+        freeze = true,
+        look = l;
 
   /// Range inside the ORIGINAL video.
   final int startMs;
@@ -71,12 +105,14 @@ class VideoPiece {
   /// Still frame instead of moving video: [startMs] is the frame time and
   /// [lengthMs] how long it is held.
   final bool freeze;
+  final LookAdjust? look;
 
   int get lengthMs => endMs - startMs;
 
-  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze);
-  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze);
-  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze);
+  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze, look);
+  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze, look);
+  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze, look);
+  VideoPiece withLook(LookAdjust? l) => VideoPiece(startMs, endMs, zoom, crop, freeze, l);
 
   @override
   bool operator ==(Object other) =>
@@ -85,10 +121,11 @@ class VideoPiece {
       other.endMs == endMs &&
       other.zoom == zoom &&
       other.crop == crop &&
-      other.freeze == freeze;
+      other.freeze == freeze &&
+      other.look == look;
 
   @override
-  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze);
+  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze, look);
 
   Map<String, Object?> toJson() => {
         's': startMs,
@@ -96,6 +133,7 @@ class VideoPiece {
         if (zoom != ZoomMode.none) 'z': zoom.index,
         if (crop != null) 'c': crop!.toJson(),
         if (freeze) 'f': 1,
+        if (look != null) 'l': look!.toJson(),
       };
   static VideoPiece fromJson(Map<String, Object?> m) {
     final z = (m['z'] as int?) ?? 0;
@@ -105,6 +143,7 @@ class VideoPiece {
       z >= 0 && z < ZoomMode.values.length ? ZoomMode.values[z] : ZoomMode.none,
       CropFrame.fromJson(m['c']),
       m['f'] == 1,
+      LookAdjust.fromJson(m['l']),
     );
   }
 }

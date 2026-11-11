@@ -117,6 +117,7 @@ void main() {
     expect(TransformTool.motionGraphics.status, ToolStatus.rendered);
     expect(TransformTool.soundDesign.status, ToolStatus.rendered);
     expect(TransformTool.splitScreen.status, ToolStatus.planned);
+    expect(TransformTool.colorGrade.status, ToolStatus.rendered);
     expect(TransformTool.commentaryVoiceOver.status, ToolStatus.inStudio);
   });
 

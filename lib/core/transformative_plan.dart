@@ -28,6 +28,7 @@ enum TransformTool {
   soundDesign,
   splitScreen,
   criticalCommentary,
+  colorGrade,
 }
 
 /// How far a tool really goes today. Used so the screen never suggests more
@@ -55,6 +56,7 @@ extension TransformToolLabel on TransformTool {
         TransformTool.soundDesign => 'Sound Design',
         TransformTool.splitScreen => 'Split Screen',
         TransformTool.criticalCommentary => 'Critical Commentary / Recap',
+        TransformTool.colorGrade => 'Brightness & Contrast',
       };
 
   String get description => switch (this) {
@@ -68,11 +70,13 @@ extension TransformToolLabel on TransformTool {
         TransformTool.soundDesign => 'အသံအကျိုးသက်ရောက်မှုနဲ့ Background Audio ချိန်ရန်',
         TransformTool.splitScreen => 'မျက်နှာပြင်ကို နှစ်ပိုင်း သို့မဟုတ် အများပိုင်းခွဲရန်',
         TransformTool.criticalCommentary => 'ဇာတ်လမ်းကို ကိုယ်ပိုင်ဝေဖန်ချက်နဲ့ အသစ်ပြန်တင်ပြရန်',
+        TransformTool.colorGrade => 'အလင်း/အမှောင်၊ ကွဲလွဲမှု (contrast) ကို အချိန်ပိုင်းအလိုက် ညှိရန် (ပုံသဏ္ဍာန်/mood အတွက်)',
       };
 
   /// What exists in the app today (see CHECKLIST.md). TE itself renders none
   /// of these yet.
   ToolStatus get status => switch (this) {
+        TransformTool.colorGrade ||
         TransformTool.smartCut ||
         TransformTool.pictureInPicture ||
         TransformTool.cropReframe ||

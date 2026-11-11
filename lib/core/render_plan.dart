@@ -96,6 +96,7 @@ Map<String, Object?> buildRenderJob({
           'z': p.zoom.index,
           if (p.crop != null) 'c': p.crop!.toJson(),
           if (p.freeze) 'f': 1,
+          if (p.look != null) 'l': p.look!.toJson(),
         }
     ],
     'aspect': aspect,

@@ -442,4 +442,63 @@ void main() {
     expect(missingFiles(r, (_) => false).length, 2);
     expect(missingFiles(r, (_) => true), isEmpty);
   });
+
+  TransformOp grade(String id, int s, int e, {double b = 0.2, double c = 0.1, OpStatus status = OpStatus.approved}) => TransformOp(
+        id: id,
+        tool: TransformTool.colorGrade,
+        startMs: s,
+        endMs: e,
+        status: status,
+        params: {'brightness': b, 'contrast': c},
+      );
+
+  group('brightness and contrast', () {
+    test('look is applied to the range only, total length unchanged', () {
+      final r = compileOps(base, [grade('g', 3000, 6000)]);
+      expect(r.pieces.length, 4);
+      expect(r.pieces[0].look, isNull);
+      expect(r.pieces[1].look, const LookAdjust(0.2, 0.1));
+      expect(r.pieces[2].look, isNull);
+      expect(r.pieces.fold<int>(0, (a, p) => a + p.lengthMs), 20000);
+      expect(r.applied.length, 1);
+    });
+
+    test('crop and look on the same range combine; held frames keep the look', () {
+      final r = compileOps(base, [crop('c', 0, 10000), grade('g', 0, 10000), freeze('f', 4000)]);
+      final moving = r.pieces.where((p) => !p.freeze && p.startMs < 10000);
+      expect(moving.every((p) => p.crop != null && p.look != null), isTrue);
+      final still = r.pieces.firstWhere((p) => p.freeze);
+      expect(still.look, isNotNull);
+      expect(still.crop, isNotNull);
+    });
+
+    test('neutral, out of range, proposed or outside: nothing applied', () {
+      final r = compileOps(base, [
+        grade('1', 0, 5000, b: 0, c: 0),
+        grade('2', 0, 5000, b: 0.9),
+        grade('3', 0, 5000, status: OpStatus.proposed),
+        grade('4', 12000, 15000),
+      ]);
+      expect(r.pieces, base);
+      expect(r.applied, isEmpty);
+      expect(r.notes.length, 3);
+    });
+
+    test('look survives JSON, trim/split helpers and goes into the render job', () {
+      const piece = VideoPiece(0, 4000, ZoomMode.none, null, false, LookAdjust(-0.3, 0.2));
+      expect(VideoPiece.fromJson(piece.toJson()), piece);
+      expect(piece.withRange(0, 2000).look, piece.look);
+      expect(piece.withZoom(ZoomMode.zoomIn).look, piece.look);
+      expect(VideoPiece.fromJson({'s': 0, 'e': 5, 'l': [0, 0]}).look, isNull);
+      expect(VideoPiece.fromJson({'s': 0, 'e': 5, 'l': [9, 9]}).look, const LookAdjust(0.6, 0.6));
+      final job = buildRenderJob(
+        name: 'n',
+        videoUri: 'content://v',
+        timeline: const Timeline(pieces: [piece]),
+        sourceSubtitles: const [],
+        settings: const RenderSettings(),
+      );
+      expect(((job['pieces'] as List).first as Map)['l'], [-0.3, 0.2]);
+    });
+  });
 }

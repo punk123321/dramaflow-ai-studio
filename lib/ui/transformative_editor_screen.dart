@@ -303,7 +303,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           _sectionTitle('Edit လုပ်ဆောင်ချက် စာရင်း'),
           const Text(
             'AI အကြံပြုချက် (နောက်ပိုင်း) တွေက “စောင့်ဆိုင်း” အနေနဲ့သာ ဝင်လာမယ်။ ခွင့်ပြုမှသာ အသုံးပြုမယ်။ '
-            'ခွင့်ပြုထားတဲ့ Smart Cut၊ Crop & Reframe၊ Freeze Frame၊ Picture-in-Picture (ပုံ)၊ Motion Graphics (စာသား/မြား)၊ Sound Design (အသံ effect) တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
+            'ခွင့်ပြုထားတဲ့ Smart Cut၊ Crop & Reframe၊ အလင်း/Contrast၊ Freeze Frame၊ Picture-in-Picture (ပုံ)၊ Motion Graphics (စာသား/မြား)၊ Sound Design (အသံ effect) တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
             style: TextStyle(color: DfColors.muted, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -465,6 +465,8 @@ class _OpDialogState extends State<_OpDialog> {
   final _note = TextEditingController();
   double _zoom = 1.5;
   double _hold = 3.0;
+  double _bright = 0.15;
+  double _contrast = 0.0;
   String? _imgPath;
   double _isize = 0.25;
   AudioFile? _sound;
@@ -522,6 +524,8 @@ class _OpDialogState extends State<_OpDialog> {
       case TransformTool.soundDesign:
         final f = _sound;
         return f == null ? const {} : {'src': f.source, 'name': f.name, 'dur': f.durationMs, 'vol': r(_svol)};
+      case TransformTool.colorGrade:
+        return {'brightness': r(_bright), 'contrast': r(_contrast)};
       case TransformTool.cropReframe:
         return {'zoom': r(_zoom), 'cx': r(_cx), 'cy': r(_cy)};
       case TransformTool.motionGraphics:
@@ -616,6 +620,14 @@ class _OpDialogState extends State<_OpDialog> {
                 ),
               ],
             ),
+            if (_tool == TransformTool.colorGrade) ...[
+              _slider('အလင်း ${(_bright * 100).round()}% (အနှုတ် = မှောင်)', _bright, -0.6, 0.6, (v) => _bright = v),
+              _slider('Contrast ${(_contrast * 100).round()}%', _contrast, -0.6, 0.6, (v) => _contrast = v),
+              const Text(
+                'ဒါက ပုံသဏ္ဍာန်/mood ညှိဖို့ပါ (ဥပမာ ဇာတ်ရှိန်မြင့်တဲ့ နေရာကို မှောင်စေ၊ အလင်းဆွဲ)။ ပလက်ဖောင်း၏ မူပိုင်စစ်ဆေးမှုကို ရှောင်ဖို့ မဟုတ်ပါ၊ အဲဒီအတွက် မသုံးပါနဲ့။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
             if (_tool == TransformTool.pictureInPicture) ...[
               const SizedBox(height: 4),
               OutlinedButton.icon(

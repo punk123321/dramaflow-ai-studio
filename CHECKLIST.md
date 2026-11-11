@@ -288,3 +288,12 @@ Split Screen and second-video picture-in-picture need Media3 multi-input composi
 - A render with TE operations (including Freeze Frame) now produces an MP4 on the phone (APK from claude/te-8-preflight). Earlier "Asset loader error" is gone in that build.
 - Not yet confirmed one by one: Crop framing, Freeze look and timing, label/arrow, picture overlay, sound effect, Smart Cut timing, Burmese text shaping.
 - Cause of the earlier error is not proven. The build that works has the JPEG type set on the freeze picture and an input-file check before rendering.
+
+## TE-9: Brightness & Contrast (branch claude/te-9-brightness)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved look ops set brightness/contrast on video pieces (and held frames) for a time range | yes | no |
+| Native: Media3 Brightness and Contrast effects | compiles on CI | no |
+
+Mirror/flip is NOT built: its purpose here would be to get past platform
+copyright checks, and it also reverses any text in the video.

@@ -211,6 +211,17 @@ VoiceItem? soundFromParams(Map<String, Object?> p, int offsetMs) {
 /// Shortest cut the compiler will make.
 const minCutMs = 100;
 
+/// Brightness and contrast from operation parameters. Null when not usable
+/// or when both are 0 (nothing to do).
+LookAdjust? lookFromParams(Map<String, Object?> p) {
+  final b = p['brightness'];
+  final c = p['contrast'];
+  if (b is! num || c is! num) return null;
+  if (b < -LookAdjust.limit || b > LookAdjust.limit || c < -LookAdjust.limit || c > LookAdjust.limit) return null;
+  final l = LookAdjust(b.toDouble(), c.toDouble());
+  return l.isNeutral ? null : l;
+}
+
 const minFreezeMs = 500;
 const maxFreezeMs = 30000;
 
@@ -245,7 +256,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     final name = op.tool.title;
     if (!op.valid) {
       notes.add('$name — အချိန် မမှန်လို့ ချန်ထားတယ်');
-    } else if (op.tool == TransformTool.cropReframe) {
+    } else if (op.tool == TransformTool.cropReframe || op.tool == TransformTool.colorGrade) {
       crops.add(op);
     } else if (op.tool == TransformTool.freezeFrame) {
       freezes.add(op);
@@ -292,11 +303,16 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
 
   for (final op in crops) {
     final name = op.tool.title;
-    final crop = cropFromParams(op.params);
-    if (crop == null) {
-      notes.add('$name — zoom/နေရာ တန်ဖိုး မမှန်လို့ ချန်ထားတယ်');
+    final isLook = op.tool == TransformTool.colorGrade;
+    final crop = isLook ? null : cropFromParams(op.params);
+    final look = isLook ? lookFromParams(op.params) : null;
+    if (isLook ? look == null : crop == null) {
+      notes.add(isLook
+          ? '$name — အလင်း/contrast တန်ဖိုး မမှန်ပါ (သို့) ၀ ဖြစ်နေလို့ ချန်ထားတယ်'
+          : '$name — zoom/နေရာ တန်ဖိုး မမှန်လို့ ချန်ထားတယ်');
       continue;
     }
+    VideoPiece mark(VideoPiece p) => isLook ? p.withLook(look) : p.withCrop(crop);
     final next = <VideoPiece>[];
     var touched = false;
     for (final p in cur) {
@@ -313,7 +329,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       if (from - p.startMs < minCompiledPieceMs) from = p.startMs;
       if (p.endMs - to < minCompiledPieceMs) to = p.endMs;
       if (from > p.startMs) next.add(p.withRange(p.startMs, from));
-      next.add(p.withRange(from, to).withCrop(crop));
+      next.add(mark(p.withRange(from, to)));
       if (to < p.endMs) next.add(p.withRange(to, p.endMs));
     }
     if (touched) {
@@ -338,7 +354,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       continue;
     }
     final p = cur[i];
-    final still = VideoPiece.freezeAt(t, hold, p.crop);
+    final still = VideoPiece.freezeAt(t, hold, p.crop, p.look);
     final next = [...cur];
     if (t - p.startMs < minCompiledPieceMs) {
       next.insert(i, still);

@@ -33,6 +33,8 @@ import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.Contrast
 import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.MatrixTransformation
 import androidx.media3.effect.OverlayEffect
@@ -201,6 +203,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                     .setDurationUs(holdUs)
                     .setFrameRate(fps)
                 val stillFx = ArrayList<Effect>()
+                val stillLook = p.optJSONArray("l")
+                if (stillLook != null && stillLook.length() == 2) {
+                    stillFx.add(Brightness(stillLook.getDouble(0).toFloat()))
+                    stillFx.add(Contrast(stillLook.getDouble(1).toFloat()))
+                }
                 val c = p.optJSONArray("c")
                 if (c != null && c.length() == 3) {
                     stillFx.add(cropEffect(c.getDouble(0).toFloat(), c.getDouble(1).toFloat(), c.getDouble(2).toFloat()))
@@ -224,6 +231,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val zoom = p.optInt("z", 0)
             val pieceUs = (p.getLong("e") - p.getLong("s")) * 1000L
             val videoFx = ArrayList<Effect>()
+            val look = p.optJSONArray("l")
+            if (look != null && look.length() == 2) {
+                videoFx.add(Brightness(look.getDouble(0).toFloat()))
+                videoFx.add(Contrast(look.getDouble(1).toFloat()))
+            }
             val crop = p.optJSONArray("c")
             if (crop != null && crop.length() == 3) {
                 videoFx.add(cropEffect(crop.getDouble(0).toFloat(), crop.getDouble(1).toFloat(), crop.getDouble(2).toFloat()))
