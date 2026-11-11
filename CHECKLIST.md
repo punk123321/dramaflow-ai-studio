@@ -212,3 +212,18 @@ TE itself still renders nothing: operations are records. No AI is connected.
 
 Other TE tools are still records only. Crop is a still frame crop; picture
 quality drops at high zoom because the video is enlarged, not re-shot.
+
+## TE-3: Freeze Frame (branch claude/te-3-freeze-frame)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved Freeze Frame ops insert a held still at render time (split, edge handling, hold 0.5-30 s) | yes (te_compile_test) | no |
+| Held frames keep the piece's crop; stored timeline is not changed | yes | no |
+| Original subtitles pause during a hold; later ones shift by the hold | yes | no |
+| Render screen shows where each hold lands on the edit time | no | no |
+| Native: frame taken with MediaMetadataRetriever, held as an image item (Media3) | compiles on CI | no |
+
+Known limits: narration is NOT shifted by a hold (the user adjusts it), the
+frame is taken on the main thread (a few frames are fine, many may stall), and
+how Media3 mixes an image item into a sequence that has original audio is
+unverified on a phone.

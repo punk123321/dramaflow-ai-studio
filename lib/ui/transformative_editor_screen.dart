@@ -217,7 +217,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           _sectionTitle('Edit လုပ်ဆောင်ချက် စာရင်း'),
           const Text(
             'AI အကြံပြုချက် (နောက်ပိုင်း) တွေက “စောင့်ဆိုင်း” အနေနဲ့သာ ဝင်လာမယ်။ ခွင့်ပြုမှသာ အသုံးပြုမယ်။ '
-            'ခွင့်ပြုထားတဲ့ Crop & Reframe တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
+            'ခွင့်ပြုထားတဲ့ Crop & Reframe နဲ့ Freeze Frame တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
             style: TextStyle(color: DfColors.muted, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -355,6 +355,7 @@ class _OpDialogState extends State<_OpDialog> {
   final _to = TextEditingController(text: '5');
   final _note = TextEditingController();
   double _zoom = 1.5;
+  double _hold = 3.0;
   double _cx = 0.5;
   double _cy = 0.5;
   String? _err;
@@ -369,7 +370,8 @@ class _OpDialogState extends State<_OpDialog> {
 
   void _ok() {
     final a = double.tryParse(_from.text.trim());
-    final b = double.tryParse(_to.text.trim());
+    final freeze = _tool == TransformTool.freezeFrame;
+    final b = freeze ? a : double.tryParse(_to.text.trim());
     if (a == null || b == null || a < 0 || b < a) {
       setState(() => _err = 'စက္ကန့် မမှန်ပါ (စချိန် ≥ 0၊ ဆုံးချိန် ≥ စချိန်)');
       return;
@@ -382,7 +384,9 @@ class _OpDialogState extends State<_OpDialog> {
         startMs: (a * 1000).round(),
         endMs: (b * 1000).round(),
         note: _note.text.trim(),
-        params: _tool == TransformTool.cropReframe
+        params: _tool == TransformTool.freezeFrame
+            ? {'hold': double.parse(_hold.toStringAsFixed(1))}
+            : _tool == TransformTool.cropReframe
             ? {
                 'zoom': double.parse(_zoom.toStringAsFixed(2)),
                 'cx': double.parse(_cx.toStringAsFixed(2)),
@@ -423,10 +427,11 @@ class _OpDialogState extends State<_OpDialog> {
                   child: TextField(
                     controller: _from,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'စချိန် (စက္ကန့်)'),
+                    decoration: const InputDecoration(labelText: _tool == TransformTool.freezeFrame ? 'ရပ်မယ့် အချိန် (စက္ကန့်)' : 'စချိန် (စက္ကန့်)'),
                   ),
                 ),
-                const SizedBox(width: 8),
+                if (_tool != TransformTool.freezeFrame) const SizedBox(width: 8),
+                if (_tool != TransformTool.freezeFrame)
                 Expanded(
                   child: TextField(
                     controller: _to,
@@ -436,6 +441,13 @@ class _OpDialogState extends State<_OpDialog> {
                 ),
               ],
             ),
+            if (_tool == TransformTool.freezeFrame) ...[
+              _slider('ရပ်မယ့် ကြာချိန် ${_hold.toStringAsFixed(1)} စက္ကန့်', _hold, 0.5, 15.0, (v) => _hold = v),
+              const Text(
+                'စချိန်ကနေ ပုံတစ်ပုံ ရပ်ပြမယ်။ ရပ်တဲ့အချိန်ကြောင့် နောက်ပိုင်း အချိန်တွေ နောက်ကျမယ် — Render screen မှာ edit အချိန်ကို ပြမယ်။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
             if (_tool == TransformTool.cropReframe) ...[
               _slider('Zoom ×${_zoom.toStringAsFixed(2)}', _zoom, 1.0, 3.0, (v) => _zoom = v),
               _slider('ဘယ်-ညာ ${(_cx * 100).round()}%', _cx, 0.0, 1.0, (v) => _cx = v),

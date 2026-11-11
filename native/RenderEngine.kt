@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -53,6 +54,7 @@ import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
 /**
@@ -73,6 +75,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     private var partFile: File? = null
     private var finalFile: File? = null
     private var polling = false
+    private val tempFrames = ArrayList<File>()
 
     private val rendersDir: File
         get() = File(activity.filesDir, "renders").apply { mkdirs() }
@@ -127,6 +130,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             partFile = part
             finalFile = fin
 
+            clearTempFrames()
             val composition = buildComposition(job)
             val height = job.getInt("height")
             val bitrate = job.getInt("bitrate")
@@ -162,6 +166,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             result.success(null)
         } catch (e: Exception) {
             transformer = null
+            clearTempFrames()
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             result.error("render_failed", e.message ?: e.toString(), null)
         }
@@ -178,6 +183,22 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         val vSeq = EditedMediaItemSequence.Builder()
         for (i in 0 until pieces.length()) {
             val p = pieces.getJSONObject(i)
+            if (p.optInt("f", 0) == 1) {
+                // Held still frame: take the picture from the original, show it for a while.
+                val file = extractFrame(videoUri, p.getLong("s"))
+                val holdUs = (p.getLong("e") - p.getLong("s")) * 1000L
+                val still = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(file)))
+                    .setDurationUs(holdUs)
+                    .setFrameRate(fps)
+                val stillFx = ArrayList<Effect>()
+                val c = p.optJSONArray("c")
+                if (c != null && c.length() == 3) {
+                    stillFx.add(cropEffect(c.getDouble(0).toFloat(), c.getDouble(1).toFloat(), c.getDouble(2).toFloat()))
+                }
+                if (stillFx.isNotEmpty()) still.setEffects(Effects(emptyList<AudioProcessor>(), stillFx))
+                vSeq.addItem(still.build())
+                continue
+            }
             val item = MediaItem.Builder()
                 .setUri(videoUri)
                 .setClippingConfiguration(
@@ -285,6 +306,28 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         return Composition.Builder(sequences)
             .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
             .build()
+    }
+
+    /** One frame of the original, saved as a picture the renderer can hold. */
+    private fun extractFrame(videoUri: Uri, atMs: Long): File {
+        val r = MediaMetadataRetriever()
+        try {
+            r.setDataSource(activity, videoUri)
+            val bmp = r.getFrameAtTime(atMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                ?: throw IllegalStateException("Could not read the frame at ${atMs} ms")
+            val f = File(activity.cacheDir, "freeze_${System.nanoTime()}.jpg")
+            FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+            bmp.recycle()
+            tempFrames.add(f)
+            return f
+        } finally {
+            r.release()
+        }
+    }
+
+    private fun clearTempFrames() {
+        for (f in tempFrames) f.delete()
+        tempFrames.clear()
     }
 
     private fun volume(v: Float): AudioProcessor {
@@ -431,6 +474,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val fin = finalFile
             transformer = null
             polling = false
+            clearTempFrames()
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (ok && part != null && fin != null && part.exists() && part.renameTo(fin)) {
                 channel.invokeMethod(

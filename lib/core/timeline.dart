@@ -50,7 +50,17 @@ class CropFrame {
 }
 
 class VideoPiece {
-  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop]);
+  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false]);
+
+  /// A still frame of the original at [atMs], held for [holdMs]. Only the
+  /// render step creates these (from approved Freeze Frame operations); they
+  /// are never saved in the timeline.
+  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c])
+      : startMs = atMs,
+        endMs = atMs + holdMs,
+        zoom = ZoomMode.none,
+        crop = c,
+        freeze = true;
 
   /// Range inside the ORIGINAL video.
   final int startMs;
@@ -58,11 +68,15 @@ class VideoPiece {
   final ZoomMode zoom;
   final CropFrame? crop;
 
+  /// Still frame instead of moving video: [startMs] is the frame time and
+  /// [lengthMs] how long it is held.
+  final bool freeze;
+
   int get lengthMs => endMs - startMs;
 
-  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop);
-  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop);
-  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c);
+  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze);
+  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze);
+  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze);
 
   @override
   bool operator ==(Object other) =>
@@ -70,16 +84,18 @@ class VideoPiece {
       other.startMs == startMs &&
       other.endMs == endMs &&
       other.zoom == zoom &&
-      other.crop == crop;
+      other.crop == crop &&
+      other.freeze == freeze;
 
   @override
-  int get hashCode => Object.hash(startMs, endMs, zoom, crop);
+  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze);
 
   Map<String, Object?> toJson() => {
         's': startMs,
         'e': endMs,
         if (zoom != ZoomMode.none) 'z': zoom.index,
         if (crop != null) 'c': crop!.toJson(),
+        if (freeze) 'f': 1,
       };
   static VideoPiece fromJson(Map<String, Object?> m) {
     final z = (m['z'] as int?) ?? 0;
@@ -88,6 +104,7 @@ class VideoPiece {
       m['e'] as int,
       z >= 0 && z < ZoomMode.values.length ? ZoomMode.values[z] : ZoomMode.none,
       CropFrame.fromJson(m['c']),
+      m['f'] == 1,
     );
   }
 }
@@ -443,7 +460,8 @@ List<SrtEntry> remapSubtitles(List<SrtEntry> subs, List<VideoPiece> pieces, {int
   var base = 0;
   final parts = <({int start, int end, int base, int pieceStart})>[];
   for (final p in pieces) {
-    parts.add((start: p.startMs, end: p.endMs, base: base, pieceStart: p.startMs));
+    // A held still frame shows no original subtitle (it is for commentary).
+    if (!p.freeze) parts.add((start: p.startMs, end: p.endMs, base: base, pieceStart: p.startMs));
     base += p.lengthMs;
   }
   for (final s in subs) {

@@ -89,8 +89,8 @@ class _RenderPanelState extends State<RenderPanel> {
     final mine = rs.runningProjectId == _pid;
     final otherRunning = rs.running && !mine;
     final blockers = renderBlockers(hasVideo: p.hasVideo, timeline: _tl, sourceMs: p.videoDurationMs ?? 0);
-    final dur = outputDurationMs(_tl);
     final te = compileOps(_tl.pieces, _plan.ops);
+    final dur = outputDurationMs(_tl.copyWith(pieces: te.pieces));
     final est = estimateBytes(dur, _settings);
     final lowSpace = _free > 0 && est > 0 && _free < est + est ~/ 5 + 50 * 1048576;
     final done = rs.lastDone;
@@ -115,7 +115,12 @@ class _RenderPanelState extends State<RenderPanel> {
         const SizedBox(height: 10),
         _row('အရှည်', dur > 0 ? _dur(dur) : '—'),
         _row('အပိုင်း', '${_tl.pieces.length}'),
-        if (te.applied.isNotEmpty) _row('TE Crop/Reframe', '${te.applied.length} ခု ပါမယ်'),
+        if (te.applied.isNotEmpty) _row('TE operation', '${te.applied.length} ခု ပါမယ်'),
+        for (final n in te.infos)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('TE: $n', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+          ),
         for (final n in te.notes)
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
