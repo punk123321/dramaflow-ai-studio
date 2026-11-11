@@ -154,7 +154,7 @@ Needs phone testing: how the corner texts, logo and zoom look in a real render, 
 ## Not started
 
 - Phase 5 leftovers: speech-to-text, MP3 encoding
-- Phase 8: Copyright and Fair Use assistant, final QA
+- (done) Phase 8 Fair Use assistant; final phone QA still needed
 - Backup and restore, project history
 - Burmese UI language switch (the text is Burmese only for now)
 - Guided/Free choice is not saved between app launches

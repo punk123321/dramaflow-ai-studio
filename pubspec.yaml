@@ -1,7 +1,7 @@
 name: aistudio
 description: DramaFlow AI Studio - personal drama recap and video production app.
 publish_to: "none"
-version: 0.1.0+1
+version: 1.0.0+8
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
