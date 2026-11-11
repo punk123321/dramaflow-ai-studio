@@ -80,8 +80,12 @@ class AiParseResult {
 String? _json(String reply) {
   final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```').firstMatch(reply);
   if (fence != null) return fence.group(1)!.trim();
-  final a = reply.indexOf('{');
-  final z = reply.lastIndexOf('}');
+  // No code fence: take from the first { or [ to the matching last } or ].
+  final o = reply.indexOf('{');
+  final l = reply.indexOf('[');
+  final isList = l >= 0 && (o < 0 || l < o);
+  final a = isList ? l : o;
+  final z = reply.lastIndexOf(isList ? ']' : '}');
   return a >= 0 && z > a ? reply.substring(a, z + 1) : null;
 }
 
