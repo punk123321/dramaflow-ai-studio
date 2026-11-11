@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme.dart';
 import '../core/timeline.dart';
 import '../core/transformative_plan.dart';
-import '../core/theme.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 
@@ -21,6 +21,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
   final _repo = HandoffRepo();
   final _instructions = TextEditingController();
   TransformativePlan _plan = const TransformativePlan();
+  String _savedSnapshot = '';
   Timeline _timeline = const Timeline();
   bool _loading = true;
   bool _saving = false;
@@ -48,6 +49,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
       _plan = TransformativePlan.decode(rawPlan);
       _timeline = Timeline.decode(rawTimeline);
       _instructions.text = _plan.instructions;
+      _savedSnapshot = _plan.copyWith(instructions: _plan.instructions.trim()).encode();
     } catch (e) {
       _error = 'TE အချက်အလက် ဖတ်မရပါ: $e';
     }
@@ -66,6 +68,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
       if (!mounted) return;
       setState(() {
         _plan = next;
+        _savedSnapshot = next.encode();
         _message = 'TE Plan ကို သိမ်းပြီးပါပြီ။';
       });
     } catch (e) {
@@ -73,6 +76,31 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  TransformativePlan get _current => _plan.copyWith(instructions: _instructions.text.trim());
+
+  bool get _dirty => !_loading && _current.encode() != _savedSnapshot;
+
+  Future<bool> _confirmLeave() async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('မသိမ်းရသေးပါ'),
+        content: const Text('ပြင်ထားတာတွေ မသိမ်းရသေးပါ။ ထွက်ရင် ပျောက်သွားမယ်။'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ဆက်ပြင်မယ်')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('မသိမ်းဘဲ ထွက်မယ်')),
+        ],
+      ),
+    );
+    return leave ?? false;
+  }
+
+  Future<void> _addOp() async {
+    final op = await showDialog<TransformOp>(context: context, builder: (_) => const _OpDialog());
+    if (op == null) return;
+    setState(() => _plan = _plan.copyWith(ops: [..._plan.ops, op]));
   }
 
   void _toggle(TransformTool tool, bool enabled) {
@@ -90,6 +118,18 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final nav = Navigator.of(context);
+        if (await _confirmLeave()) nav.pop();
+      },
+      child: _scaffold(context),
+    );
+  }
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('TE · Transformative Editor'),
@@ -110,6 +150,19 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
             'မူရင်းဗီဒီယိုကို မပြင်ဘဲ ကိုယ်ပိုင်ရှင်းပြချက်၊ အမြင်နဲ့ Editing ပုံစံအသစ် ဖန်တီးရန်',
             style: TextStyle(color: DfColors.muted),
           ),
+          if (_plan.fromNewerVersion)
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: DfColors.warn),
+              ),
+              child: const Text(
+                'ဒီ Plan ကို app ဗားရှင်းအသစ်က ရေးထားတာ ဖြစ်တယ်။ ဒီ app မသိတဲ့ အချက်တွေကို မဖျက်ဘဲ ထိန်းထားမယ်။',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
           const SizedBox(height: 14),
           _sectionTitle('လက်ရှိ Project အခြေအနေ'),
           _statRow('Video အပိုင်း', '${_timeline.pieces.length} ခု'),
@@ -149,13 +202,37 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
               value: _plan.enabledTools.contains(tool),
               onChanged: (value) => _toggle(tool, value ?? false),
               title: Text(tool.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(tool.description, style: const TextStyle(fontSize: 12)),
+              subtitle: Text(
+                '${tool.description}\n${tool.status == ToolStatus.inStudio ? 'Studio Editor မှာ အသုံးပြုလို့ရပြီ (TE ကနေ မချိတ်ရသေး)' : 'မဖြစ်သေး — မှတ်တမ်းသာ ထားနိုင်တယ်'}',
+                style: const TextStyle(fontSize: 12),
+              ),
+              isThreeLine: true,
               controlAffinity: ListTileControlAffinity.leading,
             ),
+          const SizedBox(height: 12),
+          _sectionTitle('Edit လုပ်ဆောင်ချက် စာရင်း'),
+          const Text(
+            'AI အကြံပြုချက် (နောက်ပိုင်း) တွေက “စောင့်ဆိုင်း” အနေနဲ့သာ ဝင်လာမယ်။ ခွင့်ပြုမှသာ အသုံးပြုမယ်။ '
+            'ဒီအဆင့်မှာ စာရင်းကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ် — render ကို မချိတ်ရသေးပါ။',
+            style: TextStyle(color: DfColors.muted, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          if (_plan.ops.isEmpty)
+            const Text('စာရင်း မရှိသေးပါ။', style: TextStyle(color: DfColors.muted)),
+          for (final op in _plan.ops) _opTile(op),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _addOp,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('လုပ်ဆောင်ချက် ထည့်မယ်'),
+            ),
+          ),
           const SizedBox(height: 12),
           _sectionTitle('ကိုယ်ပိုင် Editing ညွှန်ကြားချက်'),
           TextField(
             controller: _instructions,
+            onChanged: (_) => setState(() {}),
             minLines: 3,
             maxLines: 6,
             decoration: const InputDecoration(
@@ -183,6 +260,67 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
     );
   }
 
+  static String _t(int ms) {
+    final sec = ms ~/ 1000;
+    return '${sec ~/ 60}:${(sec % 60).toString().padLeft(2, '0')}';
+  }
+
+  Widget _opTile(TransformOp op) {
+    final (label, color) = switch (op.status) {
+      OpStatus.proposed => ('စောင့်ဆိုင်း', DfColors.warn),
+      OpStatus.approved => ('ခွင့်ပြုပြီး', DfColors.ok),
+      OpStatus.rejected => ('ပယ်ထား', DfColors.muted),
+    };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: DfColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: DfColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${op.tool.title} · ${_t(op.startMs)}–${_t(op.endMs)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text(label, style: TextStyle(color: color, fontSize: 12)),
+            ],
+          ),
+          if (op.source == OpSource.ai)
+            const Text('AI အကြံပြုချက်', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+          if (op.note.isNotEmpty) Text(op.note, style: const TextStyle(fontSize: 13)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (op.status != OpStatus.approved)
+                TextButton(
+                  onPressed: () => setState(() => _plan = _plan.setOpStatus(op.id, OpStatus.approved)),
+                  child: const Text('ခွင့်ပြု'),
+                ),
+              if (op.status != OpStatus.rejected)
+                TextButton(
+                  onPressed: () => setState(() => _plan = _plan.setOpStatus(op.id, OpStatus.rejected)),
+                  child: const Text('ပယ်'),
+                ),
+              IconButton(
+                tooltip: 'ဖျက်',
+                icon: const Icon(Icons.delete_outline, size: 20),
+                onPressed: () => setState(() => _plan = _plan.removeOp(op.id)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _sectionTitle(String title) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
@@ -197,4 +335,94 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           ],
         ),
       );
+}
+
+/// A manual operation. The user creates it, so it starts approved.
+class _OpDialog extends StatefulWidget {
+  const _OpDialog();
+
+  @override
+  State<_OpDialog> createState() => _OpDialogState();
+}
+
+class _OpDialogState extends State<_OpDialog> {
+  TransformTool _tool = TransformTool.freezeFrame;
+  final _from = TextEditingController(text: '0');
+  final _to = TextEditingController(text: '5');
+  final _note = TextEditingController();
+  String? _err;
+
+  @override
+  void dispose() {
+    _from.dispose();
+    _to.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  void _ok() {
+    final a = double.tryParse(_from.text.trim());
+    final b = double.tryParse(_to.text.trim());
+    if (a == null || b == null || a < 0 || b < a) {
+      setState(() => _err = 'စက္ကန့် မမှန်ပါ (စချိန် ≥ 0၊ ဆုံးချိန် ≥ စချိန်)');
+      return;
+    }
+    Navigator.pop(
+      context,
+      TransformOp(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        tool: _tool,
+        startMs: (a * 1000).round(),
+        endMs: (b * 1000).round(),
+        note: _note.text.trim(),
+        status: OpStatus.approved,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('လုပ်ဆောင်ချက် ထည့်မယ်'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<TransformTool>(
+              initialValue: _tool,
+              isExpanded: true,
+              items: [for (final t in TransformTool.values) DropdownMenuItem(value: t, child: Text(t.title))],
+              onChanged: (v) => setState(() => _tool = v ?? _tool),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _from,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'စချိန် (စက္ကန့်)'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _to,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'ဆုံးချိန် (စက္ကန့်)'),
+                  ),
+                ),
+              ],
+            ),
+            TextField(controller: _note, decoration: const InputDecoration(labelText: 'မှတ်ချက်')),
+            if (_err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_err!, style: const TextStyle(color: DfColors.danger))),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('မလုပ်တော့ဘူး')),
+        FilledButton(onPressed: _ok, child: const Text('ထည့်မယ်')),
+      ],
+    );
+  }
 }

@@ -50,5 +50,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dramaflow-apk
+          # main keeps the plain name; other branches get their own name so an
+          # unreviewed branch build is never mistaken for the main build.
+          name: ${{ github.ref_name == 'main' && 'dramaflow-apk' || format('dramaflow-apk-branch-{0}', github.run_number) }}
           path: build/app/outputs/flutter-apk/app-release.apk

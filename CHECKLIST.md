@@ -187,3 +187,16 @@ copyright checks, and none will be added.
 ## Re-check after Phase 8
 - Fixed in code: when no subtitle was showing, the renderer drew a small dark box (background colour on a blank space). Now blank = no styling. Needs a phone check.
 - Unverified assumption: zoom uses the effect clock modulo the piece length, so it works whether the clock starts at 0 per piece or runs on; a phone test must confirm it zooms smoothly in each piece.
+
+## TE review fixes (branch claude/te-review-fixes)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Plan v2: real version handling, v1 files load, newer files keep unknown fields/tools/ops | yes | no |
+| Operations list with proposed/approved/rejected; only approved+valid ops are runnable | yes | no |
+| Per-project storage and project copy include the TE plan | yes (db test) | no |
+| Tool status badges (planned vs works in Studio Editor) | yes (model) | no |
+| Unsaved-changes prompt on leaving the TE screen | no | no |
+| Branch CI artifact name differs from main | CI only | n/a |
+
+TE itself still renders nothing: operations are records. No AI is connected.
