@@ -80,7 +80,7 @@ void main() {
 
   test('other tools and bad operations are reported, not silently dropped', () {
     final r = compileOps(base, [
-      crop('f', 0, 3000, tool: TransformTool.splitScreen),
+      crop('f', 0, 3000, tool: TransformTool.commentaryVoiceOver),
       crop('z', 0, 3000, params: const {'zoom': 9.0, 'cx': 0.5, 'cy': 0.5}),
       crop('x', 12000, 15000), // between the two pieces
       crop('i', 5000, 1000),
@@ -88,7 +88,7 @@ void main() {
     expect(r.pieces, base);
     expect(r.applied, isEmpty);
     expect(r.notes.length, 4);
-    expect(r.notes.first.contains('Split Screen'), isTrue);
+    expect(r.notes.first.contains('Commentary'), isTrue);
   });
 
   test('render job carries the crop and the timeline is untouched', () {
@@ -531,9 +531,14 @@ void main() {
       expect(r.splits.length, 1);
       expect(r.splits.single.startMs, 2000);
       expect(r.notes.length, 4);
-      final cutMid = compileOps(base, [cut('c', 3000, 6000), split('s', 1000, 9000, lr)]);
-      expect(cutMid.splits, isEmpty);
-      expect(cutMid.notes.length, 1);
+      // the same source moment shows up twice (reordered pieces): not one window
+      final twice = compileOps(const [VideoPiece(0, 10000), VideoPiece(20000, 30000), VideoPiece(5000, 8000)], [split('s', 6000, 7500, lr)]);
+      expect(twice.splits, isEmpty);
+      expect(twice.notes.length, 1);
+      // a cut that leaves the range touching in the output is still one window
+      final joined = compileOps(base, [cut('c', 3000, 6000), split('s', 1000, 9000, lr)]);
+      expect(joined.splits.length, 1);
+      expect(joined.splits.single.startMs, 1000);
     });
 
     test('goes into the render job; no splits means no key', () {
