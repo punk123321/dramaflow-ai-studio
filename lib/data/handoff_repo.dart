@@ -18,6 +18,9 @@ class DocKind {
 
   /// Source, permission and fair-use checklist answers as JSON.
   static const fairUse = 'fair_use';
+
+  /// Versioned Transformative Editor plan, separate from the existing timeline.
+  static const transformativePlan = 'transformative_plan';
 }
 
 /// Source subtitles, name/term notes and the replies brought back from Gemini.
