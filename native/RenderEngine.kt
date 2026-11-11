@@ -336,7 +336,10 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     ) : TextOverlay() {
         override fun getText(presentationTimeUs: Long): SpannableString {
             val ms = presentationTimeUs / 1000L
-            val line = subs.firstOrNull { ms >= it.startMs && ms < it.endMs }?.text ?: " "
+            val line = subs.firstOrNull { ms >= it.startMs && ms < it.endMs }?.text
+            // No subtitle now: an invisible space with no background, or the
+            // background colour would show as a small dark box.
+            if (line == null) return SpannableString(" ")
             val s = SpannableString(line)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)

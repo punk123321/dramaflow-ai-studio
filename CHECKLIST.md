@@ -183,3 +183,7 @@ Needs phone testing: how the corner texts, logo and zoom look in a real render, 
 
 Rules of thumb only, not legal advice. No feature hides material from platform
 copyright checks, and none will be added.
+
+## Re-check after Phase 8
+- Fixed in code: when no subtitle was showing, the renderer drew a small dark box (background colour on a blank space). Now blank = no styling. Needs a phone check.
+- Unverified assumption: zoom uses the effect clock modulo the piece length, so it works whether the clock starts at 0 per piece or runs on; a phone test must confirm it zooms smoothly in each piece.
