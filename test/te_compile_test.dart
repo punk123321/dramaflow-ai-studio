@@ -404,4 +404,35 @@ void main() {
       expect(r.notes.length, 2);
     });
   });
+
+  test('missing app files are reported; content links are not checked', () {
+    final r = compileOps(base, [
+      TransformOp(
+        id: 'p',
+        tool: TransformTool.pictureInPicture,
+        startMs: 1000,
+        endMs: 3000,
+        status: OpStatus.approved,
+        params: const {'kind': 'image', 'path': '/data/gone.png', 'x': 0.5, 'y': 0.5, 'size': 0.3, 'color': 0xFFFFFFFF},
+      ),
+      TransformOp(
+        id: 's1',
+        tool: TransformTool.soundDesign,
+        startMs: 1000,
+        endMs: 1000,
+        status: OpStatus.approved,
+        params: const {'src': '/data/gone.mp3', 'name': 'a.mp3', 'dur': 1000, 'vol': 0.5},
+      ),
+      TransformOp(
+        id: 's2',
+        tool: TransformTool.soundDesign,
+        startMs: 2000,
+        endMs: 2000,
+        status: OpStatus.approved,
+        params: const {'src': 'content://x/1', 'name': 'b.mp3', 'dur': 1000, 'vol': 0.5},
+      ),
+    ]);
+    expect(missingFiles(r, (_) => false).length, 2);
+    expect(missingFiles(r, (_) => true), isEmpty);
+  });
 }

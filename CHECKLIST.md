@@ -277,3 +277,9 @@ No API key and no network call. Gemini's own quality is not tested here.
 NOT built: second-video picture-in-picture, Split Screen (needs multi-input
 compositing in Media3, unverified), audio-based silence detection. A subtitle
 gap is only a guess that nothing is said there, so cuts stay proposals.
+
+## TE-8: Pre-render file check (branch claude/te-8-preflight)
+The Render screen now refuses to start when a picture or sound file used by an approved TE operation is gone (app files only; `content://` links cannot be checked in advance). Automated: yes. Phone-tested: no.
+
+## Still not built (TE)
+Split Screen and second-video picture-in-picture need Media3 multi-input compositing. Without a phone to test on, writing them blind would only add code that may not work, so they wait for the phone results of the existing tools.

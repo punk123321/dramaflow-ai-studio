@@ -93,6 +93,7 @@ class _RenderPanelState extends State<RenderPanel> {
     final blockers = renderBlockers(hasVideo: p.hasVideo, timeline: _tl, sourceMs: p.videoDurationMs ?? 0);
     final te = compileOps(_tl.pieces, _plan.ops);
     final dur = outputDurationMs(_tl.copyWith(pieces: te.pieces));
+    blockers.addAll(missingFiles(te, (f) => File(f).existsSync()));
     final est = estimateBytes(dur, _settings);
     final lowSpace = _free > 0 && est > 0 && _free < est + est ~/ 5 + 50 * 1048576;
     final done = rs.lastDone;

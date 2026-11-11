@@ -411,3 +411,21 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   }
   return CompileResult(cur, applied, notes, infos, overlays, soundItems);
 }
+
+/// Files that the compiled result needs but that are not there. Only app
+/// files (paths starting with "/") can be checked; a `content://` link to the
+/// user's own file cannot, so it is left to the renderer.
+List<String> missingFiles(CompileResult r, bool Function(String path) exists) {
+  final out = <String>[];
+  for (final o in r.overlays) {
+    if (o.kind == MotionKind.image && o.path.startsWith('/') && !exists(o.path)) {
+      out.add('Picture-in-Picture ပုံ ပျောက်နေတယ် — ပုံကို ပြန်ရွေးပါ');
+    }
+  }
+  for (final v in r.sounds) {
+    if (v.source.startsWith('/') && !exists(v.source)) {
+      out.add('Sound effect "${v.label}" ဖိုင် ပျောက်နေတယ်');
+    }
+  }
+  return out;
+}
