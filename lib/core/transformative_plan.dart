@@ -58,9 +58,9 @@ extension TransformToolLabel on TransformTool {
       };
 
   String get description => switch (this) {
-        TransformTool.smartCut => 'မလိုအပ်တဲ့ အချိန်ပိုင်းတွေကို ရွေးချယ်ဖြတ်တောက်ရန်',
+        TransformTool.smartCut => 'မလိုအပ်တဲ့ အချိန်ပိုင်းတွေကို ဖြတ်ထုတ်ရန် (စာတန်းအကြား ရှာပေးနိုင်တယ်)',
         TransformTool.cropReframe => 'ပုံရိပ်ကို Crop၊ Zoom နဲ့ Reframe ပြုလုပ်ရန်',
-        TransformTool.pictureInPicture => 'ဒုတိယဗီဒီယို သို့မဟုတ် ပုံကို အပေါ်ထပ်ပြရန်',
+        TransformTool.pictureInPicture => 'ပုံ (picture) ကို အပေါ်ထပ်ပြရန် — ဒုတိယဗီဒီယို ထပ်တာ မရသေးပါ',
         TransformTool.commentaryVoiceOver => 'ကိုယ်ပိုင်ရှင်းပြချက်နဲ့ Voice-over ထည့်ရန်',
         TransformTool.freezeFrame => 'အရေးကြီးတဲ့ Scene ကို ရပ်ပြပြီး ရှင်းပြရန်',
         TransformTool.sceneReordering => 'Scene အစီအစဉ်ကို ပြန်စီရန်',
@@ -73,6 +73,8 @@ extension TransformToolLabel on TransformTool {
   /// What exists in the app today (see CHECKLIST.md). TE itself renders none
   /// of these yet.
   ToolStatus get status => switch (this) {
+        TransformTool.smartCut ||
+        TransformTool.pictureInPicture ||
         TransformTool.cropReframe ||
         TransformTool.freezeFrame ||
         TransformTool.motionGraphics ||

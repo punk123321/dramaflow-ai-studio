@@ -100,8 +100,8 @@ void main() {
   test('tool status says only what exists today', () {
     expect(TransformTool.freezeFrame.status, ToolStatus.rendered);
     expect(TransformTool.cropReframe.status, ToolStatus.rendered);
-    expect(TransformTool.pictureInPicture.status, ToolStatus.planned);
-    expect(TransformTool.smartCut.status, ToolStatus.planned);
+    expect(TransformTool.pictureInPicture.status, ToolStatus.rendered);
+    expect(TransformTool.smartCut.status, ToolStatus.rendered);
     expect(TransformTool.motionGraphics.status, ToolStatus.rendered);
     expect(TransformTool.soundDesign.status, ToolStatus.rendered);
     expect(TransformTool.splitScreen.status, ToolStatus.planned);

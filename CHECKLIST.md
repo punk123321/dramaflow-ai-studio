@@ -263,3 +263,17 @@ effect, an effects library. Only use sounds you may use; the app cannot check.
 | Copy prompt / paste reply buttons in the TE screen | no | no |
 
 No API key and no network call. Gemini's own quality is not tested here.
+
+## TE-7: Smart Cut and picture overlay (branch claude/te-7-smart-cut-pip)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved Smart Cut ops remove source ranges from the render (other ops follow the cut) | yes (te_compile_test) | no |
+| "Find gaps" suggests cuts from subtitle gaps (rule-based, proposed only) | yes (te_suggest_test) | no |
+| Gemini prompt/reply understands smartCut | yes (te_ai_test) | no |
+| Picture-in-Picture: a PICTURE as a timed overlay (position, width) | yes (model) | no |
+| Native image overlay (Media3 BitmapOverlay) | compiles on CI | no |
+
+NOT built: second-video picture-in-picture, Split Screen (needs multi-input
+compositing in Media3, unverified), audio-based silence detection. A subtitle
+gap is only a guess that nothing is said there, so cuts stay proposals.

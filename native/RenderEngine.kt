@@ -309,7 +309,15 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 val color = m.getLong("color").toInt()
                 val px = (m.getDouble("size") * height).toInt().coerceAtLeast(14)
                 val settings = centerSettings(cx, cy)
-                if (m.optString("k") == "arrow") {
+                if (m.optString("k") == "image") {
+                    // Picture-in-picture (a picture, not a second video): size is a share of the width.
+                    val w = (m.getDouble("size") * outW).toInt()
+                    val pic = loadLogo(m.optString("path", ""), w, 1f)
+                    if (pic != null) {
+                        val blank = Bitmap.createBitmap(pic.width, pic.height, Bitmap.Config.ARGB_8888)
+                        overlays.add(WindowedBitmapOverlay(pic, blank, startMs, endMs, settings))
+                    }
+                } else if (m.optString("k") == "arrow") {
                     val n = px.coerceIn(24, 1200)
                     val arrow = arrowBitmap(n, color, m.optDouble("angle", 0.0).toFloat())
                     val blank = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)

@@ -5,7 +5,8 @@ import 'transformative_plan.dart';
 /// description (video pieces). Pure Dart. The stored timeline is never
 /// changed: this runs when a render is prepared.
 ///
-/// Only Crop & Reframe, Freeze Frame, Motion Graphics (text label, arrow) and
+/// Only Smart Cut (remove a range), Crop & Reframe, Freeze Frame, Picture-in-
+/// Picture (a picture, not a second video), Motion Graphics (text label, arrow) and
 /// Sound Design (one sound effect at a moment) are compiled today. Every other approved operation is
 /// reported as "not rendered" so nothing is silently skipped.
 
@@ -46,11 +47,11 @@ CropFrame? cropFromParams(Map<String, Object?> params) {
   return CropFrame(z.toDouble(), x.toDouble(), y.toDouble()).fitted;
 }
 
-enum MotionKind { label, arrow }
+enum MotionKind { label, arrow, image }
 
-/// A text label or arrow shown on the finished video between [startMs] and
+/// A text label, arrow or picture (picture-in-picture, image only) shown on the finished video between [startMs] and
 /// [endMs] of the OUTPUT time. [x], [y]: centre, 0 to 1 from the top-left.
-/// [size] is a fraction of the video height. [angle] is degrees, 0 = pointing
+/// [size] is a fraction of the video height (for a picture: of the width). [angle] is degrees, 0 = pointing
 /// right, 90 = pointing down. [color] is ARGB.
 class MotionItem {
   const MotionItem({
@@ -62,6 +63,7 @@ class MotionItem {
     required this.size,
     required this.color,
     this.text = '',
+    this.path = '',
     this.angle = 0,
     this.background = true,
   });
@@ -74,6 +76,9 @@ class MotionItem {
   final double size;
   final int color;
   final String text;
+
+  /// Picture file inside the app (kind image).
+  final String path;
   final double angle;
   final bool background;
 
@@ -86,6 +91,7 @@ class MotionItem {
         size: size,
         color: color,
         text: text,
+        path: path,
         angle: angle,
         background: background,
       );
@@ -99,6 +105,7 @@ class MotionItem {
         'size': size,
         'color': color,
         if (kind == MotionKind.label) 't': text,
+        if (kind == MotionKind.image) 'path': path,
         if (kind == MotionKind.label) 'bg': background,
         if (kind == MotionKind.arrow) 'angle': angle,
       };
@@ -108,15 +115,21 @@ const maxLabelChars = 120;
 
 /// Null when the parameters are not usable. Time is filled in later.
 MotionItem? motionFromParams(Map<String, Object?> p) {
-  final kind = p['kind'] == 'arrow' ? MotionKind.arrow : (p['kind'] == 'label' ? MotionKind.label : null);
+  final kind = MotionKind.values.where((k) => k.name == p['kind']).firstOrNull;
   final x = p['x'];
   final y = p['y'];
   final size = p['size'];
   final color = p['color'];
   if (kind == null || x is! num || y is! num || size is! num || color is! int) return null;
   if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-  if (size < 0.03 || size > 0.4) return null;
+  if (size < 0.03 || size > (kind == MotionKind.image ? 0.6 : 0.4)) return null;
   var text = '';
+  var path = '';
+  if (kind == MotionKind.image) {
+    final f = p['path'];
+    if (f is! String || f.trim().isEmpty) return null;
+    path = f;
+  }
   if (kind == MotionKind.label) {
     final t = p['text'];
     if (t is! String || t.trim().isEmpty || t.length > maxLabelChars) return null;
@@ -132,6 +145,7 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     size: size.toDouble(),
     color: color,
     text: text,
+    path: path,
     angle: a is num ? a.toDouble() % 360 : 0,
     background: p['bg'] != false,
   );
@@ -194,6 +208,9 @@ VoiceItem? soundFromParams(Map<String, Object?> p, int offsetMs) {
   );
 }
 
+/// Shortest cut the compiler will make.
+const minCutMs = 100;
+
 const minFreezeMs = 500;
 const maxFreezeMs = 30000;
 
@@ -218,9 +235,11 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   final notes = <String>[];
 
   final approved = [for (final o in ops) if (o.status == OpStatus.approved) o];
+  var cutMs = 0;
   final crops = <TransformOp>[];
   final freezes = <TransformOp>[];
   final motions = <TransformOp>[];
+  final cuts = <TransformOp>[];
   final sounds = <TransformOp>[];
   for (final op in approved) {
     final name = op.tool.title;
@@ -230,12 +249,42 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       crops.add(op);
     } else if (op.tool == TransformTool.freezeFrame) {
       freezes.add(op);
-    } else if (op.tool == TransformTool.motionGraphics) {
+    } else if (op.tool == TransformTool.motionGraphics || op.tool == TransformTool.pictureInPicture) {
       motions.add(op);
+    } else if (op.tool == TransformTool.smartCut) {
+      cuts.add(op);
     } else if (op.tool == TransformTool.soundDesign) {
       sounds.add(op);
     } else {
       notes.add('$name — render မချိတ်ရသေးလို့ မပါပါ');
+    }
+  }
+
+  // Cuts first. Everything else is placed on what is left.
+  for (final op in cuts) {
+    final name = op.tool.title;
+    final next = <VideoPiece>[];
+    var touched = false;
+    for (final p in cur) {
+      final s = op.startMs > p.startMs ? op.startMs : p.startMs;
+      final e = op.endMs < p.endMs ? op.endMs : p.endMs;
+      if (p.freeze || e - s < minCutMs) {
+        next.add(p);
+        continue;
+      }
+      touched = true;
+      // A leftover shorter than the minimum is dropped with the cut part.
+      if (s - p.startMs >= minCompiledPieceMs) next.add(p.withRange(p.startMs, s));
+      if (p.endMs - e >= minCompiledPieceMs) next.add(p.withRange(e, p.endMs));
+    }
+    if (!touched) {
+      notes.add('$name — ဗီဒီယိုအပိုင်းနဲ့ မထိတဲ့ အချိန်မို့ ချန်ထားတယ်');
+    } else if (next.isEmpty) {
+      notes.add('$name — ဗီဒီယိုအားလုံး ပျောက်သွားမှာမို့ ချန်ထားတယ်');
+    } else {
+      cur = next;
+      applied.add(op);
+      cutMs += op.endMs - op.startMs;
     }
   }
 
@@ -356,6 +405,9 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   }
   if (infos.isNotEmpty) {
     infos.add('ရပ်တဲ့ အချိန်ကြောင့် နောက်ပိုင်း အပိုင်းတွေ နောက်ကျသွားမယ်။ Narration အချိန်ကို ကိုယ်တိုင် ညှိပါ');
+  }
+  if (cutMs > 0) {
+    infos.add('Smart Cut: မူရင်းအချိန် ${_clock(cutMs)} လောက် ဖြတ်ထုတ်မယ်။ နောက်ပိုင်း အပိုင်းတွေ စောလာမယ်၊ Narration အချိန်ကို ကိုယ်တိုင် ညှိပါ');
   }
   return CompileResult(cur, applied, notes, infos, overlays, soundItems);
 }

@@ -21,7 +21,8 @@ Hope it helps''';
     final p = buildTePrompt(projectName: 'Drama', sourceMs: 600000, subtitles: '1\n00:00:01,000 --> 00:00:02,000\nhi', instructions: 'be brief');
     expect(p.contains('600 seconds'), isTrue);
     expect(p.contains('freezeFrame'), isTrue);
-    expect(p.contains('smartCut'), isFalse);
+    expect(p.contains('smartCut'), isTrue);
+    expect(p.contains('splitScreen'), isFalse);
     expect(p.contains('watermark'), isTrue);
     expect(p.contains('be brief'), isTrue);
     expect(p.contains('00:00:01,000'), isTrue);
@@ -69,7 +70,7 @@ Hope it helps''';
 
   test('bad suggestions are rejected with a reason, good ones kept', () {
     final r = parseTeReply('''{"ops":[
-      {"tool":"smartCut","from":1,"to":2},
+      {"tool":"splitScreen","from":1,"to":2},
       {"tool":"freezeFrame","at":9999},
       {"tool":"freezeFrame","at":1,"hold":99},
       {"tool":"cropReframe","from":5,"to":2,"zoom":2},
@@ -82,7 +83,15 @@ Hope it helps''';
     expect(r.ops.length, 1);
     expect(r.ops.single.startMs, 2000);
     expect(r.rejected.length, 8);
-    expect(r.rejected.first.contains('smartCut'), isTrue);
+    expect(r.rejected.first.contains('splitScreen'), isTrue);
+  });
+
+  test('a smartCut suggestion is read as a range and stays proposed', () {
+    final r = parseTeReply('{"ops":[{"tool":"smartCut","from":5,"to":9,"note":"slow"}]}', sourceMs: 60000, idSeed: 1);
+    expect(r.ops.single.tool, TransformTool.smartCut);
+    expect(r.ops.single.startMs, 5000);
+    expect(r.ops.single.endMs, 9000);
+    expect(r.ops.single.runnable, isFalse);
   });
 
   test('no more than the limit is taken', () {

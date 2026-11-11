@@ -12,6 +12,7 @@ import 'transformative_plan.dart';
 
 /// Tools the render really supports (see te_compile.dart).
 const aiTools = [
+  TransformTool.smartCut,
   TransformTool.cropReframe,
   TransformTool.freezeFrame,
   TransformTool.motionGraphics,
@@ -36,6 +37,9 @@ String buildTePrompt({
     ..writeln('Suggest a SMALL number of editing steps (at most 12) that make my recap more '
         'explanatory and original: emphasise key moments, point things out, add short labels.')
     ..writeln('Use only these tools:');
+  if (use.contains(TransformTool.smartCut)) {
+    b.writeln('- smartCut (remove a dull part): {"tool":"smartCut","from":SEC,"to":SEC,"note":"why"}');
+  }
   if (use.contains(TransformTool.cropReframe)) {
     b.writeln('- cropReframe: {"tool":"cropReframe","from":SEC,"to":SEC,"zoom":1.0-3.0,"cx":0-1,"cy":0-1,"note":"why"}');
   }
@@ -154,7 +158,9 @@ AiParseResult parseTeReply(String reply, {required int sourceMs, required int id
     }
     s = from;
     e = to;
-    if (tool == TransformTool.cropReframe) {
+    if (tool == TransformTool.smartCut) {
+      params = const {};
+    } else if (tool == TransformTool.cropReframe) {
       final z = item['zoom'];
       final cx = item['cx'];
       final cy = item['cy'];

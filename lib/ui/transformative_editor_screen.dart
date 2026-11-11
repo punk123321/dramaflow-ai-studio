@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/srt.dart';
 import '../core/te_ai.dart';
+import '../core/te_suggest.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
 import '../core/transformative_plan.dart';
@@ -138,6 +140,49 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
     });
   }
 
+  Future<void> _findGaps() async {
+    final ctrl = TextEditingController(text: '4');
+    final secs = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('စာတန်းအကြား ရှာမယ်'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'အနည်းဆုံး ကြာချိန် (စက္ကန့်)', helperText: 'စာတန်း မပါတဲ့ ဒီထက်ရှည်တဲ့ နေရာတွေ'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('မလုပ်တော့ဘူး')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, double.tryParse(ctrl.text.trim())), child: const Text('ရှာမယ်')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (secs == null || secs < 1) return;
+    final studio = await _repo.getDoc(_projectId, DocKind.studioSrt);
+    final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_projectId, DocKind.sourceSrt);
+    final sourceMs = widget.project.videoDurationMs ?? 0;
+    if (!mounted) return;
+    if (src == null || src.trim().isEmpty || sourceMs <= 0) {
+      setState(() {
+        _error = 'စာတန်း (SRT) နဲ့ ဗီဒီယိုအရှည် လိုပါတယ်';
+        _message = null;
+      });
+      return;
+    }
+    final gaps = findSubtitleGaps(parseSrt(src).entries, sourceMs: sourceMs, minGapMs: (secs * 1000).round());
+    final props = gapProposals(gaps, idSeed: DateTime.now().millisecondsSinceEpoch);
+    setState(() {
+      _error = null;
+      if (props.isEmpty) {
+        _message = 'ဒီအတိုင်းအတာနဲ့ စာတန်းမပါတဲ့ နေရာ မတွေ့ပါ';
+      } else {
+        _plan = _plan.copyWith(ops: [..._plan.ops, ...props]);
+        _message = 'Smart Cut အကြံပြုချက် ${props.length} ခု ထည့်ပြီး (စောင့်ဆိုင်း)။ စာတန်းမရှိတာကို ခန့်မှန်းတာသာ ဖြစ်လို့ ကိုယ်တိုင် စစ်ပြီး ခွင့်ပြုပါ။';
+      }
+    });
+  }
+
   Future<void> _addOp() async {
     final op = await showDialog<TransformOp>(context: context, builder: (_) => const _OpDialog());
     if (op == null) return;
@@ -258,7 +303,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           _sectionTitle('Edit လုပ်ဆောင်ချက် စာရင်း'),
           const Text(
             'AI အကြံပြုချက် (နောက်ပိုင်း) တွေက “စောင့်ဆိုင်း” အနေနဲ့သာ ဝင်လာမယ်။ ခွင့်ပြုမှသာ အသုံးပြုမယ်။ '
-            'ခွင့်ပြုထားတဲ့ Crop & Reframe၊ Freeze Frame၊ Motion Graphics (စာသား/မြား)၊ Sound Design (အသံ effect) တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
+            'ခွင့်ပြုထားတဲ့ Smart Cut၊ Crop & Reframe၊ Freeze Frame၊ Picture-in-Picture (ပုံ)၊ Motion Graphics (စာသား/မြား)၊ Sound Design (အသံ effect) တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
             style: TextStyle(color: DfColors.muted, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -271,6 +316,14 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
               onPressed: _addOp,
               icon: const Icon(Icons.add, size: 18),
               label: const Text('လုပ်ဆောင်ချက် ထည့်မယ်'),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _findGaps,
+              icon: const Icon(Icons.content_cut, size: 18),
+              label: const Text('စာတန်းအကြား ဖြတ်ဖို့ ရှာမယ်'),
             ),
           ),
           const SizedBox(height: 12),
@@ -412,6 +465,8 @@ class _OpDialogState extends State<_OpDialog> {
   final _note = TextEditingController();
   double _zoom = 1.5;
   double _hold = 3.0;
+  String? _imgPath;
+  double _isize = 0.25;
   AudioFile? _sound;
   double _svol = 0.8;
   String _kind = 'label';
@@ -438,6 +493,15 @@ class _OpDialogState extends State<_OpDialog> {
 
   bool get _point => _tool == TransformTool.freezeFrame || _tool == TransformTool.soundDesign;
 
+  Future<void> _pickImage() async {
+    try {
+      final f = await AudioChannel.pickImage();
+      if (f != null) setState(() => _imgPath = f);
+    } catch (e) {
+      setState(() => _err = 'ပုံ ရွေးမရပါ: $e');
+    }
+  }
+
   Future<void> _pickSound() async {
     try {
       final f = await AudioChannel.pickAudio();
@@ -452,6 +516,9 @@ class _OpDialogState extends State<_OpDialog> {
     switch (_tool) {
       case TransformTool.freezeFrame:
         return {'hold': double.parse(_hold.toStringAsFixed(1))};
+      case TransformTool.pictureInPicture:
+        final f = _imgPath;
+        return f == null ? const {} : {'kind': 'image', 'path': f, 'x': r(_mx), 'y': r(_my), 'size': r(_isize), 'color': 0xFFFFFFFF};
       case TransformTool.soundDesign:
         final f = _sound;
         return f == null ? const {} : {'src': f.source, 'name': f.name, 'dur': f.durationMs, 'vol': r(_svol)};
@@ -476,6 +543,10 @@ class _OpDialogState extends State<_OpDialog> {
   void _ok() {
     final a = double.tryParse(_from.text.trim());
     final b = _point ? a : double.tryParse(_to.text.trim());
+    if (_tool == TransformTool.pictureInPicture && _imgPath == null) {
+      setState(() => _err = 'ပုံ အရင်ရွေးပါ');
+      return;
+    }
     if (_tool == TransformTool.soundDesign && _sound == null) {
       setState(() => _err = 'အသံဖိုင် အရင်ရွေးပါ');
       return;
@@ -545,6 +616,21 @@ class _OpDialogState extends State<_OpDialog> {
                 ),
               ],
             ),
+            if (_tool == TransformTool.pictureInPicture) ...[
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.image_outlined, size: 18),
+                label: Text(_imgPath == null ? 'ပုံ ရွေးမယ်' : 'ပုံ ရွေးပြီး (ပြန်ရွေးလို့ရ)'),
+              ),
+              _slider('ဘယ်-ညာ ${(_mx * 100).round()}%', _mx, 0.0, 1.0, (v) => _mx = v),
+              _slider('အပေါ်-အောက် ${(_my * 100).round()}%', _my, 0.0, 1.0, (v) => _my = v),
+              _slider('အကျယ် ${(_isize * 100).round()}% (ဗီဒီယိုအကျယ်)', _isize, 0.05, 0.6, (v) => _isize = v),
+              const Text(
+                'ပုံတစ်ပုံကို ဗီဒီယိုပေါ် ထပ်ပြမယ်။ ဒုတိယဗီဒီယိုကို ထပ်တာ မရသေးပါ။ ကိုယ်ပိုင်/အသုံးပြုခွင့်ရှိတဲ့ ပုံသာ သုံးပါ။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
             if (_tool == TransformTool.soundDesign) ...[
               const SizedBox(height: 4),
               OutlinedButton.icon(

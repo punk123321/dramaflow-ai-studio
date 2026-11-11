@@ -80,7 +80,7 @@ void main() {
 
   test('other tools and bad operations are reported, not silently dropped', () {
     final r = compileOps(base, [
-      crop('f', 0, 3000, tool: TransformTool.smartCut),
+      crop('f', 0, 3000, tool: TransformTool.splitScreen),
       crop('z', 0, 3000, params: const {'zoom': 9.0, 'cx': 0.5, 'cy': 0.5}),
       crop('x', 12000, 15000), // between the two pieces
       crop('i', 5000, 1000),
@@ -88,7 +88,7 @@ void main() {
     expect(r.pieces, base);
     expect(r.applied, isEmpty);
     expect(r.notes.length, 4);
-    expect(r.notes.first.contains('Smart Cut'), isTrue);
+    expect(r.notes.first.contains('Split Screen'), isTrue);
   });
 
   test('render job carries the crop and the timeline is untouched', () {
@@ -330,6 +330,78 @@ void main() {
       final lanes = job['voiceLanes'] as List;
       expect(lanes.length, 2); // overlap, so two lanes mixed together
       expect(r.pieces, base);
+    });
+  });
+
+  TransformOp cut(String id, int s, int e, {OpStatus status = OpStatus.approved}) =>
+      TransformOp(id: id, tool: TransformTool.smartCut, startMs: s, endMs: e, status: status);
+
+  group('smart cut', () {
+    test('removes the range, splitting a piece in the middle', () {
+      final r = compileOps(base, [cut('c', 3000, 6000)]);
+      expect(r.pieces, const [VideoPiece(0, 3000), VideoPiece(6000, 10000), VideoPiece(20000, 30000)]);
+      expect(r.pieces.fold<int>(0, (a, p) => a + p.lengthMs), 17000);
+      expect(r.applied.length, 1);
+      expect(r.infos.any((i) => i.contains('Smart Cut')), isTrue);
+    });
+
+    test('a cut across two pieces trims both; a whole piece can go', () {
+      final r = compileOps(base, [cut('c', 8000, 25000)]);
+      expect(r.pieces, const [VideoPiece(0, 8000), VideoPiece(25000, 30000)]);
+      final whole = compileOps(base, [cut('c', 0, 10000)]);
+      expect(whole.pieces, const [VideoPiece(20000, 30000)]);
+    });
+
+    test('tiny leftovers go with the cut; nothing to cut or everything is reported', () {
+      final r = compileOps(base, [cut('c', 100, 9900)]);
+      expect(r.pieces, const [VideoPiece(20000, 30000)]);
+      final none = compileOps(base, [cut('c', 12000, 15000)]);
+      expect(none.pieces, base);
+      expect(none.notes.length, 1);
+      final all = compileOps(const [VideoPiece(0, 5000)], [cut('c', 0, 5000)]);
+      expect(all.pieces, const [VideoPiece(0, 5000)]);
+      expect(all.notes.length, 1);
+      expect(compileOps(base, [cut('c', 3000, 6000, status: OpStatus.proposed)]).pieces, base);
+    });
+
+    test('other operations follow the cut: a label after it moves earlier', () {
+      final r = compileOps(base, [cut('c', 3000, 6000), motion('m', 7000, 9000, label)]);
+      expect(r.overlays.single.startMs, 4000);
+      expect(r.overlays.single.endMs, 6000);
+    });
+
+    test('a label inside the cut part is left out with a note', () {
+      final r = compileOps(base, [cut('c', 3000, 6000), motion('m', 3500, 5500, label)]);
+      expect(r.overlays, isEmpty);
+      expect(r.notes.length, 1);
+    });
+  });
+
+  group('picture overlay (picture-in-picture, image only)', () {
+    TransformOp pip(String id, int s, int e, Map<String, Object?> params) =>
+        TransformOp(id: id, tool: TransformTool.pictureInPicture, startMs: s, endMs: e, status: OpStatus.approved, params: params);
+
+    test('a picture becomes a timed image overlay', () {
+      final r = compileOps(base, [
+        pip('p', 2000, 5000, const {'kind': 'image', 'path': '/data/logo.png', 'x': 0.8, 'y': 0.2, 'size': 0.3, 'color': 0xFFFFFFFF}),
+      ]);
+      final o = r.overlays.single;
+      expect(o.kind, MotionKind.image);
+      expect(o.path, '/data/logo.png');
+      final j = o.toJson();
+      expect(j['k'], 'image');
+      expect(j['path'], '/data/logo.png');
+      expect(j.containsKey('t'), isFalse);
+      expect(r.applied.length, 1);
+    });
+
+    test('no picture, or too large, is reported', () {
+      final r = compileOps(base, [
+        pip('1', 2000, 5000, const {'kind': 'image', 'path': '', 'x': 0.5, 'y': 0.5, 'size': 0.3, 'color': 0xFFFFFFFF}),
+        pip('2', 2000, 5000, const {'kind': 'image', 'path': 'a.png', 'x': 0.5, 'y': 0.5, 'size': 0.9, 'color': 0xFFFFFFFF}),
+      ]);
+      expect(r.overlays, isEmpty);
+      expect(r.notes.length, 2);
     });
   });
 }
