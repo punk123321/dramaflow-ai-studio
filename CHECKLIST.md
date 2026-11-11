@@ -283,3 +283,8 @@ The Render screen now refuses to start when a picture or sound file used by an a
 
 ## Still not built (TE)
 Split Screen and second-video picture-in-picture need Media3 multi-input compositing. Without a phone to test on, writing them blind would only add code that may not work, so they wait for the phone results of the existing tools.
+
+## Phone result (user, 2026-11-12)
+- A render with TE operations (including Freeze Frame) now produces an MP4 on the phone (APK from claude/te-8-preflight). Earlier "Asset loader error" is gone in that build.
+- Not yet confirmed one by one: Crop framing, Freeze look and timing, label/arrow, picture overlay, sound effect, Smart Cut timing, Burmese text shaping.
+- Cause of the earlier error is not proven. The build that works has the JPEG type set on the freeze picture and an input-file check before rendering.
