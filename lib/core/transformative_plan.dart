@@ -87,8 +87,10 @@ class TransformativePlan {
       final json = jsonDecode(raw);
       if (json is! Map) return const TransformativePlan();
       final modeName = json['mode'];
-      final mode = TransformMode.values.where((v) => v.name == modeName).firstOrNull ??
-          TransformMode.hybrid;
+      final mode = TransformMode.values.firstWhere(
+        (value) => value.name == modeName,
+        orElse: () => TransformMode.hybrid,
+      );
       final rawTools = json['tools'];
       final tools = <TransformTool>{};
       if (rawTools is List) {
