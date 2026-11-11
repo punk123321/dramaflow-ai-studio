@@ -251,3 +251,15 @@ The arrow is drawn around its centre, not its tip. A label spans one line.
 
 Not built: ducking (lowering music under narration), fades, trimming a long
 effect, an effects library. Only use sounds you may use; the app cannot check.
+
+## TE-6: Gemini suggestions by copy/paste (branch claude/te-6-ai-proposals)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Prompt built from subtitles, duration, enabled tools and the user's instructions | yes (te_ai_test) | no |
+| Reply read from a code fence or bare JSON; every suggestion checked | yes | no |
+| Suggestions always enter as proposed/AI; compile only after the user approves | yes | no |
+| Bad suggestions listed with a reason; at most 30 taken | yes | no |
+| Copy prompt / paste reply buttons in the TE screen | no | no |
+
+No API key and no network call. Gemini's own quality is not tested here.

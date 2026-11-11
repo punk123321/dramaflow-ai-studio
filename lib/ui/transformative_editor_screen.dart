@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../core/te_ai.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
 import '../core/transformative_plan.dart';
@@ -96,6 +98,44 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
       ),
     );
     return leave ?? false;
+  }
+
+  Future<void> _copyPrompt() async {
+    final raw = await _repo.getDoc(_projectId, DocKind.studioSrt);
+    final src = (raw != null && raw.trim().isNotEmpty) ? raw : (await _repo.getDoc(_projectId, DocKind.sourceSrt) ?? '');
+    final prompt = buildTePrompt(
+      projectName: widget.project.name,
+      sourceMs: widget.project.videoDurationMs ?? 0,
+      subtitles: src,
+      instructions: _instructions.text,
+      tools: _plan.enabledTools,
+    );
+    await Clipboard.setData(ClipboardData(text: prompt));
+    if (!mounted) return;
+    setState(() {
+      _message = 'Prompt ကို Copy လုပ်ပြီးပါပြီ။ Gemini မှာ paste လုပ်ပါ။';
+      _error = null;
+    });
+  }
+
+  Future<void> _pasteReply() async {
+    final reply = await showDialog<String>(context: context, builder: (_) => const _ReplyDialog());
+    if (reply == null || reply.trim().isEmpty) return;
+    final r = parseTeReply(reply, sourceMs: widget.project.videoDurationMs ?? 0, idSeed: DateTime.now().millisecondsSinceEpoch);
+    if (!mounted) return;
+    if (r.error != null) {
+      setState(() {
+        _error = r.error;
+        _message = null;
+      });
+      return;
+    }
+    setState(() {
+      _plan = _plan.copyWith(ops: [..._plan.ops, ...r.ops]);
+      _error = null;
+      _message = 'အကြံပြုချက် ${r.ops.length} ခု ထည့်ပြီး (စောင့်ဆိုင်း)။ ခွင့်ပြုမှသာ သုံးမယ်။'
+          '${r.rejected.isEmpty ? '' : '\nချန်ထားတာ ${r.rejected.length} ခု: ${r.rejected.take(5).join('; ')}'}';
+    });
   }
 
   Future<void> _addOp() async {
@@ -232,6 +272,21 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
               icon: const Icon(Icons.add, size: 18),
               label: const Text('လုပ်ဆောင်ချက် ထည့်မယ်'),
             ),
+          ),
+          const SizedBox(height: 12),
+          _sectionTitle('Gemini အကြံပြုချက် (copy / paste)'),
+          const Text(
+            'API key မလိုပါ။ Prompt ကို Copy လုပ်ပြီး Gemini app မှာ paste၊ ပြန်ဖြေတာကို ဒီမှာ ထည့်ပါ။ '
+            'အကြံပြုချက်တွေက “စောင့်ဆိုင်း” အဖြစ်သာ ဝင်မယ် — ကိုယ်တိုင် စစ်ပြီး ခွင့်ပြုမှသာ Render မှာ ပါမယ်။',
+            style: TextStyle(color: DfColors.muted, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(onPressed: _copyPrompt, icon: const Icon(Icons.copy, size: 18), label: const Text('Prompt Copy')),
+              OutlinedButton.icon(onPressed: _pasteReply, icon: const Icon(Icons.paste, size: 18), label: const Text('Gemini ပြန်ဖြေ ထည့်မယ်')),
+            ],
           ),
           const SizedBox(height: 12),
           _sectionTitle('ကိုယ်ပိုင် Editing ညွှန်ကြားချက်'),
@@ -578,6 +633,47 @@ class _OpDialogState extends State<_OpDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('မလုပ်တော့ဘူး')),
         FilledButton(onPressed: _ok, child: const Text('ထည့်မယ်')),
+      ],
+    );
+  }
+}
+
+class _ReplyDialog extends StatefulWidget {
+  const _ReplyDialog();
+
+  @override
+  State<_ReplyDialog> createState() => _ReplyDialogState();
+}
+
+class _ReplyDialogState extends State<_ReplyDialog> {
+  final _c = TextEditingController();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Gemini ပြန်ဖြေချက်'),
+      content: TextField(
+        controller: _c,
+        minLines: 6,
+        maxLines: 12,
+        decoration: const InputDecoration(hintText: 'ဒီမှာ paste လုပ်ပါ', border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            final d = await Clipboard.getData('text/plain');
+            if (d?.text != null) setState(() => _c.text = d!.text!);
+          },
+          child: const Text('Paste'),
+        ),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('မလုပ်တော့ဘူး')),
+        FilledButton(onPressed: () => Navigator.pop(context, _c.text), child: const Text('စစ်ပြီး ထည့်မယ်')),
       ],
     );
   }
