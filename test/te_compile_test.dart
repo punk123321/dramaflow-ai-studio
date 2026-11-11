@@ -181,4 +181,100 @@ void main() {
       expect(outputDurationMs(Timeline(pieces: r.pieces)), 12000);
     });
   });
+
+  TransformOp motion(String id, int s, int e, Map<String, Object?> params, {OpStatus status = OpStatus.approved}) => TransformOp(
+        id: id,
+        tool: TransformTool.motionGraphics,
+        startMs: s,
+        endMs: e,
+        status: status,
+        params: params,
+      );
+  const label = {'kind': 'label', 'text': 'Key scene', 'x': 0.5, 'y': 0.2, 'size': 0.06, 'color': 0xFFFFEB3B};
+
+  group('motion graphics', () {
+    test('a label inside one piece lands on the same output time', () {
+      final r = compileOps(base, [motion('m', 2000, 6000, label)]);
+      expect(r.overlays.length, 1);
+      final o = r.overlays.first;
+      expect(o.kind, MotionKind.label);
+      expect(o.startMs, 2000);
+      expect(o.endMs, 6000);
+      expect(o.text, 'Key scene');
+      expect(r.applied.length, 1);
+    });
+
+    test('time follows the cut: a range in the second piece moves earlier', () {
+      // pieces 0-10 s and 20-30 s: source 22 s is output 12 s
+      final r = compileOps(base, [motion('m', 22000, 25000, label)]);
+      expect(r.overlays.single.startMs, 12000);
+      expect(r.overlays.single.endMs, 15000);
+    });
+
+    test('a range spanning the gap joins into one output range', () {
+      final r = compileOps(base, [motion('m', 8000, 22000, label)]);
+      expect(r.overlays.length, 1);
+      expect(r.overlays.single.startMs, 8000);
+      expect(r.overlays.single.endMs, 12000);
+    });
+
+    test('reordered pieces: one operation can show in two places', () {
+      final r = compileOps(const [VideoPiece(0, 10000), VideoPiece(20000, 30000), VideoPiece(5000, 8000)], [motion('m', 6000, 7000, label)]);
+      expect(r.overlays.length, 2);
+      expect(r.overlays[0].startMs, 6000);
+      expect(r.overlays[1].startMs, 21000);
+    });
+
+    test('a freeze inside the range is covered, and later content shifts', () {
+      final r = compileOps(const [VideoPiece(0, 10000)], [freeze('f', 4000, hold: 2.0), motion('m', 3000, 6000, label)]);
+      expect(r.overlays.length, 1);
+      expect(r.overlays.single.startMs, 3000);
+      expect(r.overlays.single.endMs, 8000);
+    });
+
+    test('arrow, bad values, proposals and unreachable times', () {
+      final arrow = {'kind': 'arrow', 'x': 0.3, 'y': 0.4, 'size': 0.2, 'color': 0xFFFF5252, 'angle': 450};
+      final ok = compileOps(base, [motion('a', 1000, 4000, arrow)]);
+      expect(ok.overlays.single.kind, MotionKind.arrow);
+      expect(ok.overlays.single.angle, 90);
+      expect(ok.overlays.single.toJson().containsKey('t'), isFalse);
+
+      final r = compileOps(base, [
+        motion('1', 0, 3000, {...label, 'text': '  '}),
+        motion('2', 0, 3000, {...label, 'x': 1.5}),
+        motion('3', 0, 3000, {...label, 'size': 0.9}),
+        motion('4', 0, 3000, {...label, 'kind': 'hologram'}),
+        motion('5', 12000, 15000, label),
+        motion('6', 0, 3000, label, status: OpStatus.proposed),
+      ]);
+      expect(r.overlays, isEmpty);
+      expect(r.applied, isEmpty);
+      expect(r.notes.length, 5);
+    });
+
+    test('overlays go into the render job and do not change the video pieces', () {
+      final r = compileOps(base, [motion('m', 2000, 6000, label)]);
+      final job = buildRenderJob(
+        name: 'n',
+        videoUri: 'content://v',
+        timeline: Timeline(pieces: r.pieces),
+        sourceSubtitles: const [],
+        settings: const RenderSettings(),
+        overlays: [for (final o in r.overlays) o.toJson()],
+      );
+      expect(r.pieces, base);
+      final list = job['overlays'] as List;
+      expect(list.length, 1);
+      expect((list[0] as Map)['t'], 'Key scene');
+      expect((list[0] as Map)['s'], 2000);
+      final none = buildRenderJob(
+        name: 'n',
+        videoUri: 'content://v',
+        timeline: Timeline(pieces: base),
+        sourceSubtitles: const [],
+        settings: const RenderSettings(),
+      );
+      expect(none.containsKey('overlays'), isFalse);
+    });
+  });
 }

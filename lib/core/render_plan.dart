@@ -75,6 +75,7 @@ Map<String, Object?> buildRenderJob({
   required List<SrtEntry> sourceSubtitles,
   required RenderSettings settings,
   double aspect = 16 / 9,
+  List<Map<String, Object?>> overlays = const [],
 }) {
   final subs = remapSubtitles(sourceSubtitles, timeline.pieces, offsetMs: timeline.subtitleOffsetMs);
   final lanes = assignVoiceLanes(timeline.voices);
@@ -112,6 +113,7 @@ Map<String, Object?> buildRenderJob({
         : {'uri': _uri(timeline.music!.source), 'vol': timeline.music!.volume, 'loop': timeline.music!.loop},
     'burn': timeline.burnSubtitles,
     'subtitles': [for (final s in subs) {'s': s.startMs, 'e': s.endMs, 't': s.text}],
+    if (overlays.isNotEmpty) 'overlays': overlays,
   };
 }
 

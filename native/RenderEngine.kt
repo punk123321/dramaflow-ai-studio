@@ -292,6 +292,29 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             }
         }
 
+        // Labels and arrows from approved Motion Graphics operations (output time).
+        val motion = job.optJSONArray("overlays")
+        if (motion != null) {
+            for (i in 0 until motion.length()) {
+                val m = motion.getJSONObject(i)
+                val startMs = m.getLong("s")
+                val endMs = m.getLong("e")
+                val cx = m.getDouble("x").toFloat()
+                val cy = m.getDouble("y").toFloat()
+                val color = m.getLong("color").toInt()
+                val px = (m.getDouble("size") * height).toInt().coerceAtLeast(14)
+                val settings = centerSettings(cx, cy)
+                if (m.optString("k") == "arrow") {
+                    val n = px.coerceIn(24, 1200)
+                    val arrow = arrowBitmap(n, color, m.optDouble("angle", 0.0).toFloat())
+                    val blank = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+                    overlays.add(WindowedBitmapOverlay(arrow, blank, startMs, endMs, settings))
+                } else {
+                    overlays.add(WindowedTextOverlay(m.optString("t", ""), color, px, m.optBoolean("bg", true), startMs, endMs, settings))
+                }
+            }
+        }
+
         val logo = job.optJSONObject("logo")
         if (logo != null) {
             val bmp = loadLogo(logo.getString("path"), (logo.optDouble("size", 0.15) * outW).toInt(), logo.optDouble("op", 0.9).toFloat())
@@ -375,6 +398,44 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             .build()
     }
 
+    /** Centre of the overlay at (x, y), 0..1 from the top-left of the picture. */
+    private fun centerSettings(x: Float, y: Float): StaticOverlaySettings {
+        return StaticOverlaySettings.Builder()
+            .setOverlayFrameAnchor(0f, 0f)
+            .setBackgroundFrameAnchor(2f * x.coerceIn(0f, 1f) - 1f, 1f - 2f * y.coerceIn(0f, 1f))
+            .build()
+    }
+
+    /** A right-pointing arrow turned by [angle] degrees (90 = down). */
+    private fun arrowBitmap(n: Int, color: Int, angle: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.rotate(angle, n / 2f, n / 2f)
+        val m = n * 0.5f
+        val path = android.graphics.Path().apply {
+            moveTo(n * 0.08f, m - n * 0.09f)
+            lineTo(n * 0.58f, m - n * 0.09f)
+            lineTo(n * 0.58f, m - n * 0.24f)
+            lineTo(n * 0.94f, m)
+            lineTo(n * 0.58f, m + n * 0.24f)
+            lineTo(n * 0.58f, m + n * 0.09f)
+            lineTo(n * 0.08f, m + n * 0.09f)
+            close()
+        }
+        val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = n * 0.03f
+            this.color = Color.BLACK
+        }
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            this.color = color
+        }
+        c.drawPath(path, fill)
+        c.drawPath(path, outline)
+        return bmp
+    }
+
     private fun loadLogo(path: String, targetW: Int, opacity: Float): Bitmap? {
         return try {
             val src = BitmapFactory.decodeFile(path) ?: return null
@@ -418,6 +479,46 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 .setBackgroundFrameAnchor(0f, if (top) 0.88f else -0.88f)
                 .build()
         }
+    }
+
+    private class WindowedTextOverlay(
+        private val text: String,
+        private val color: Int,
+        private val sizePx: Int,
+        private val background: Boolean,
+        private val startMs: Long,
+        private val endMs: Long,
+        private val settings: StaticOverlaySettings
+    ) : TextOverlay() {
+        override fun getText(presentationTimeUs: Long): SpannableString {
+            val ms = presentationTimeUs / 1000L
+            // Outside the time window: an invisible space, no background.
+            if (ms < startMs || ms >= endMs || text.isBlank()) return SpannableString(" ")
+            val s = SpannableString(text)
+            s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            if (background) {
+                s.setSpan(BackgroundColorSpan(Color.argb(170, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            }
+            return s
+        }
+
+        override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings = settings
+    }
+
+    private class WindowedBitmapOverlay(
+        private val shown: Bitmap,
+        private val blank: Bitmap,
+        private val startMs: Long,
+        private val endMs: Long,
+        private val settings: StaticOverlaySettings
+    ) : BitmapOverlay() {
+        override fun getBitmap(presentationTimeUs: Long): Bitmap {
+            val ms = presentationTimeUs / 1000L
+            return if (ms >= startMs && ms < endMs) shown else blank
+        }
+
+        override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings = settings
     }
 
     private class CornerTextOverlay(

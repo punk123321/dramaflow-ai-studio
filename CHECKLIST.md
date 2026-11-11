@@ -227,3 +227,15 @@ Known limits: narration is NOT shifted by a hold (the user adjusts it), the
 frame is taken on the main thread (a few frames are fine, many may stall), and
 how Media3 mixes an image item into a sequence that has original audio is
 unverified on a phone.
+
+## TE-4: Motion Graphics, text label and arrow (branch claude/te-4-motion-graphics)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved label/arrow ops become timed overlays on the OUTPUT time (follows cuts, reorder, held frames) | yes (te_compile_test) | no |
+| Bad text/position/size are reported, not silently dropped | yes | no |
+| Render job carries overlays; stored timeline unchanged | yes | no |
+| Native: timed text and arrow overlays (Media3 TextOverlay / BitmapOverlay) | compiles on CI | no |
+
+Not built: shapes other than an arrow, animation (fade/move), infographics.
+The arrow is drawn around its centre, not its tip. A label spans one line.

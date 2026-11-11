@@ -217,7 +217,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           _sectionTitle('Edit လုပ်ဆောင်ချက် စာရင်း'),
           const Text(
             'AI အကြံပြုချက် (နောက်ပိုင်း) တွေက “စောင့်ဆိုင်း” အနေနဲ့သာ ဝင်လာမယ်။ ခွင့်ပြုမှသာ အသုံးပြုမယ်။ '
-            'ခွင့်ပြုထားတဲ့ Crop & Reframe နဲ့ Freeze Frame တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
+            'ခွင့်ပြုထားတဲ့ Crop & Reframe၊ Freeze Frame၊ Motion Graphics (စာသား/မြား) တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
             style: TextStyle(color: DfColors.muted, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -356,6 +356,15 @@ class _OpDialogState extends State<_OpDialog> {
   final _note = TextEditingController();
   double _zoom = 1.5;
   double _hold = 3.0;
+  String _kind = 'label';
+  final _text = TextEditingController();
+  double _mx = 0.5;
+  double _my = 0.15;
+  double _msize = 0.06;
+  double _angle = 0;
+  bool _bg = true;
+  int _color = 0xFFFFEB3B;
+  static const _colors = [0xFFFFFFFF, 0xFFFFEB3B, 0xFFFF5252, 0xFF69F0AE, 0xFF40C4FF];
   double _cx = 0.5;
   double _cy = 0.5;
   String? _err;
@@ -365,13 +374,41 @@ class _OpDialogState extends State<_OpDialog> {
     _from.dispose();
     _to.dispose();
     _note.dispose();
+    _text.dispose();
     super.dispose();
+  }
+
+  Map<String, Object?> _params() {
+    double r(double v) => double.parse(v.toStringAsFixed(2));
+    switch (_tool) {
+      case TransformTool.freezeFrame:
+        return {'hold': double.parse(_hold.toStringAsFixed(1))};
+      case TransformTool.cropReframe:
+        return {'zoom': r(_zoom), 'cx': r(_cx), 'cy': r(_cy)};
+      case TransformTool.motionGraphics:
+        return {
+          'kind': _kind,
+          'x': r(_mx),
+          'y': r(_my),
+          'size': r(_msize),
+          'color': _color,
+          if (_kind == 'label') 'text': _text.text.trim(),
+          if (_kind == 'label') 'bg': _bg,
+          if (_kind == 'arrow') 'angle': _angle.roundToDouble(),
+        };
+      default:
+        return const {};
+    }
   }
 
   void _ok() {
     final a = double.tryParse(_from.text.trim());
     final freeze = _tool == TransformTool.freezeFrame;
     final b = freeze ? a : double.tryParse(_to.text.trim());
+    if (_tool == TransformTool.motionGraphics && _kind == 'label' && _text.text.trim().isEmpty) {
+      setState(() => _err = 'Label စာသား ရေးပါ');
+      return;
+    }
     if (a == null || b == null || a < 0 || b < a) {
       setState(() => _err = 'စက္ကန့် မမှန်ပါ (စချိန် ≥ 0၊ ဆုံးချိန် ≥ စချိန်)');
       return;
@@ -384,15 +421,7 @@ class _OpDialogState extends State<_OpDialog> {
         startMs: (a * 1000).round(),
         endMs: (b * 1000).round(),
         note: _note.text.trim(),
-        params: _tool == TransformTool.freezeFrame
-            ? {'hold': double.parse(_hold.toStringAsFixed(1))}
-            : _tool == TransformTool.cropReframe
-            ? {
-                'zoom': double.parse(_zoom.toStringAsFixed(2)),
-                'cx': double.parse(_cx.toStringAsFixed(2)),
-                'cy': double.parse(_cy.toStringAsFixed(2)),
-              }
-            : const {},
+        params: _params(),
         status: OpStatus.approved,
       ),
     );
@@ -441,6 +470,57 @@ class _OpDialogState extends State<_OpDialog> {
                 ),
               ],
             ),
+            if (_tool == TransformTool.motionGraphics) ...[
+              const SizedBox(height: 4),
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: 'label', label: Text('စာသား')),
+                  ButtonSegment(value: 'arrow', label: Text('မြား')),
+                ],
+                selected: {_kind},
+                onSelectionChanged: (v) => setState(() => _kind = v.first),
+              ),
+              if (_kind == 'label')
+                TextField(
+                  controller: _text,
+                  maxLength: 120,
+                  decoration: const InputDecoration(labelText: 'Label စာသား'),
+                ),
+              _slider('ဘယ်-ညာ ${(_mx * 100).round()}%', _mx, 0.0, 1.0, (v) => _mx = v),
+              _slider('အပေါ်-အောက် ${(_my * 100).round()}%', _my, 0.0, 1.0, (v) => _my = v),
+              _slider('အရွယ်အစား ${(_msize * 100).round()}%', _msize, 0.03, 0.4, (v) => _msize = v),
+              if (_kind == 'arrow') _slider('လှည့်ပုံ ${_angle.round()}° (0=ညာ၊ 90=အောက်)', _angle, 0, 359, (v) => _angle = v),
+              if (_kind == 'label')
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('နောက်ခံ အမည်း', style: TextStyle(fontSize: 14)),
+                  value: _bg,
+                  onChanged: (v) => setState(() => _bg = v),
+                ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final c in _colors)
+                    GestureDetector(
+                      onTap: () => setState(() => _color = c),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: Color(c),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _color == c ? DfColors.accent : DfColors.line, width: _color == c ? 3 : 1),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const Text(
+                'အချိန်ကို မူရင်းဗီဒီယိုအပေါ် တိုင်းထားတယ် — အပိုင်းဖြတ်၊ ရှေ့နောက်ရွှေ့ထားရင်လည်း အလိုက်သင့် လိုက်မယ်။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
             if (_tool == TransformTool.freezeFrame) ...[
               _slider('ရပ်မယ့် ကြာချိန် ${_hold.toStringAsFixed(1)} စက္ကန့်', _hold, 0.5, 15.0, (v) => _hold = v),
               const Text(

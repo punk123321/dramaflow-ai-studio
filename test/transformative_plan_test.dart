@@ -102,6 +102,7 @@ void main() {
     expect(TransformTool.cropReframe.status, ToolStatus.rendered);
     expect(TransformTool.pictureInPicture.status, ToolStatus.planned);
     expect(TransformTool.smartCut.status, ToolStatus.planned);
+    expect(TransformTool.motionGraphics.status, ToolStatus.rendered);
     expect(TransformTool.commentaryVoiceOver.status, ToolStatus.inStudio);
   });
 

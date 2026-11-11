@@ -67,11 +67,13 @@ class _RenderPanelState extends State<RenderPanel> {
   Future<void> _start() async {
     final p = widget.project;
     final name = '${safeFileName(p.name)}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+    final te = compileOps(_tl.pieces, _plan.ops);
     final job = buildRenderJob(
       name: name,
       videoUri: p.sourceVideoUri!,
       // Approved TE operations are applied to a copy; the saved timeline stays as it is.
-      timeline: _tl.copyWith(pieces: compileOps(_tl.pieces, _plan.ops).pieces),
+      timeline: _tl.copyWith(pieces: te.pieces),
+      overlays: [for (final o in te.overlays) o.toJson()],
       sourceSubtitles: _subs,
       settings: _settings,
       aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,

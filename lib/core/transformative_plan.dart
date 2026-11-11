@@ -73,7 +73,10 @@ extension TransformToolLabel on TransformTool {
   /// What exists in the app today (see CHECKLIST.md). TE itself renders none
   /// of these yet.
   ToolStatus get status => switch (this) {
-        TransformTool.cropReframe || TransformTool.freezeFrame => ToolStatus.rendered,
+        TransformTool.cropReframe ||
+        TransformTool.freezeFrame ||
+        TransformTool.motionGraphics =>
+          ToolStatus.rendered,
         TransformTool.commentaryVoiceOver ||
         TransformTool.sceneReordering ||
         TransformTool.criticalCommentary =>
