@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'te_compile.dart';
-import 'timeline.dart';
 import 'transformative_plan.dart';
 
 /// Gemini handoff for the Transformative Editor. Pure Dart, no network.
