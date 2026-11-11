@@ -8,6 +8,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.media.MediaExtractor
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
@@ -131,6 +134,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             finalFile = fin
 
             clearTempFrames()
+            checkInputs(job)
             val composition = buildComposition(job)
             val height = job.getInt("height")
             val bitrate = job.getInt("bitrate")
@@ -186,11 +190,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             if (p.optInt("f", 0) == 1) {
                 // Held still frame: take the picture from the original, show it for a while.
                 val file = extractFrame(videoUri, p.getLong("s"))
+                validatePicture(file, "Freeze Frame")
                 val holdUs = (p.getLong("e") - p.getLong("s")) * 1000L
                 // Say it is a JPEG picture, so it is not guessed from the file name.
                 val stillItem = MediaItem.Builder()
                     .setUri(Uri.fromFile(file))
                     .setMimeType(MimeTypes.IMAGE_JPEG)
+                    .setImageDurationMs((p.getLong("e") - p.getLong("s")))
                     .build()
                 val still = EditedMediaItem.Builder(stillItem)
                     .setDurationUs(holdUs)
@@ -241,6 +247,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             for (i in 0 until lane.length()) {
                 val v = lane.getJSONObject(i)
                 val off = v.getLong("off")
+                validateAudio(v.getString("uri"), "အသံ (narration / sound effect)")
                 if (off > cursorMs) seq.addGap((off - cursorMs) * 1000L)
                 val item = EditedMediaItem.Builder(MediaItem.fromUri(Uri.parse(v.getString("uri"))))
                     .setRemoveVideo(true)
@@ -255,6 +262,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         // 3. Background music, repeated when it is shorter than the video.
         val music = job.optJSONObject("music")
         if (music != null) {
+            validateAudio(music.getString("uri"), "Background music")
             val item = EditedMediaItem.Builder(MediaItem.fromUri(Uri.parse(music.getString("uri"))))
                 .setRemoveVideo(true)
                 .setEffects(Effects(listOf(volume(music.optDouble("vol", 0.25).toFloat())), emptyList<Effect>()))
@@ -342,6 +350,70 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         return Composition.Builder(sequences)
             .setEffects(Effects(emptyList<AudioProcessor>(), videoEffects))
             .build()
+    }
+
+    /** Fails early, naming the file, when an audio file cannot be read. */
+    private fun validateAudio(uriText: String, what: String) {
+        val ex = MediaExtractor()
+        try {
+            ex.setDataSource(activity, Uri.parse(uriText), null)
+            var audio = false
+            for (i in 0 until ex.trackCount) {
+                val mime = ex.getTrackFormat(i).getString(android.media.MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith("audio/")) audio = true
+            }
+            if (!audio) throw IllegalStateException("no audio track")
+        } catch (e: Exception) {
+            throw IllegalStateException("$what ဖတ်မရပါ (${e.message ?: "unsupported"}): $uriText")
+        } finally {
+            ex.release()
+        }
+    }
+
+    /** Fails early when the saved still picture cannot be decoded. */
+    private fun validatePicture(f: File, what: String) {
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(f.absolutePath, o)
+        if (o.outWidth <= 0 || o.outHeight <= 0 || f.length() < 100) {
+            throw IllegalStateException("$what ပုံ မမှန်ပါ (${f.length()} bytes): ${f.name}")
+        }
+    }
+
+    /**
+     * Opens every audio file and the video once, before the render, so a file
+     * that cannot be read is named in the error instead of a vague loader error.
+     */
+    private fun checkInputs(job: JSONObject) {
+        probe("မူရင်းဗီဒီယို", job.getString("videoUri"), true)
+        val lanes = job.optJSONArray("voiceLanes") ?: JSONArray()
+        for (l in 0 until lanes.length()) {
+            val lane = lanes.getJSONArray(l)
+            for (i in 0 until lane.length()) {
+                val v = lane.getJSONObject(i)
+                probe("အသံ/narration ဖိုင်", v.getString("uri"), false)
+            }
+        }
+        val music = job.optJSONObject("music")
+        if (music != null) probe("Background music ဖိုင်", music.getString("uri"), false)
+    }
+
+    private fun probe(label: String, uri: String, video: Boolean) {
+        val ex = MediaExtractor()
+        try {
+            ex.setDataSource(activity, Uri.parse(uri), null)
+            var found = false
+            for (i in 0 until ex.trackCount) {
+                val mime = ex.getTrackFormat(i).getString(MediaFormat.KEY_MIME) ?: ""
+                if (mime.startsWith(if (video) "video/" else "audio/")) found = true
+            }
+            if (!found) throw IllegalStateException("$label: ${if (video) "video" else "audio"} track မတွေ့ပါ ($uri)")
+        } catch (e: IllegalStateException) {
+            throw e
+        } catch (e: Exception) {
+            throw IllegalStateException("$label ဖွင့်မရပါ: ${e.message} ($uri)")
+        } finally {
+            ex.release()
+        }
     }
 
     /** One frame of the original, saved as a picture the renderer can hold. */
