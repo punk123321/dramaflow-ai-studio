@@ -77,8 +77,7 @@ extension TransformToolLabel on TransformTool {
         TransformTool.colorGrade => 'အလင်း/အမှောင်၊ ကွဲလွဲမှု (contrast) ကို အချိန်ပိုင်းအလိုက် ညှိရန် (ပုံသဏ္ဍာန်/mood အတွက်)',
       };
 
-  /// What exists in the app today (see CHECKLIST.md). TE itself renders none
-  /// of these yet.
+  /// What the app really does for each tool today (see CHECKLIST.md).
   ToolStatus get status => switch (this) {
         TransformTool.splitScreen => ToolStatus.experimental,
         TransformTool.colorGrade ||
@@ -93,7 +92,6 @@ extension TransformToolLabel on TransformTool {
         TransformTool.sceneReordering ||
         TransformTool.criticalCommentary =>
           ToolStatus.inStudio,
-        _ => ToolStatus.planned,
       };
 }
 
