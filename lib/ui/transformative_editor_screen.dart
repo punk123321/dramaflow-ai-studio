@@ -427,7 +427,7 @@ class _OpDialogState extends State<_OpDialog> {
                   child: TextField(
                     controller: _from,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: _tool == TransformTool.freezeFrame ? 'ရပ်မယ့် အချိန် (စက္ကန့်)' : 'စချိန် (စက္ကန့်)'),
+                    decoration: InputDecoration(labelText: _tool == TransformTool.freezeFrame ? 'ရပ်မယ့် အချိန် (စက္ကန့်)' : 'စချိန် (စက္ကန့်)'),
                   ),
                 ),
                 if (_tool != TransformTool.freezeFrame) const SizedBox(width: 8),
