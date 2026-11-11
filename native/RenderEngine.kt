@@ -12,7 +12,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.util.Size
+import androidx.media3.common.util.Size
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
