@@ -5,6 +5,7 @@ import '../core/timeline.dart';
 import '../core/transformative_plan.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
+import '../platform/audio_channel.dart';
 
 /// TE-1: a separate, persisted planning workspace. Actual effect rendering is
 /// added in later TE phases through the existing timeline and Render Center.
@@ -217,7 +218,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           _sectionTitle('Edit လုပ်ဆောင်ချက် စာရင်း'),
           const Text(
             'AI အကြံပြုချက် (နောက်ပိုင်း) တွေက “စောင့်ဆိုင်း” အနေနဲ့သာ ဝင်လာမယ်။ ခွင့်ပြုမှသာ အသုံးပြုမယ်။ '
-            'ခွင့်ပြုထားတဲ့ Crop & Reframe၊ Freeze Frame၊ Motion Graphics (စာသား/မြား) တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
+            'ခွင့်ပြုထားတဲ့ Crop & Reframe၊ Freeze Frame၊ Motion Graphics (စာသား/မြား)၊ Sound Design (အသံ effect) တွေသာ Render မှာ ပါပါမယ်။ ကျန် tool တွေကို မှတ်တမ်းအဖြစ်သာ သိမ်းတယ်။',
             style: TextStyle(color: DfColors.muted, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -356,6 +357,8 @@ class _OpDialogState extends State<_OpDialog> {
   final _note = TextEditingController();
   double _zoom = 1.5;
   double _hold = 3.0;
+  AudioFile? _sound;
+  double _svol = 0.8;
   String _kind = 'label';
   final _text = TextEditingController();
   double _mx = 0.5;
@@ -378,11 +381,25 @@ class _OpDialogState extends State<_OpDialog> {
     super.dispose();
   }
 
+  bool get _point => _tool == TransformTool.freezeFrame || _tool == TransformTool.soundDesign;
+
+  Future<void> _pickSound() async {
+    try {
+      final f = await AudioChannel.pickAudio();
+      if (f != null) setState(() => _sound = f);
+    } catch (e) {
+      setState(() => _err = 'အသံဖိုင် ရွေးမရပါ: $e');
+    }
+  }
+
   Map<String, Object?> _params() {
     double r(double v) => double.parse(v.toStringAsFixed(2));
     switch (_tool) {
       case TransformTool.freezeFrame:
         return {'hold': double.parse(_hold.toStringAsFixed(1))};
+      case TransformTool.soundDesign:
+        final f = _sound;
+        return f == null ? const {} : {'src': f.source, 'name': f.name, 'dur': f.durationMs, 'vol': r(_svol)};
       case TransformTool.cropReframe:
         return {'zoom': r(_zoom), 'cx': r(_cx), 'cy': r(_cy)};
       case TransformTool.motionGraphics:
@@ -403,8 +420,11 @@ class _OpDialogState extends State<_OpDialog> {
 
   void _ok() {
     final a = double.tryParse(_from.text.trim());
-    final freeze = _tool == TransformTool.freezeFrame;
-    final b = freeze ? a : double.tryParse(_to.text.trim());
+    final b = _point ? a : double.tryParse(_to.text.trim());
+    if (_tool == TransformTool.soundDesign && _sound == null) {
+      setState(() => _err = 'အသံဖိုင် အရင်ရွေးပါ');
+      return;
+    }
     if (_tool == TransformTool.motionGraphics && _kind == 'label' && _text.text.trim().isEmpty) {
       setState(() => _err = 'Label စာသား ရေးပါ');
       return;
@@ -456,11 +476,11 @@ class _OpDialogState extends State<_OpDialog> {
                   child: TextField(
                     controller: _from,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: _tool == TransformTool.freezeFrame ? 'ရပ်မယ့် အချိန် (စက္ကန့်)' : 'စချိန် (စက္ကန့်)'),
+                    decoration: InputDecoration(labelText: _tool == TransformTool.freezeFrame ? 'ရပ်မယ့် အချိန် (စက္ကန့်)' : (_tool == TransformTool.soundDesign ? 'အသံစမယ့် အချိန် (စက္ကန့်)' : 'စချိန် (စက္ကန့်)')),
                   ),
                 ),
-                if (_tool != TransformTool.freezeFrame) const SizedBox(width: 8),
-                if (_tool != TransformTool.freezeFrame)
+                if (!_point) const SizedBox(width: 8),
+                if (!_point)
                 Expanded(
                   child: TextField(
                     controller: _to,
@@ -470,6 +490,19 @@ class _OpDialogState extends State<_OpDialog> {
                 ),
               ],
             ),
+            if (_tool == TransformTool.soundDesign) ...[
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: _pickSound,
+                icon: const Icon(Icons.audiotrack, size: 18),
+                label: Text(_sound == null ? 'အသံဖိုင် ရွေးမယ်' : '${_sound!.name} · ${(_sound!.durationMs / 1000).toStringAsFixed(1)}s'),
+              ),
+              _slider('အသံ ${(_svol * 100).round()}%', _svol, 0.05, 1.0, (v) => _svol = v),
+              const Text(
+                'ကိုယ့်ဖုန်းထဲက အသံဖိုင်ကို သုံးမယ် (မူရင်းဖိုင် မပြောင်း)။ အချိန်ကို မူရင်းဗီဒီယိုအပေါ် တိုင်းထားတယ်။ အသံက ဗီဒီယိုအဆုံး မကျော်ရပါ။ ကိုယ်ပိုင်/အသုံးပြုခွင့်ရှိတဲ့ အသံသာ သုံးပါ။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
             if (_tool == TransformTool.motionGraphics) ...[
               const SizedBox(height: 4),
               SegmentedButton<String>(

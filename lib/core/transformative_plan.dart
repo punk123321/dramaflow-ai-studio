@@ -75,7 +75,8 @@ extension TransformToolLabel on TransformTool {
   ToolStatus get status => switch (this) {
         TransformTool.cropReframe ||
         TransformTool.freezeFrame ||
-        TransformTool.motionGraphics =>
+        TransformTool.motionGraphics ||
+        TransformTool.soundDesign =>
           ToolStatus.rendered,
         TransformTool.commentaryVoiceOver ||
         TransformTool.sceneReordering ||

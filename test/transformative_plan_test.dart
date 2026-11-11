@@ -103,6 +103,8 @@ void main() {
     expect(TransformTool.pictureInPicture.status, ToolStatus.planned);
     expect(TransformTool.smartCut.status, ToolStatus.planned);
     expect(TransformTool.motionGraphics.status, ToolStatus.rendered);
+    expect(TransformTool.soundDesign.status, ToolStatus.rendered);
+    expect(TransformTool.splitScreen.status, ToolStatus.planned);
     expect(TransformTool.commentaryVoiceOver.status, ToolStatus.inStudio);
   });
 

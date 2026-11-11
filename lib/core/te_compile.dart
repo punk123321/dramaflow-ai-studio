@@ -5,12 +5,12 @@ import 'transformative_plan.dart';
 /// description (video pieces). Pure Dart. The stored timeline is never
 /// changed: this runs when a render is prepared.
 ///
-/// Only Crop & Reframe, Freeze Frame and Motion Graphics (text label, arrow)
-/// are compiled today. Every other approved operation is
+/// Only Crop & Reframe, Freeze Frame, Motion Graphics (text label, arrow) and
+/// Sound Design (one sound effect at a moment) are compiled today. Every other approved operation is
 /// reported as "not rendered" so nothing is silently skipped.
 
 class CompileResult {
-  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const []]);
+  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const [], this.sounds = const []]);
 
   final List<VideoPiece> pieces;
 
@@ -26,6 +26,10 @@ class CompileResult {
 
   /// Labels and arrows, already placed on the OUTPUT time.
   final List<MotionItem> overlays;
+
+  /// Sound effects placed on the OUTPUT time. The render mixes them in with
+  /// the narration lanes.
+  final List<VoiceItem> sounds;
 }
 
 /// Shortest piece the compiler will create. Anything shorter is folded into
@@ -169,6 +173,27 @@ List<(int, int)> outputRanges(List<VideoPiece> pieces, int s, int e) {
 /// A label or arrow shorter than this on the output is not worth showing.
 const minMotionMs = 300;
 
+/// Longest sound effect file accepted (10 minutes).
+const maxSoundMs = 600000;
+
+/// A sound effect from operation parameters, placed at [offsetMs]. Null when
+/// the parameters are not usable.
+VoiceItem? soundFromParams(Map<String, Object?> p, int offsetMs) {
+  final src = p['src'];
+  final dur = p['dur'];
+  final vol = p['vol'];
+  if (src is! String || src.isEmpty || dur is! int || dur <= 0 || dur > maxSoundMs) return null;
+  if (vol is! num || vol < 0.05 || vol > 1.0) return null;
+  final name = p['name'];
+  return VoiceItem(
+    source: src,
+    label: name is String && name.isNotEmpty ? name : 'Sound effect',
+    durationMs: dur,
+    offsetMs: offsetMs,
+    volume: vol.toDouble(),
+  );
+}
+
 const minFreezeMs = 500;
 const maxFreezeMs = 30000;
 
@@ -196,6 +221,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   final crops = <TransformOp>[];
   final freezes = <TransformOp>[];
   final motions = <TransformOp>[];
+  final sounds = <TransformOp>[];
   for (final op in approved) {
     final name = op.tool.title;
     if (!op.valid) {
@@ -206,6 +232,8 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       freezes.add(op);
     } else if (op.tool == TransformTool.motionGraphics) {
       motions.add(op);
+    } else if (op.tool == TransformTool.soundDesign) {
+      sounds.add(op);
     } else {
       notes.add('$name — render မချိတ်ရသေးလို့ မပါပါ');
     }
@@ -295,6 +323,29 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     applied.add(op);
   }
 
+  // Sound effects, placed on the final output time.
+  final soundItems = <VoiceItem>[];
+  final total = cur.fold<int>(0, (a, p) => a + p.lengthMs);
+  for (final op in sounds) {
+    final name = op.tool.title;
+    final ranges = outputRanges(cur, op.startMs, op.startMs + 1);
+    if (ranges.isEmpty) {
+      notes.add('$name — ဗီဒီယိုအပိုင်းထဲ မကျတဲ့ အချိန်မို့ ချန်ထားတယ်');
+      continue;
+    }
+    final item = soundFromParams(op.params, ranges.first.$1);
+    if (item == null) {
+      notes.add('$name — အသံဖိုင်/အသံတိုး တန်ဖိုး မမှန်လို့ ချန်ထားတယ်');
+      continue;
+    }
+    if (item.endMs > total) {
+      notes.add('$name — အသံက ဗီဒီယိုအဆုံးကျော်နေလို့ ချန်ထားတယ် (အချိန်စောစော ထားပါ)');
+      continue;
+    }
+    soundItems.add(item);
+    applied.add(op);
+  }
+
   final infos = <String>[];
   var at = 0;
   for (final p in cur) {
@@ -306,5 +357,5 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   if (infos.isNotEmpty) {
     infos.add('ရပ်တဲ့ အချိန်ကြောင့် နောက်ပိုင်း အပိုင်းတွေ နောက်ကျသွားမယ်။ Narration အချိန်ကို ကိုယ်တိုင် ညှိပါ');
   }
-  return CompileResult(cur, applied, notes, infos, overlays);
+  return CompileResult(cur, applied, notes, infos, overlays, soundItems);
 }

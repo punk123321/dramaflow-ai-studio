@@ -277,4 +277,59 @@ void main() {
       expect(none.containsKey('overlays'), isFalse);
     });
   });
+
+  TransformOp sfx(String id, int at, {Map<String, Object?>? params, OpStatus status = OpStatus.approved}) => TransformOp(
+        id: id,
+        tool: TransformTool.soundDesign,
+        startMs: at,
+        endMs: at,
+        status: status,
+        params: params ?? const {'src': 'content://a/1', 'name': 'boom.mp3', 'dur': 2000, 'vol': 0.8},
+      );
+
+  group('sound design', () {
+    test('effect lands on the output time of its source moment', () {
+      final r = compileOps(base, [sfx('s', 22000)]);
+      expect(r.sounds.length, 1);
+      expect(r.sounds.single.offsetMs, 12000);
+      expect(r.sounds.single.durationMs, 2000);
+      expect(r.sounds.single.volume, 0.8);
+      expect(r.sounds.single.source, 'content://a/1');
+      expect(r.applied.length, 1);
+    });
+
+    test('later content shifts after a held frame', () {
+      final r = compileOps(const [VideoPiece(0, 10000)], [freeze('f', 2000, hold: 3.0), sfx('s', 5000)]);
+      expect(r.sounds.single.offsetMs, 8000);
+    });
+
+    test('bad file, volume, time outside, past the end, proposal: reported or ignored', () {
+      final r = compileOps(base, [
+        sfx('1', 1000, params: const {'src': '', 'dur': 2000, 'vol': 0.5}),
+        sfx('2', 1000, params: const {'src': 'x', 'dur': 2000, 'vol': 5}),
+        sfx('3', 12000),
+        sfx('4', 19000), // output 19 s, 2 s long: past the 20 s end
+        sfx('5', 1000, status: OpStatus.proposed),
+      ]);
+      expect(r.sounds, isEmpty);
+      expect(r.applied, isEmpty);
+      expect(r.notes.length, 4);
+    });
+
+    test('sound effects join the narration lanes in the render job', () {
+      final r = compileOps(base, [sfx('s', 3000)]);
+      final voice = VoiceItem(source: '/data/v.wav', label: 'v', durationMs: 5000, offsetMs: 2000);
+      final tl = Timeline(pieces: r.pieces, voices: [voice, ...r.sounds]);
+      final job = buildRenderJob(
+        name: 'n',
+        videoUri: 'content://v',
+        timeline: tl,
+        sourceSubtitles: const [],
+        settings: const RenderSettings(),
+      );
+      final lanes = job['voiceLanes'] as List;
+      expect(lanes.length, 2); // overlap, so two lanes mixed together
+      expect(r.pieces, base);
+    });
+  });
 }

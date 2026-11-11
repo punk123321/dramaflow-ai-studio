@@ -72,7 +72,7 @@ class _RenderPanelState extends State<RenderPanel> {
       name: name,
       videoUri: p.sourceVideoUri!,
       // Approved TE operations are applied to a copy; the saved timeline stays as it is.
-      timeline: _tl.copyWith(pieces: te.pieces),
+      timeline: _tl.copyWith(pieces: te.pieces, voices: [..._tl.voices, ...te.sounds]),
       overlays: [for (final o in te.overlays) o.toJson()],
       sourceSubtitles: _subs,
       settings: _settings,

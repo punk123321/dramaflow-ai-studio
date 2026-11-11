@@ -239,3 +239,15 @@ unverified on a phone.
 
 Not built: shapes other than an arrow, animation (fade/move), infographics.
 The arrow is drawn around its centre, not its tip. A label spans one line.
+
+## TE-5: Sound Design, one sound effect at a moment (branch claude/te-5-sound-design)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved sound ops become effects on the OUTPUT time (follows cuts and held frames) | yes (te_compile_test) | no |
+| Effects join the existing narration lanes in the render job (no new native code) | yes | no |
+| Bad file/volume, time outside the video, past the end: reported | yes | no |
+| Pick a file, volume slider in the TE dialog | no | no |
+
+Not built: ducking (lowering music under narration), fades, trimming a long
+effect, an effects library. Only use sounds you may use; the app cannot check.
