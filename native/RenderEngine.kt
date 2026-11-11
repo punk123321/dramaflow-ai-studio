@@ -155,7 +155,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                         exportResult: ExportResult,
                         exportException: ExportException
                     ) {
-                        finish(false, 0L, height, exportException.message ?: "Export failed")
+                        finish(false, 0L, height, describeError(exportException))
                     }
                 })
                 .build()
@@ -187,7 +187,12 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 // Held still frame: take the picture from the original, show it for a while.
                 val file = extractFrame(videoUri, p.getLong("s"))
                 val holdUs = (p.getLong("e") - p.getLong("s")) * 1000L
-                val still = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(file)))
+                // Say it is a JPEG picture, so it is not guessed from the file name.
+                val stillItem = MediaItem.Builder()
+                    .setUri(Uri.fromFile(file))
+                    .setMimeType(MimeTypes.IMAGE_JPEG)
+                    .build()
+                val still = EditedMediaItem.Builder(stillItem)
                     .setDurationUs(holdUs)
                     .setFrameRate(fps)
                 val stillFx = ArrayList<Effect>()
@@ -346,6 +351,21 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         } finally {
             r.release()
         }
+    }
+
+    /** The error code and the chain of causes, so the real reason is visible. */
+    private fun describeError(e: ExportException): String {
+        val parts = ArrayList<String>()
+        parts.add(e.errorCodeName)
+        var t: Throwable? = e
+        var depth = 0
+        while (t != null && depth < 4) {
+            val m = t.message
+            if (!m.isNullOrBlank() && !parts.contains(m)) parts.add(m)
+            t = t.cause
+            depth++
+        }
+        return parts.joinToString(" | ")
     }
 
     private fun clearTempFrames() {
