@@ -8,6 +8,7 @@ import '../core/publish_text.dart';
 import '../core/theme.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
+import '../platform/audio_channel.dart';
 import '../platform/render_channel.dart';
 import 'widgets.dart';
 
@@ -33,6 +34,7 @@ class _PublishScreenState extends State<PublishScreen> {
   bool _loading = true;
   double _atSec = 0;
   bool _busy = false;
+  String? _ownPic;
   String? _thumbPath;
   String? _thumbNote;
   String? _error;
@@ -135,6 +137,7 @@ class _PublishScreenState extends State<PublishScreen> {
         videoUri: uri,
         atMs: (_atSec * 1000).round(),
         text: _thumbText.text,
+        imagePath: _ownPic,
         name: '${safeName(widget.project.name)}_thumb_${DateTime.now().millisecondsSinceEpoch ~/ 1000}',
       );
       _thumbPath = r.path;
@@ -143,6 +146,15 @@ class _PublishScreenState extends State<PublishScreen> {
       _error = 'Thumbnail မထုတ်နိုင်ပါ: $e';
     }
     if (mounted) setState(() => _busy = false);
+  }
+
+  Future<void> _pickOwn() async {
+    try {
+      final f = await AudioChannel.pickImage();
+      if (f != null) setState(() => _ownPic = f);
+    } catch (e) {
+      setState(() => _error = 'ပုံ ရွေးမရပါ: $e');
+    }
   }
 
   String safeName(String s) {
@@ -214,15 +226,30 @@ class _PublishScreenState extends State<PublishScreen> {
                 ],
                 const SectionTitle('Thumbnail'),
                 const Text('မူရင်းဗီဒီယိုထဲက frame တစ်ခုကို ယူပြီး စာထည့်မယ်။ မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
-                if (_maxSec <= 0)
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _pickOwn,
+                  icon: const Icon(Icons.brush_outlined, size: 18),
+                  label: Text(_ownPic == null ? 'ကိုယ်တိုင်ဒီဇိုင်းဆွဲထားတဲ့ ပုံ ရွေးမယ်' : 'ကိုယ့်ပုံ ရွေးပြီး (ပြန်ရွေးလို့ရ)'),
+                ),
+                if (_ownPic != null)
+                  TextButton(onPressed: _busy ? null : () => setState(() => _ownPic = null), child: const Text('ကိုယ့်ပုံ မသုံးတော့ဘူး (ဗီဒီယို frame သုံးမယ်)')),
+                if (_ownPic != null)
+                  const Text(
+                    'ကိုယ့်ပုံကို ကူးပြီး Gallery (Pictures/DramaFlow) ထဲ သိမ်းပေးမယ်။ မူရင်းပုံကို မပြင်ပါဘူး။ ပုံပေါ်ကစာ ထည့်ချင်ရင် အောက်မှာ ရေးပါ၊ မထည့်ရင် ဗလာထားပါ။ ဒီပုံကို YouTube/Facebook မှာ ကိုယ်တိုင် upload တင်ပါ။',
+                    style: TextStyle(color: DfColors.muted, fontSize: 12),
+                  ),
+                if (_ownPic == null && _maxSec <= 0)
                   const Padding(padding: EdgeInsets.only(top: 6), child: Text('ဗီဒီယို အရှည် မသိသေးပါ။ Project မှာ ဗီဒီယို ရွေးပါ။', style: TextStyle(color: DfColors.warn, fontSize: 13)))
                 else ...[
-                  Slider(
-                    value: _atSec.clamp(0, _maxSec),
-                    max: _maxSec,
-                    onChanged: _busy ? null : (v) => setState(() => _atSec = v),
-                  ),
-                  Text('အချိန် ${_atSec.toStringAsFixed(1)} စက္ကန့်', style: const TextStyle(fontSize: 13)),
+                  if (_ownPic == null) ...[
+                    Slider(
+                      value: _atSec.clamp(0, _maxSec),
+                      max: _maxSec,
+                      onChanged: _busy ? null : (v) => setState(() => _atSec = v),
+                    ),
+                    Text('အချိန် ${_atSec.toStringAsFixed(1)} စက္ကန့်', style: const TextStyle(fontSize: 13)),
+                  ],
                   const SizedBox(height: 6),
                   TextField(
                     controller: _thumbText,
@@ -232,7 +259,7 @@ class _PublishScreenState extends State<PublishScreen> {
                   FilledButton.icon(
                     onPressed: _busy ? null : _thumb,
                     icon: const Icon(Icons.image_outlined, size: 18),
-                    label: Text(_busy ? 'ထုတ်နေတယ်...' : 'Thumbnail ထုတ်မယ်'),
+                    label: Text(_busy ? 'ထုတ်နေတယ်...' : (_ownPic == null ? 'Thumbnail ထုတ်မယ်' : 'ကိုယ့်ပုံကို သိမ်းမယ်')),
                   ),
                 ],
                 if (_thumbPath != null) ...[

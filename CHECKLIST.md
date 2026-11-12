@@ -322,6 +322,7 @@ wrong with a split operation, remove that operation; other tools are unaffected.
 | Sample render: first 8 s, not saved to history, does not mark the Render stage done | yes (pieces, narration, windows) | no |
 | Upload text by Gemini copy/paste: parse + checks + credit lines from the Fair Use record | yes | no |
 | Thumbnail: one frame of the original + text, saved to Pictures/DramaFlow (Android 10+) | compiles on CI | no |
+| Thumbnail from the user's own designed picture (optional text), saved to Pictures/DramaFlow; original file untouched | compiles on CI | no |
 
 Blur background was written from the Media3 docs without a phone. Unknown until
 tested: which compositor input is drawn on top, and whether the real picture is

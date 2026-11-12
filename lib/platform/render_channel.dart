@@ -82,8 +82,9 @@ class RenderChannel {
     required int atMs,
     required String text,
     required String name,
+    String? imagePath,
   }) async {
-    final r = await _channel.invokeMethod<Map>('makeThumbnail', {'videoUri': videoUri, 'atMs': atMs, 'text': text, 'name': name});
+    final r = await _channel.invokeMethod<Map>('makeThumbnail', {'videoUri': videoUri, 'atMs': atMs, 'text': text, 'name': name, 'imagePath': imagePath});
     return (path: r!['path'] as String, gallery: r['gallery'] as String?);
   }
 }

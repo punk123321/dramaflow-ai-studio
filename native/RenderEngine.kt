@@ -843,13 +843,24 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         val name = args?.get("name") as? String ?: "thumbnail"
         worker.execute {
             try {
-                val r = MediaMetadataRetriever()
-                val frame = try {
-                    r.setDataSource(activity, uri)
-                    r.getFrameAtTime(atMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)
-                } finally {
-                    r.release()
-                } ?: throw IllegalStateException("Could not read the frame at $atMs ms")
+                val imagePath = args?.get("imagePath") as? String
+                val frame = if (!imagePath.isNullOrEmpty()) {
+                    // The user's own designed picture: read it, never change the original file.
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(imagePath, bounds)
+                    var sample = 1
+                    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2560) sample *= 2
+                    BitmapFactory.decodeFile(imagePath, BitmapFactory.Options().apply { inSampleSize = sample })
+                        ?: throw IllegalStateException("Could not read the picture")
+                } else {
+                    val r = MediaMetadataRetriever()
+                    try {
+                        r.setDataSource(activity, uri)
+                        r.getFrameAtTime(atMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                    } finally {
+                        r.release()
+                    } ?: throw IllegalStateException("Could not read the frame at $atMs ms")
+                }
                 val bmp = frame.copy(Bitmap.Config.ARGB_8888, true)
                 if (text.isNotEmpty()) {
                     val canvas = Canvas(bmp)
