@@ -260,10 +260,8 @@ class _PublishScreenState extends State<PublishScreen> {
                 const SizedBox(height: 6),
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
-                  title: Text('Gemini ကို ပုံဆွဲခိုင်းမယ်${_ai.ready ? '' : ' (key မရှိသေး)'}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  title: const Text('Gemini ကို ပုံဆွဲခိုင်းမယ်', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   children: [
-                    if (!_ai.ready)
-                      const Text('API key ကို Stage 3 → Audio → "Gemini API အသံ" မှာ အရင်ထည့်ပါ (key တစ်ခုတည်းကို သုံးတယ်)။', style: TextStyle(color: DfColors.warn, fontSize: 12.5)),
                     TextField(
                       controller: _imgPrompt,
                       minLines: 3,
@@ -276,15 +274,36 @@ class _PublishScreenState extends State<PublishScreen> {
                         ChoiceChip(label: Text(a), selected: _aspect == a, onSelected: (_) => setState(() => _aspect = a)),
                     ]),
                     const SizedBox(height: 6),
+                    const Text('နည်း ၁ — Gemini app (chat) နဲ့၊ API key မလိုပါ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 4),
                     FilledButton.icon(
+                      onPressed: () async {
+                        final msg = await openInGemini('${_imgPrompt.text.trim()}\nMake the picture $_aspect shaped.');
+                        _toast('$msg ပုံထွက်ရင် Gemini ထဲမှာ သိမ်း (Download) ပြီး ပြန်လာ၊ အောက်က "ကိုယ်တိုင်ဒီဇိုင်းဆွဲထားတဲ့ ပုံ ရွေးမယ်" ကို နှိပ်ပါ။');
+                      },
+                      icon: const Icon(Icons.open_in_new, size: 18),
+                      label: const Text('Gemini app ဖွင့်ပြီး ဆွဲခိုင်းမယ်'),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'ပုံထွက်လာရင် Gemini ထဲမှာ သိမ်းပါ။ ပြီးရင် ဒီ app က "ကိုယ်တိုင်ဒီဇိုင်းဆွဲထားတဲ့ ပုံ ရွေးမယ်" နဲ့ ရွေးပြီး စာထည့်၊ သိမ်းလို့ရတယ်။ '
+                      'Gemini app ထဲမှာ ပုံဆွဲခွင့် ရှိမရှိက ကိုယ့် account ပေါ် မူတည်တယ်။',
+                      style: TextStyle(fontSize: 11.5, color: DfColors.muted),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('နည်း ၂ — API နဲ့ (app ထဲမှာ တန်းဆွဲ)${_ai.ready ? '' : ' · key မရှိသေး'}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    if (!_ai.ready)
+                      const Text('API key ကို Stage 3 → Audio → "Gemini API အသံ" မှာ ထည့်ပါ (key တစ်ခုတည်းကို သုံးတယ်)။', style: TextStyle(color: DfColors.warn, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    FilledButton.tonalIcon(
                       onPressed: (!_ai.ready || _drawing || _busy) ? null : _draw,
                       icon: const Icon(Icons.auto_awesome, size: 18),
-                      label: Text(_drawing ? 'ဆွဲနေတယ်...' : 'Gemini နဲ့ ဆွဲမယ်'),
+                      label: Text(_drawing ? 'ဆွဲနေတယ်...' : 'API နဲ့ ဆွဲမယ်'),
                     ),
                     const Padding(
                       padding: EdgeInsets.only(top: 4, bottom: 8),
                       child: Text(
-                        'နှိပ်တဲ့အခါ အပေါ်က prompt စာသားကို Google ဆီ internet နဲ့ ပို့ပါတယ်။ ကိုယ့် key ရဲ့ သုံးခွင့်/ကုန်ကျစရိတ် ကျတယ်။ '
+                        'နည်း ၂ နှိပ်တဲ့အခါ အပေါ်က prompt စာသားကို Google ဆီ internet နဲ့ ပို့ပါတယ်။ ကိုယ့် key ရဲ့ သုံးခွင့်/ကုန်ကျစရိတ် ကျတယ်။ '
                         'ဇာတ်ကားထဲက တကယ့်ဇာတ်ဆောင်၊ ဇာတ်ကောင်၊ logo ကို အတိအကျ ဆွဲခိုင်းတာမျိုး မလုပ်ပါနဲ့၊ ကိုယ်ပိုင်ပုံစံပဲ ခိုင်းပါ။ '
                         'ထွက်လာတဲ့ ပုံက ကိုယ်ပိုင်မူပိုင်ခွင့် ကိစ္စ ကင်းတယ်လို့ ကျွန်တော် အာမခံလို့ မရပါဘူး၊ တင်ခင် ကိုယ်တိုင်ကြည့်ပါ။ '
                         'ဒါကို Google ကို တကယ်မခေါ်ကြည့်ရသေးလို့ error ပေါ်ရင် စာကို ပြောပြပါ။',
