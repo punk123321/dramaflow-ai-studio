@@ -359,3 +359,14 @@ NOT verified: the real Gemini reply. The request shape for the newer "interactio
 was taken from the public docs and could not be called from the build machine. If the first
 call fails, the app shows Google's error text; send it and the request is adjusted.
 The key is plain text in the app's private database and is not in backups. Chunk text is sent to Google.
+
+## TE-14: Gemini draws the thumbnail (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Request (picture + aspect ratio), reply reading, settings with a separate picture model | yes (gemini_tts_test) | no |
+| Publish screen: prompt, shape, "Gemini နဲ့ ဆွဲမယ်"; the result goes through the same own-picture path (add text, save to Pictures/DramaFlow) | compiles on CI | no |
+
+Not verified against the real API (same as TE-13). Default picture model is gemini-3.1-flash-image
+(from Google's Firebase documentation; the REST shape is the standard generateContent one).
+The prompt text is sent to Google. No copyright guarantee for generated pictures; the default
+prompt asks for original characters, no real people, no logos, no text.

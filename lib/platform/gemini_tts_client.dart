@@ -12,31 +12,23 @@ class GeminiTtsException implements Exception {
   String toString() => message;
 }
 
-/// One call to the Gemini API. The text is sent to Google; the key goes in a
-/// header (never in the address). Throws [GeminiTtsException].
-Future<Uint8List> geminiSpeak(GeminiTtsSettings s, String text) async {
+Future<Object?> _post(GeminiTtsSettings s, Uri uri, Map<String, Object?> body) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
   try {
-    final req = await client.postUrl(ttsEndpoint(s.model));
+    final req = await client.postUrl(uri);
     req.headers.set('x-goog-api-key', s.apiKey.trim());
     req.headers.set(HttpHeaders.contentTypeHeader, 'application/json; charset=utf-8');
-    req.add(utf8.encode(jsonEncode(ttsBody(s.model, text, s.voice))));
+    req.add(utf8.encode(jsonEncode(body)));
     final resp = await req.close().timeout(const Duration(seconds: 240));
-    final body = await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 240));
+    final text = await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 240));
     if (resp.statusCode != 200) {
-      throw GeminiTtsException(explainTtsHttp(resp.statusCode, body, s.apiKey));
+      throw GeminiTtsException(explainTtsHttp(resp.statusCode, text, s.apiKey));
     }
-    Object? json;
     try {
-      json = jsonDecode(body);
+      return jsonDecode(text);
     } catch (_) {
       throw GeminiTtsException('Gemini ပြန်ဖြေချက် ဖတ်လို့မရပါ။');
     }
-    final audio = extractAudio(json);
-    if (audio == null) {
-      throw GeminiTtsException('Gemini ပြန်ဖြေချက်ထဲမှာ အသံ မပါပါ။ Model နာမည် (TTS model ဟုတ်လား) စစ်ပါ။');
-    }
-    return audio.bytes;
   } on SocketException {
     throw GeminiTtsException('Internet ချိတ်ဆက်မှု မရပါ။');
   } on TimeoutException {
@@ -46,4 +38,25 @@ Future<Uint8List> geminiSpeak(GeminiTtsSettings s, String text) async {
   } finally {
     client.close(force: true);
   }
+}
+
+/// Narration audio (a WAV). The text is sent to Google; the key goes in a
+/// header, never in the address. Throws [GeminiTtsException].
+Future<Uint8List> geminiSpeak(GeminiTtsSettings s, String text) async {
+  final json = await _post(s, ttsEndpoint(s.model), ttsBody(s.model, text, s.voice));
+  final audio = extractAudio(json);
+  if (audio == null) {
+    throw GeminiTtsException('Gemini ပြန်ဖြေချက်ထဲမှာ အသံ မပါပါ။ Model နာမည် (TTS model ဟုတ်လား) စစ်ပါ။');
+  }
+  return audio.bytes;
+}
+
+/// A picture drawn by Gemini from [prompt]. Throws [GeminiTtsException].
+Future<GeneratedImage> geminiDraw(GeminiTtsSettings s, String prompt, String aspect) async {
+  final json = await _post(s, imageEndpoint(s.imageModel), imageBody(prompt, aspect));
+  final img = extractImage(json);
+  if (img == null) {
+    throw GeminiTtsException('Gemini က ပုံ မပေးပါ။ Prompt ကို ပြောင်းစမ်းပါ (လုံခြုံရေး စည်းကမ်းကြောင့် ပယ်တာ ဖြစ်နိုင်တယ်) ဒါမှမဟုတ် ပုံ model နာမည် စစ်ပါ။');
+  }
+  return img;
 }

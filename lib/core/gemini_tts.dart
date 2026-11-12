@@ -15,6 +15,11 @@ import 'dart:typed_data';
 const defaultTtsModel = 'gemini-3.8-flash-tts';
 const defaultTtsVoice = 'Kore';
 
+/// Picture model ("Nano Banana 2" in Google's naming). Editable in settings.
+const defaultImageModel = 'gemini-3.1-flash-image';
+
+const imageAspects = ['16:9', '9:16', '1:1', '4:5'];
+
 const ttsVoices = [
   'Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe',
   'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi',
@@ -23,18 +28,23 @@ const ttsVoices = [
 ];
 
 class GeminiTtsSettings {
-  const GeminiTtsSettings({this.apiKey = '', this.model = defaultTtsModel, this.voice = defaultTtsVoice});
+  const GeminiTtsSettings({this.apiKey = '', this.model = defaultTtsModel, this.voice = defaultTtsVoice, this.imageModel = defaultImageModel});
 
   final String apiKey;
   final String model;
   final String voice;
+  final String imageModel;
 
   bool get ready => apiKey.trim().isNotEmpty && model.trim().isNotEmpty;
 
-  GeminiTtsSettings copyWith({String? apiKey, String? model, String? voice}) =>
-      GeminiTtsSettings(apiKey: apiKey ?? this.apiKey, model: model ?? this.model, voice: voice ?? this.voice);
+  GeminiTtsSettings copyWith({String? apiKey, String? model, String? voice, String? imageModel}) => GeminiTtsSettings(
+        apiKey: apiKey ?? this.apiKey,
+        model: model ?? this.model,
+        voice: voice ?? this.voice,
+        imageModel: imageModel ?? this.imageModel,
+      );
 
-  String encode() => jsonEncode({'key': apiKey, 'model': model, 'voice': voice});
+  String encode() => jsonEncode({'key': apiKey, 'model': model, 'voice': voice, 'imgModel': imageModel});
 
   static GeminiTtsSettings decode(String? raw) {
     if (raw == null || raw.trim().isEmpty) return const GeminiTtsSettings();
@@ -47,6 +57,7 @@ class GeminiTtsSettings {
         apiKey: (m['key'] as String?)?.trim() ?? '',
         model: model.isEmpty ? defaultTtsModel : model,
         voice: ttsVoices.contains(voice) ? voice : defaultTtsVoice,
+        imageModel: ((m['imgModel'] as String?)?.trim().isEmpty ?? true) ? defaultImageModel : (m['imgModel'] as String).trim(),
       );
     } catch (_) {
       return const GeminiTtsSettings();
@@ -179,3 +190,64 @@ String explainTtsHttp(int status, String body, String apiKey) {
   };
   return 'Gemini API ($status): $why${detail.isEmpty ? '' : '\n$detail'}';
 }
+
+// ---- pictures (thumbnail) ----
+
+Uri imageEndpoint(String model) => Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/${model.trim()}:generateContent');
+
+Map<String, Object?> imageBody(String prompt, String aspect) => {
+      'contents': [
+        {
+          'parts': [
+            {'text': prompt}
+          ]
+        }
+      ],
+      'generationConfig': {
+        'responseModalities': ['IMAGE'],
+        'imageConfig': {'aspectRatio': imageAspects.contains(aspect) ? aspect : '16:9'},
+      },
+    };
+
+class GeneratedImage {
+  const GeneratedImage(this.bytes, this.extension);
+
+  final Uint8List bytes;
+  final String extension;
+}
+
+/// The first picture in the reply (base64 in an `inlineData` part). Null when none.
+GeneratedImage? extractImage(Object? json) {
+  GeneratedImage? found;
+  void walk(Object? n) {
+    if (found != null) return;
+    if (n is Map) {
+      final data = n['data'];
+      final mime = '${n['mimeType'] ?? n['mime_type'] ?? ''}';
+      if (data is String && data.length > 100 && mime.startsWith('image/')) {
+        try {
+          final ext = mime.contains('jpeg') || mime.contains('jpg') ? 'jpg' : (mime.contains('webp') ? 'webp' : 'png');
+          found = GeneratedImage(base64Decode(data), ext);
+          return;
+        } catch (_) {}
+      }
+      for (final v in n.values) {
+        walk(v);
+      }
+    } else if (n is List) {
+      for (final v in n) {
+        walk(v);
+      }
+    }
+  }
+
+  walk(json);
+  return found;
+}
+
+/// The starting prompt for a thumbnail. Original scene, no real faces, no
+/// logos, no lettering (the app adds text itself).
+String defaultImagePrompt(String dramaTitle) =>
+    'Eye-catching video thumbnail for a recap of a Chinese drama called "$dramaTitle". '
+    'Dramatic, emotional mood, cinematic lighting, bold colours. Original invented characters, '
+    'no real people, no existing characters, no logos, no text or lettering in the picture.';

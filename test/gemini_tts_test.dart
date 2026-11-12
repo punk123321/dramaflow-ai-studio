@@ -5,6 +5,7 @@ import 'package:aistudio/core/gemini_tts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  imageTests();
   test('settings: no key means not ready; round trip; bad values fall back', () {
     expect(const GeminiTtsSettings().ready, isFalse);
     final s = const GeminiTtsSettings(apiKey: ' k ', voice: 'Puck').copyWith(model: 'm');
@@ -84,5 +85,51 @@ void main() {
     expect(explainTtsHttp(429, '', 'k'), contains('quota'));
     expect(explainTtsHttp(404, '', 'k'), contains('Model'));
     expect(explainTtsHttp(500, 'x' * 1000, 'k').length, lessThan(450));
+  });
+}
+
+void imageTests() {
+  test('image settings default, round trip and old settings still load', () {
+    expect(const GeminiTtsSettings().imageModel, defaultImageModel);
+    final s = const GeminiTtsSettings(apiKey: 'k').copyWith(imageModel: 'm-img');
+    expect(GeminiTtsSettings.decode(s.encode()).imageModel, 'm-img');
+    expect(GeminiTtsSettings.decode('{"key":"k","model":"x","voice":"Puck"}').imageModel, defaultImageModel);
+  });
+
+  test('image request asks for a picture with the chosen shape; bad shape falls back', () {
+    final b = jsonEncode(imageBody('draw', '9:16'));
+    expect(b, contains('"responseModalities":["IMAGE"]'));
+    expect(b, contains('"aspectRatio":"9:16"'));
+    expect(jsonEncode(imageBody('x', '7:3')), contains('"aspectRatio":"16:9"'));
+    expect(imageEndpoint('gemini-3.1-flash-image').path, '/v1beta/models/gemini-3.1-flash-image:generateContent');
+  });
+
+  test('picture is found in the reply and its type is kept; text-only reply gives null', () {
+    final png = base64Encode(List.filled(300, 7));
+    final r = extractImage({
+      'candidates': [
+        {
+          'content': {
+            'parts': [
+              {'text': 'here'},
+              {'inlineData': {'mimeType': 'image/jpeg', 'data': png}}
+            ]
+          }
+        }
+      ]
+    });
+    expect(r, isNotNull);
+    expect(r!.extension, 'jpg');
+    expect(r.bytes.length, 300);
+    expect(extractImage({'candidates': [{'content': {'parts': [{'text': 'no'}]}}]}), isNull);
+    // audio in the reply is not a picture
+    expect(extractImage({'inlineData': {'mimeType': 'audio/wav', 'data': png}}), isNull);
+  });
+
+  test('default prompt names the drama and forbids real people, logos and text', () {
+    final p = defaultImagePrompt('ပန်းတိုင်');
+    expect(p, contains('ပန်းတိုင်'));
+    expect(p, contains('no real people'));
+    expect(p, contains('no logos'));
   });
 }
