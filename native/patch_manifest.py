@@ -15,6 +15,8 @@ changed = False
 i = s.index("<manifest")
 j = s.index(">", i) + 1
 add = ""
+if "android.permission.INTERNET" not in s:
+    add += "\n    " + '<uses-permission android:name="android.permission.INTERNET"/>'
 if "android.permission.RECORD_AUDIO" not in s:
     add += "\n    " + perm
 if "android.intent.action.TTS_SERVICE" not in s:

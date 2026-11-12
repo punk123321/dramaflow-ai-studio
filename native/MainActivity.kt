@@ -113,6 +113,30 @@ class MainActivity : FlutterActivity() {
                         call.argument<String>("name") ?: "audio.wav",
                         call.argument<String>("mime") ?: "application/octet-stream"
                     )
+                    "saveAudioBytes" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val safe = (call.argument<String>("name") ?: "api_" + System.currentTimeMillis()).replace(Regex("[^A-Za-z0-9_.-]"), "_")
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("empty", "No audio", null)
+                        } else {
+                            worker.execute {
+                                try {
+                                    val out = File(audioDir(), "$safe.wav")
+                                    out.writeBytes(bytes)
+                                    val d = durationOf(out.absolutePath)
+                                    runOnUiThread {
+                                        if (d > 0L) result.success(hashMapOf("path" to out.absolutePath, "durationMs" to d, "sizeBytes" to out.length()))
+                                        else {
+                                            out.delete()
+                                            result.error("empty_audio", "The audio could not be read", null)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    runOnUiThread { result.error("save_failed", e.message ?: e.toString(), null) }
+                                }
+                            }
+                        }
+                    }
                     "deleteFile" -> {
                         val f = File(call.argument<String>("path") ?: "")
                         val ok = f.absolutePath.startsWith(File(filesDir, "audio").absolutePath) && f.delete()

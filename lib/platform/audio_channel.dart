@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
@@ -54,6 +55,12 @@ class AudioChannel {
       'ttsSynthesize',
       {'text': text, 'name': name, 'rate': rate, 'pitch': pitch},
     );
+    return _file(r!);
+  }
+
+  /// Stores audio made elsewhere (a WAV from the Gemini API) in the app's audio folder.
+  static Future<AudioFile> saveAudioBytes(String name, Uint8List bytes) async {
+    final r = await _channel.invokeMapMethod<String, Object?>('saveAudioBytes', {'name': name, 'bytes': bytes});
     return _file(r!);
   }
 

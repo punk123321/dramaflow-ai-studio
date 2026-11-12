@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../core/gemini_tts.dart';
 import '../core/script.dart';
 import '../core/segments.dart';
 import '../core/stage.dart';
 import '../core/theme.dart';
+import '../data/ai_settings_repo.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
+import '../platform/gemini_tts_client.dart';
 import 'gemini_panel.dart';
 import '../state/project_store.dart';
 
@@ -30,6 +33,10 @@ class AudioPanel extends StatefulWidget {
 class _AudioPanelState extends State<AudioPanel> {
   final _handoff = HandoffRepo();
   final _audio = AudioRepo();
+  final _aiRepo = AiSettingsRepo();
+  GeminiTtsSettings _ai = const GeminiTtsSettings();
+  final _keyC = TextEditingController();
+  final _modelC = TextEditingController();
 
   bool _loading = true;
   TtsStatus? _tts;
@@ -69,6 +76,8 @@ class _AudioPanelState extends State<AudioPanel> {
 
   @override
   void dispose() {
+    _keyC.dispose();
+    _modelC.dispose();
     _sub?.cancel();
     AudioChannel.stop().catchError((_) {});
     super.dispose();
@@ -107,6 +116,9 @@ class _AudioPanelState extends State<AudioPanel> {
     try {
       _script = await _handoff.getDoc(_pid, DocKind.script) ?? '';
       _clips = await _audio.forProject(_pid);
+      _ai = await _aiRepo.load();
+      _keyC.text = _ai.apiKey;
+      _modelC.text = _ai.model;
     } catch (e) {
       _say('ဖတ်လို့မရပါ: $e', error: true);
     }
@@ -237,6 +249,102 @@ class _AudioPanelState extends State<AudioPanel> {
       _say(_explain(e), error: true);
     }
     if (mounted) setState(() => _busy = null);
+  }
+
+  Future<void> _saveAi(GeminiTtsSettings next) async {
+    setState(() => _ai = next);
+    try {
+      await _aiRepo.save(next);
+    } catch (e) {
+      _say('Setting မသိမ်းနိုင်ပါ: $e', error: true);
+    }
+  }
+
+  /// Narration from the Gemini API. Only runs when the user taps it; the text
+  /// of that chunk is sent to Google.
+  Future<void> _makeApiTts(int i, String text) async {
+    setState(() {
+      _busy = i;
+      _msg = null;
+    });
+    try {
+      final wav = await geminiSpeak(_ai, text);
+      final f = await AudioChannel.saveAudioBytes('p${_pid}_c${i + 1}_g${DateTime.now().millisecondsSinceEpoch}', wav);
+      await _storeClip(i, ClipKind.tts, f, 'Gemini');
+      _say('Chunk ${i + 1} Gemini အသံ ထုတ်ပြီး (${formatTime(f.durationMs)})');
+    } catch (e) {
+      _say(e is GeminiTtsException ? e.message : _explain(e), error: true);
+    }
+    if (mounted) setState(() => _busy = null);
+  }
+
+  Future<void> _apiAll(List<String> chunks) async {
+    for (var i = 0; i < chunks.length; i++) {
+      if (!mounted) return;
+      if (_clipOf(i) != null || chunks[i].isEmpty) continue;
+      await _makeApiTts(i, chunks[i]);
+      if (_msgError) return;
+    }
+  }
+
+  Widget _aiSettings() {
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Text('Gemini API အသံ (လိုချင်မှ သုံးမယ်)${_ai.ready ? ' ✓' : ''}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+      subtitle: const Text('မထည့်ရင် ဖုန်း TTS / Mic / ဖိုင်ကို အရင်အတိုင်း သုံးလို့ရ', style: TextStyle(fontSize: 12, color: DfColors.muted)),
+      children: [
+        TextField(
+          controller: _keyC,
+          obscureText: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: const InputDecoration(labelText: 'API key (Google AI Studio က ယူ)'),
+          onChanged: (v) => _ai = _ai.copyWith(apiKey: v.trim()),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _modelC,
+          autocorrect: false,
+          decoration: const InputDecoration(labelText: 'Model နာမည်', helperText: 'မြန်မာစာအတွက် gemini-3.8-flash-tts (Flash-Lite မပါ)'),
+          onChanged: (v) => _ai = _ai.copyWith(model: v.trim()),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey('v${_ai.voice}'),
+          initialValue: _ai.voice,
+          decoration: const InputDecoration(labelText: 'အသံ'),
+          items: [for (final v in ttsVoices) DropdownMenuItem(value: v, child: Text(v))],
+          onChanged: (v) => setState(() => _ai = _ai.copyWith(voice: v)),
+        ),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: () async {
+            await _saveAi(_ai.copyWith(apiKey: _keyC.text.trim(), model: _modelC.text.trim().isEmpty ? defaultTtsModel : _modelC.text.trim()));
+            _say('သိမ်းပြီးပါပြီ။');
+          },
+          child: const Text('သိမ်းမယ်'),
+        ),
+        if (_ai.apiKey.isNotEmpty)
+          TextButton(
+            onPressed: () async {
+              _keyC.clear();
+              await _saveAi(_ai.copyWith(apiKey: ''));
+              _say('Key ကို ဖျက်ပြီးပါပြီ။');
+            },
+            child: const Text('Key ဖျက်မယ်'),
+          ),
+        const Padding(
+          padding: EdgeInsets.only(top: 4, bottom: 8),
+          child: Text(
+            'သတိ: Gemini အသံ နှိပ်တဲ့အခါ အဲဒီ chunk ရဲ့ စာသားကို Google ဆီ internet နဲ့ ပို့ပါတယ်။ '
+            'Key ကို ဒီဖုန်းထဲ app ရဲ့ သီးသန့်နေရာမှာ စာသားအတိုင်း သိမ်းတယ် (Backup ထဲ မပါ)။ '
+            'သုံးခွင့်/ကုန်ကျစရိတ်က ကိုယ့် Google account ပေါ်မူတည်တယ်။ '
+            'ဒါကို ကျွန်တော် Google ကို တကယ်မခေါ်ကြည့်ရသေးလို့ ပထမဆုံးအကြိမ် error ပေါ်ရင် စာသားကို ပြောပြပါ။',
+            style: TextStyle(fontSize: 11.5, color: DfColors.muted),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _ttsAll(List<String> chunks) async {
@@ -398,6 +506,7 @@ class _AudioPanelState extends State<AudioPanel> {
             style: TextStyle(color: DfColors.muted, fontSize: 12),
           ),
           const SizedBox(height: 14),
+          _aiSettings(),
           _section('၃။ Chunk ${chunks.length} ခု · အသံ $haveClips/${chunks.length}${totalMs > 0 ? ' · ${formatTime(totalMs)}' : ''}'),
           if (_tts?.burmese == true && _script.trim().isNotEmpty)
             Padding(
@@ -406,6 +515,15 @@ class _AudioPanelState extends State<AudioPanel> {
                 onPressed: busyAny ? null : () => _ttsAll(chunks),
                 icon: const Icon(Icons.record_voice_over, size: 18),
                 label: const Text('မရှိသေးတာ အားလုံး TTS ထုတ်'),
+              ),
+            ),
+          if (_ai.ready && _script.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FilledButton.tonalIcon(
+                onPressed: busyAny ? null : () => _apiAll(chunks),
+                icon: const Icon(Icons.cloud_outlined, size: 18),
+                label: const Text('မရှိသေးတာ အားလုံး Gemini အသံ ထုတ်'),
               ),
             ),
           for (var i = 0; i < chunks.length; i++) _chunkCard(i, chunks[i]),
@@ -479,6 +597,11 @@ class _AudioPanelState extends State<AudioPanel> {
           Wrap(spacing: 4, runSpacing: 2, children: [
             if (canTts)
               TextButton(onPressed: (busyThis || otherBusy || recordingThis) ? null : () => _makeTts(i, text), child: Text(clip?.kind == ClipKind.tts ? 'TTS ပြန်ထုတ်' : 'TTS ထုတ်')),
+            if (_ai.ready && text.isNotEmpty)
+              TextButton(
+                onPressed: (busyThis || otherBusy || recordingThis) ? null : () => _makeApiTts(i, text),
+                child: Text(clip?.label == 'Gemini' ? 'Gemini ပြန်ထုတ်' : 'Gemini အသံ'),
+              ),
             TextButton(
               onPressed: (busyThis || otherBusy) ? null : () => _toggleRecord(i),
               child: Text(recordingThis ? '■ ရပ်' : '● Mic'),

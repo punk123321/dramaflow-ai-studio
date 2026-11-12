@@ -346,3 +346,16 @@ Not built, on purpose: covering other people's watermarks, flip/mirror, voice cl
 
 Backup does NOT contain videos, audio, pictures or finished MP4s.
 Not built: audio-based silence detection (cannot be tested without a phone, so it was left out rather than guessed).
+
+## TE-13: optional Gemini API narration (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Key, model and voice saved locally; works with no key (phone TTS, Mic, files unchanged) | yes (settings round trip) | no |
+| Request body for both model families, reply reading (base64 PCM/WAV), WAV header, error text without the key | yes (gemini_tts_test) | no |
+| Network call (dart:io HttpClient), INTERNET permission added to the manifest patch | compiles on CI | no |
+| Audio saved to the app's audio folder and used as a normal narration clip | compiles on CI | no |
+
+NOT verified: the real Gemini reply. The request shape for the newer "interactions" endpoint
+was taken from the public docs and could not be called from the build machine. If the first
+call fails, the app shows Google's error text; send it and the request is adjusted.
+The key is plain text in the app's private database and is not in backups. Chunk text is sent to Google.
