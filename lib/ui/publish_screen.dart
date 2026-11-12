@@ -68,7 +68,7 @@ class _PublishScreenState extends State<PublishScreen> {
   }
 
   Future<void> _save() async {
-    _text = PublishText(titles: _text.titles, description: _desc.text, hashtags: _text.hashtags);
+    _text = PublishText(titles: _text.titles, description: _desc.text, hashtags: _text.hashtags, thumbTexts: _text.thumbTexts);
     await _repo.setDoc(_pid, DocKind.publishText, _text.encode());
   }
 
@@ -250,6 +250,18 @@ class _PublishScreenState extends State<PublishScreen> {
                     ),
                     Text('အချိန် ${_atSec.toStringAsFixed(1)} စက္ကန့်', style: const TextStyle(fontSize: 13)),
                   ],
+                  if (_text.thumbTexts.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    const Text('Gemini အကြံပေး စာတန်း (နှိပ်ရင် ထည့်ပေးမယ်)', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+                    Wrap(spacing: 6, runSpacing: 4, children: [
+                      for (final t in _text.thumbTexts)
+                        ActionChip(label: Text(t, style: const TextStyle(fontSize: 12.5)), onPressed: () => setState(() => _thumbText.text = t)),
+                    ]),
+                  ] else
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text('အလန်းစား စာတန်း လိုချင်ရင် အပေါ်က Prompt Copy → Gemini → ပြန်ဖြေ ထည့်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+                    ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _thumbText,

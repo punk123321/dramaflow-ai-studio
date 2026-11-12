@@ -32,6 +32,15 @@ Sure!
       expect(parsePublishReply('{broken'), isNull);
     });
 
+    test('thumbnail texts are parsed, deduplicated, cut and round-tripped', () {
+      final r = parsePublishReply('{"titles":["x"],"thumbnailTexts":[" ဟုတ်လား ","ဟုတ်လား","", 3, "${'z' * 80}"]}')!;
+      expect(r.thumbTexts.length, 2);
+      expect(r.thumbTexts[1].length, maxThumbChars);
+      expect(PublishText.decode(r.encode()).thumbTexts, r.thumbTexts);
+      expect(buildPublishPrompt(dramaTitle: 'a', episode: 1, script: ''), contains('thumbnailTexts'));
+      expect(parsePublishReply('{"thumbnailTexts":["only this"]}')!.thumbTexts, ['only this']);
+    });
+
     test('long values are cut', () {
       final r = parsePublishReply('{"titles":["${'x' * 300}"],"description":"${'y' * 5000}"}')!;
       expect(r.titles.first.length, maxTitleChars);
