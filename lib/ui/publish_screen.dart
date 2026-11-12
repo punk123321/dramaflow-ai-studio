@@ -9,6 +9,7 @@ import '../core/theme.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
+import '../platform/gemini_open.dart';
 import '../platform/render_channel.dart';
 import 'widgets.dart';
 
@@ -76,8 +77,7 @@ class _PublishScreenState extends State<PublishScreen> {
 
   Future<void> _copyPrompt() async {
     final p = widget.project;
-    await Clipboard.setData(ClipboardData(text: buildPublishPrompt(dramaTitle: p.dramaTitle, episode: p.episode, script: _script)));
-    _toast('Prompt ကူးပြီးပါပြီ။ Gemini ထဲ paste လုပ်ပါ။');
+    _toast(await openInGemini(buildPublishPrompt(dramaTitle: p.dramaTitle, episode: p.episode, script: _script)));
   }
 
   Future<void> _pasteReply() async {
@@ -182,7 +182,7 @@ class _PublishScreenState extends State<PublishScreen> {
                 ],
                 const SectionTitle('ခေါင်းစဉ် / description / hashtag'),
                 Row(children: [
-                  Expanded(child: OutlinedButton.icon(onPressed: _copyPrompt, icon: const Icon(Icons.copy, size: 18), label: const Text('Prompt Copy'))),
+                  Expanded(child: OutlinedButton.icon(onPressed: _copyPrompt, icon: const Icon(Icons.open_in_new, size: 18), label: const Text('Gemini ဖွင့်မယ်'))),
                   const SizedBox(width: 8),
                   Expanded(child: OutlinedButton.icon(onPressed: _pasteReply, icon: const Icon(Icons.paste, size: 18), label: const Text('Gemini ပြန်ဖြေ'))),
                 ]),
@@ -260,7 +260,7 @@ class _PublishScreenState extends State<PublishScreen> {
                   ] else
                     const Padding(
                       padding: EdgeInsets.only(top: 4),
-                      child: Text('အလန်းစား စာတန်း လိုချင်ရင် အပေါ်က Prompt Copy → Gemini → ပြန်ဖြေ ထည့်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+                      child: Text('အလန်းစား စာတန်း လိုချင်ရင် အပေါ်က Gemini ဖွင့်မယ် → ဖြေပြီးရင် Gemini ပြန်ဖြေ ထဲ ထည့်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
                     ),
                   const SizedBox(height: 6),
                   TextField(

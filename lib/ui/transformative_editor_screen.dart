@@ -10,6 +10,7 @@ import '../core/transformative_plan.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
+import '../platform/gemini_open.dart';
 
 /// TE-1: a separate, persisted planning workspace. Actual effect rendering is
 /// added in later TE phases through the existing timeline and Render Center.
@@ -112,10 +113,10 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
       instructions: _instructions.text,
       tools: _plan.enabledTools,
     );
-    await Clipboard.setData(ClipboardData(text: prompt));
+    final msg = await openInGemini(prompt);
     if (!mounted) return;
     setState(() {
-      _message = 'Prompt ကို Copy လုပ်ပြီးပါပြီ။ Gemini မှာ paste လုပ်ပါ။';
+      _message = msg;
       _error = null;
     });
   }
@@ -338,7 +339,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
           Wrap(
             spacing: 8,
             children: [
-              OutlinedButton.icon(onPressed: _copyPrompt, icon: const Icon(Icons.copy, size: 18), label: const Text('Prompt Copy')),
+              OutlinedButton.icon(onPressed: _copyPrompt, icon: const Icon(Icons.open_in_new, size: 18), label: const Text('Gemini ဖွင့်မယ်')),
               OutlinedButton.icon(onPressed: _pasteReply, icon: const Icon(Icons.paste, size: 18), label: const Text('Gemini ပြန်ဖြေ ထည့်မယ်')),
             ],
           ),
