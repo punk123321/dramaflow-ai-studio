@@ -329,3 +329,8 @@ tested: which compositor input is drawn on top, and whether the real picture is
 sized as intended. If it looks wrong, use black bars or crop; they do not use the compositor.
 Platform presets are common settings, not a check against any platform's current rules.
 Not built, on purpose: covering other people's watermarks, flip/mirror, voice cloning, link downloading.
+
+## Phone result (user, 2026-11-12, APK from claude/te-11-ratio-presets)
+- Confirmed OK by the user: 8-second sample render, Split Screen, blur background, 9:16 with black bars, crop.
+- Not tested yet: Brightness/Contrast, Thumbnail (frame, own picture, Gemini text).
+- Problem found: with 9:16 (TikTok/Shorts/Reels) text ran outside the picture. Fix: subtitles, labels and corner text are now wrapped to the picture width in the renderer (native/RenderEngine.kt wrapText). Phone-tested: no.

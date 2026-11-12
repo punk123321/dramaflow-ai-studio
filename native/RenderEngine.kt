@@ -378,9 +378,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         val subs = job.optJSONArray("subtitles")
         if (job.optBoolean("burn", true) && subs != null && subs.length() > 0) {
             val list = ArrayList<Sub>()
+            val st0 = job.optJSONObject("subStyle")
+            val sizePx0 = ((st0?.optDouble("size", 0.05) ?: 0.05) * base).toInt().coerceAtLeast(14)
             for (i in 0 until subs.length()) {
                 val s = subs.getJSONObject(i)
-                list.add(Sub(s.getLong("s"), s.getLong("e"), s.getString("t")))
+                list.add(Sub(s.getLong("s"), s.getLong("e"), wrapText(s.getString("t"), sizePx0, (outW * 0.92f).toInt())))
             }
             val st = job.optJSONObject("subStyle")
             val sizePx = ((st?.optDouble("size", 0.05) ?: 0.05) * base).toInt().coerceAtLeast(14)
@@ -395,7 +397,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 val text = c.optString("t", "")
                 if (text.isBlank()) continue
                 val px = (c.optDouble("size", 0.035) * base).toInt().coerceAtLeast(12)
-                overlays.add(CornerTextOverlay(text, c.optLong("color", 0xFFFFFFFFL).toInt(), px, c.optInt("c", 3)))
+                overlays.add(CornerTextOverlay(wrapText(text, px, (outW * 0.6f).toInt()), c.optLong("color", 0xFFFFFFFFL).toInt(), px, c.optInt("c", 3)))
             }
         }
 
@@ -425,7 +427,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                     val blank = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
                     overlays.add(WindowedBitmapOverlay(arrow, blank, startMs, endMs, settings))
                 } else {
-                    overlays.add(WindowedTextOverlay(m.optString("t", ""), color, px, m.optBoolean("bg", true), startMs, endMs, settings))
+                    overlays.add(WindowedTextOverlay(wrapText(m.optString("t", ""), px, (outW * 0.9f).toInt()), color, px, m.optBoolean("bg", true), startMs, endMs, settings))
                 }
             }
         }
@@ -674,6 +676,42 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 .setBackgroundFrameAnchor(0f, if (top) 0.88f else -0.88f)
                 .build()
         }
+    }
+
+    /**
+     * Breaks [text] into lines no wider than [maxW] pixels at [sizePx], so text
+     * stays inside a narrow (vertical) picture. Uses the system line breaker, so
+     * Burmese, which has no spaces between words, is broken at allowed points.
+     */
+    private fun wrapText(text: String, sizePx: Int, maxW: Int): String {
+        if (maxW <= 0 || text.isEmpty()) return text
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.textSize = sizePx.toFloat()
+        val out = StringBuilder()
+        for (para in text.split("\n")) {
+            if (out.isNotEmpty()) out.append('\n')
+            if (paint.measureText(para) <= maxW) {
+                out.append(para)
+                continue
+            }
+            val it = java.text.BreakIterator.getLineInstance()
+            it.setText(para)
+            var line = StringBuilder()
+            var start = it.first()
+            var end = it.next()
+            while (end != java.text.BreakIterator.DONE) {
+                val seg = para.substring(start, end)
+                if (line.isNotEmpty() && paint.measureText(line.toString() + seg.trimEnd()) > maxW) {
+                    out.append(line.toString().trimEnd()).append('\n')
+                    line = StringBuilder()
+                }
+                line.append(seg)
+                start = end
+                end = it.next()
+            }
+            out.append(line.toString().trimEnd())
+        }
+        return out.toString()
     }
 
     /** Blur-fill layout: input 0 (blurred copy) fills the frame, input 1 is the real picture, centred. */
