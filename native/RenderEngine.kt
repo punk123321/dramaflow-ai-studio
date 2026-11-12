@@ -8,6 +8,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Typeface
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -37,6 +41,7 @@ import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.FrameDropEffect
+import androidx.media3.effect.GaussianBlur
 import androidx.media3.effect.MatrixTransformation
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
@@ -93,6 +98,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 cancel()
                 result.success(null)
             }
+            "makeThumbnail" -> makeThumbnail(args, result)
             "renderFreeBytes" -> result.success(StatFs(rendersDir.path).availableBytes)
             "saveToGallery" -> saveToGallery(
                 args?.get("path") as? String ?: "",
@@ -183,6 +189,22 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         val videoUri = Uri.parse(job.getString("videoUri"))
         val height = job.getInt("height")
         val fps = job.optInt("fps", 30)
+        val aspect = job.optDouble("aspect", 16.0 / 9.0).let { if (it > 0.2 && it < 5.0) it else 16.0 / 9.0 }
+        val outH = job.optInt("outH", height).let { if (it >= 2) it else height }
+        val outW = job.optInt("outW", 0).let { if (it >= 2) it else (height * aspect).toInt() }
+        // Text sizes follow the shorter side, so a vertical video is not given huge text.
+        val base = minOf(outW, outH)
+        val fit = job.optString("fit", "orig")
+        val blurMode = fit == "blur"
+        val fitW: Int
+        val fitH: Int
+        if (aspect > outW.toDouble() / outH) {
+            fitW = outW
+            fitH = ((outW / aspect).toInt() / 2 * 2).coerceAtLeast(2)
+        } else {
+            fitH = outH
+            fitW = ((outH * aspect).toInt() / 2 * 2).coerceAtLeast(2)
+        }
         val origVol = job.optDouble("originalVolume", 0.0).toFloat()
 
         // 1. Video pieces, in order.
@@ -243,15 +265,40 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 videoFx.add(cropEffect(crop.getDouble(0).toFloat(), crop.getDouble(1).toFloat(), crop.getDouble(2).toFloat()))
             }
             if (zoom == 1 || zoom == 2) videoFx.add(zoomEffect(zoom == 1, pieceUs))
+            if (blurMode) videoFx.add(Presentation.createForWidthAndHeight(fitW, fitH, Presentation.LAYOUT_STRETCH_TO_FIT))
             if (audioFx.isNotEmpty() || videoFx.isNotEmpty()) b.setEffects(Effects(audioFx, videoFx))
             vSeq.addItem(b.build())
         }
         val sequences = ArrayList<EditedMediaItemSequence>()
+        var compositor: VideoCompositorSettings? = null
+        if (blurMode) {
+            // Experimental: a blurred, enlarged copy of the same video is the
+            // bottom layer (input 0); the real picture sits on top (input 1).
+            val bg = EditedMediaItemSequence.Builder()
+            for (i in 0 until pieces.length()) {
+                val p = pieces.getJSONObject(i)
+                val item = MediaItem.Builder()
+                    .setUri(videoUri)
+                    .setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(p.getLong("s"))
+                            .setEndPositionMs(p.getLong("e"))
+                            .build()
+                    )
+                    .build()
+                val fx = listOf<Effect>(
+                    Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP),
+                    GaussianBlur(25f)
+                )
+                bg.addItem(EditedMediaItem.Builder(item).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
+            }
+            sequences.add(bg.build())
+            compositor = BlurFillCompositor(outW, outH)
+        }
         sequences.add(vSeq.build())
 
         // 1b. Split screen (experimental): a second picture of the same video,
         //     shown only inside the windows. Both pictures are drawn at half size.
-        var compositor: VideoCompositorSettings? = null
         val splits = job.optJSONArray("splits")
         if (splits != null && splits.length() > 0) {
             val sSeq = EditedMediaItemSequence.Builder().experimentalSetForceVideoTrack(true)
@@ -319,10 +366,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
 
         // 4. Output size, frame rate and burned-in subtitles.
         val videoEffects = ArrayList<Effect>()
-        videoEffects.add(Presentation.createForHeight(height))
+        when (fit) {
+            "bars" -> videoEffects.add(Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT))
+            "crop" -> videoEffects.add(Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP))
+            "blur" -> videoEffects.add(Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT))
+            else -> videoEffects.add(Presentation.createForHeight(height))
+        }
         videoEffects.add(FrameDropEffect.createDefaultFrameDropEffect(fps.toFloat()))
-        val aspect = job.optDouble("aspect", 16.0 / 9.0).let { if (it > 0.2 && it < 5.0) it else 16.0 / 9.0 }
-        val outW = height * aspect
         val overlays = ArrayList<TextureOverlay>()
 
         val subs = job.optJSONArray("subtitles")
@@ -333,7 +383,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 list.add(Sub(s.getLong("s"), s.getLong("e"), s.getString("t")))
             }
             val st = job.optJSONObject("subStyle")
-            val sizePx = ((st?.optDouble("size", 0.05) ?: 0.05) * height).toInt().coerceAtLeast(14)
+            val sizePx = ((st?.optDouble("size", 0.05) ?: 0.05) * base).toInt().coerceAtLeast(14)
             val color = (st?.optLong("color", 0xFFFFFFFFL) ?: 0xFFFFFFFFL).toInt()
             overlays.add(SubtitleOverlay(list, sizePx, color, st?.optBoolean("bg", true) ?: true, st?.optBoolean("top", false) ?: false))
         }
@@ -344,7 +394,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 val c = corners.getJSONObject(i)
                 val text = c.optString("t", "")
                 if (text.isBlank()) continue
-                val px = (c.optDouble("size", 0.035) * height).toInt().coerceAtLeast(12)
+                val px = (c.optDouble("size", 0.035) * base).toInt().coerceAtLeast(12)
                 overlays.add(CornerTextOverlay(text, c.optLong("color", 0xFFFFFFFFL).toInt(), px, c.optInt("c", 3)))
             }
         }
@@ -359,7 +409,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 val cx = m.getDouble("x").toFloat()
                 val cy = m.getDouble("y").toFloat()
                 val color = m.getLong("color").toInt()
-                val px = (m.getDouble("size") * height).toInt().coerceAtLeast(14)
+                val px = (m.getDouble("size") * base).toInt().coerceAtLeast(14)
                 val settings = centerSettings(cx, cy)
                 if (m.optString("k") == "image") {
                     // Picture-in-picture (a picture, not a second video): size is a share of the width.
@@ -626,6 +676,14 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         }
     }
 
+    /** Blur-fill layout: input 0 (blurred copy) fills the frame, input 1 is the real picture, centred. */
+    private class BlurFillCompositor(private val w: Int, private val h: Int) : VideoCompositorSettings {
+        override fun getOutputSize(inputSizes: List<Size>): Size = Size(w, h)
+
+        override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings =
+            StaticOverlaySettings.Builder().build()
+    }
+
     private class SplitWin(val startMs: Long, val endMs: Long, val topBottom: Boolean)
 
     /**
@@ -770,6 +828,82 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         partFile?.delete()
         channel.invokeMethod("renderCanceled", null)
+    }
+
+    // ---- thumbnail ----
+
+    /**
+     * One frame of the original, with optional text at the bottom, saved as a
+     * JPEG in Pictures/DramaFlow. The video itself is only read.
+     */
+    private fun makeThumbnail(args: Map<*, *>?, result: MethodChannel.Result) {
+        val uri = Uri.parse(args?.get("videoUri") as? String ?: "")
+        val atMs = (args?.get("atMs") as? Number)?.toLong() ?: 0L
+        val text = (args?.get("text") as? String ?: "").trim()
+        val name = args?.get("name") as? String ?: "thumbnail"
+        worker.execute {
+            try {
+                val r = MediaMetadataRetriever()
+                val frame = try {
+                    r.setDataSource(activity, uri)
+                    r.getFrameAtTime(atMs * 1000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                } finally {
+                    r.release()
+                } ?: throw IllegalStateException("Could not read the frame at $atMs ms")
+                val bmp = frame.copy(Bitmap.Config.ARGB_8888, true)
+                if (text.isNotEmpty()) {
+                    val canvas = Canvas(bmp)
+                    val size = minOf(bmp.width, bmp.height) * 0.10f
+                    val fill = TextPaint(Paint.ANTI_ALIAS_FLAG)
+                    fill.color = Color.WHITE
+                    fill.textSize = size
+                    fill.typeface = Typeface.DEFAULT_BOLD
+                    val edge = TextPaint(fill)
+                    edge.color = Color.BLACK
+                    edge.style = Paint.Style.STROKE
+                    edge.strokeWidth = size * 0.2f
+                    edge.strokeJoin = Paint.Join.ROUND
+                    val w = (bmp.width * 0.9f).toInt()
+                    val back = StaticLayout.Builder.obtain(text, 0, text.length, edge, w)
+                        .setAlignment(Layout.Alignment.ALIGN_CENTER).build()
+                    val front = StaticLayout.Builder.obtain(text, 0, text.length, fill, w)
+                        .setAlignment(Layout.Alignment.ALIGN_CENTER).build()
+                    canvas.save()
+                    canvas.translate((bmp.width - w) / 2f, bmp.height - front.height - bmp.height * 0.06f)
+                    back.draw(canvas)
+                    front.draw(canvas)
+                    canvas.restore()
+                }
+                val f = File(activity.cacheDir, "thumb_${System.nanoTime()}.jpg")
+                FileOutputStream(f).use { bmp.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+                var link: String? = null
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val resolver = activity.contentResolver
+                    val values = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, "$name.jpg")
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/DramaFlow")
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                    val out = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IllegalStateException("Gallery refused the picture")
+                    try {
+                        resolver.openOutputStream(out)?.use { o -> f.inputStream().use { it.copyTo(o) } }
+                            ?: throw IllegalStateException("Cannot write to the gallery")
+                        resolver.update(out, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+                        link = out.toString()
+                    } catch (e: Exception) {
+                        resolver.delete(out, null, null)
+                        throw e
+                    }
+                }
+                bmp.recycle()
+                frame.recycle()
+                main.post { result.success(hashMapOf("path" to f.absolutePath, "gallery" to link)) }
+            } catch (e: Exception) {
+                main.post { result.error("thumb_failed", e.message ?: e.toString(), null) }
+            }
+        }
     }
 
     // ---- gallery ----

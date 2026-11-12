@@ -310,3 +310,21 @@ tested: which input index is which, whether the half-size pictures are
 positioned as intended, whether a gap in the second sequence stays invisible.
 Not built: a second video FILE, more than two panels. If a render fails or looks
 wrong with a split operation, remove that operation; other tools are unaffected.
+
+## TE-11: Ratio, fill modes, platform presets, sample render, upload text, thumbnail (branch claude/te-11-ratio-presets)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Output size from ratio (original, 16:9, 9:16, 1:1, 4:5), always even numbers | yes (publish_text_test) | no |
+| Platform presets (Shorts, TikTok/Reels, YouTube, Feed, 1:1) set ratio, size, fps, fill | yes | no |
+| Fill: black bars and crop (Media3 Presentation layouts) | compiles on CI | no |
+| Fill: blur background (second blurred copy of the same video under the real picture), EXPERIMENTAL | compiles on CI | no |
+| Blur falls back to black bars when a freeze frame or split is in the edit | yes | no |
+| Sample render: first 8 s, not saved to history, does not mark the Render stage done | yes (pieces, narration, windows) | no |
+| Upload text by Gemini copy/paste: parse + checks + credit lines from the Fair Use record | yes | no |
+| Thumbnail: one frame of the original + text, saved to Pictures/DramaFlow (Android 10+) | compiles on CI | no |
+
+Blur background was written from the Media3 docs without a phone. Unknown until
+tested: which compositor input is drawn on top, and whether the real picture is
+sized as intended. If it looks wrong, use black bars or crop; they do not use the compositor.
+Platform presets are common settings, not a check against any platform's current rules.
+Not built, on purpose: covering other people's watermarks, flip/mirror, voice cloning, link downloading.

@@ -73,4 +73,17 @@ class RenderChannel {
       _channel.invokeMethod<String>('saveToGallery', {'path': path, 'name': name});
 
   static Future<bool> deleteRender(String path) async => (await _channel.invokeMethod<bool>('deleteRender', {'path': path})) ?? false;
+
+  /// A frame of the original with optional text, saved to Pictures/DramaFlow
+  /// (Android 10+). Returns the preview file path and the gallery link (null
+  /// on older Android, where only the preview file exists).
+  static Future<({String path, String? gallery})> makeThumbnail({
+    required String videoUri,
+    required int atMs,
+    required String text,
+    required String name,
+  }) async {
+    final r = await _channel.invokeMethod<Map>('makeThumbnail', {'videoUri': videoUri, 'atMs': atMs, 'text': text, 'name': name});
+    return (path: r!['path'] as String, gallery: r['gallery'] as String?);
+  }
 }

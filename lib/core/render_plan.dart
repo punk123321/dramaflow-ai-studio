@@ -5,20 +5,104 @@ import 'timeline.dart';
 /// answers questions like "how big will the file be" and "can we render".
 /// Pure Dart, no Flutter.
 
-class RenderSettings {
-  const RenderSettings({this.height = 720, this.fps = 30});
+/// Shape of the finished video.
+enum OutRatio {
+  original('မူရင်းအတိုင်း', 0),
+  r16x9('16:9 (အလျား)', 16 / 9),
+  r9x16('9:16 (Shorts / Reels / TikTok)', 9 / 16),
+  r1x1('1:1 (လေးထောင့်)', 1),
+  r4x5('4:5 (Feed)', 4 / 5);
 
-  /// 720 or 1080 (output height in pixels; width follows the video).
+  const OutRatio(this.label, this.value);
+  final String label;
+
+  /// width / height. 0 means "same as the source".
+  final double value;
+}
+
+/// What to do when the source shape differs from the chosen shape.
+enum FillMode {
+  /// Whole picture kept, black bars fill the rest.
+  bars('အနက်ရောင် အကွက်'),
+
+  /// Picture fills the frame; the edges that do not fit are cut off.
+  crop('ဖြတ်ပြီး ပြည့်အောင်'),
+
+  /// Whole picture kept, a blurred, enlarged copy of the same video fills the
+  /// rest. Experimental.
+  blur('blur နောက်ခံ (စမ်းသပ်)');
+
+  const FillMode(this.label);
+  final String label;
+}
+
+class RenderSettings {
+  const RenderSettings({this.height = 720, this.fps = 30, this.ratio = OutRatio.original, this.fill = FillMode.bars});
+
+  /// Shorter side of the output in pixels (720 or 1080). For a landscape video
+  /// this is the height, for a vertical one the width.
   final int height;
   final int fps;
+  final OutRatio ratio;
+  final FillMode fill;
 
-  RenderSettings copyWith({int? height, int? fps}) => RenderSettings(height: height ?? this.height, fps: fps ?? this.fps);
+  RenderSettings copyWith({int? height, int? fps, OutRatio? ratio, FillMode? fill}) => RenderSettings(
+        height: height ?? this.height,
+        fps: fps ?? this.fps,
+        ratio: ratio ?? this.ratio,
+        fill: fill ?? this.fill,
+      );
 }
+
+int _even(double v) {
+  final r = v.round();
+  final e = r.isOdd ? r + 1 : r;
+  return e < 2 ? 2 : e;
+}
+
+/// Output width and height in pixels. [sourceAspect] is width / height of the
+/// source and is used only for [OutRatio.original].
+({int w, int h}) outputSize(RenderSettings s, double sourceAspect) {
+  final short = s.height;
+  final r = s.ratio == OutRatio.original ? (sourceAspect > 0.2 && sourceAspect < 5 ? sourceAspect : 16 / 9) : s.ratio.value;
+  // "Original" keeps the old behaviour: the height is fixed, the width follows.
+  if (s.ratio == OutRatio.original) return (w: _even(short * r), h: _even(short.toDouble()));
+  if (r >= 1) return (w: _even(short * r), h: _even(short.toDouble()));
+  return (w: _even(short.toDouble()), h: _even(short / r));
+}
+
+/// One tap sets shape, size and frame rate. These are common settings, not a
+/// promise about what any platform accepts today.
+class PlatformPreset {
+  const PlatformPreset(this.id, this.label, this.note, this.ratio, this.height, this.fps, this.fill);
+
+  final String id;
+  final String label;
+  final String note;
+  final OutRatio ratio;
+  final int height;
+  final int fps;
+  final FillMode fill;
+
+  RenderSettings get settings => RenderSettings(height: height, fps: fps, ratio: ratio, fill: fill);
+}
+
+const platformPresets = <PlatformPreset>[
+  PlatformPreset('shorts', 'YouTube Shorts', '9:16 · 1080 · 30fps', OutRatio.r9x16, 1080, 30, FillMode.blur),
+  PlatformPreset('tiktok', 'TikTok / Reels', '9:16 · 720 · 30fps', OutRatio.r9x16, 720, 30, FillMode.blur),
+  PlatformPreset('youtube', 'YouTube (ပုံမှန်)', '16:9 · 1080 · 30fps', OutRatio.r16x9, 1080, 30, FillMode.bars),
+  PlatformPreset('feed', 'Facebook Feed', '4:5 · 1080 · 30fps', OutRatio.r4x5, 1080, 30, FillMode.blur),
+  PlatformPreset('square', 'လေးထောင့် (1:1)', '1:1 · 720 · 30fps', OutRatio.r1x1, 720, 30, FillMode.blur),
+];
 
 /// Video bitrate in bits per second for the chosen size and frame rate.
 int videoBitrate(RenderSettings s) {
   final base = s.height >= 1080 ? 8000000 : 4000000;
-  return s.fps > 30 ? (base * 1.4).round() : base;
+  // Other shapes have more or fewer pixels than 16:9 at the same short side.
+  final r = s.ratio == OutRatio.original ? 16 / 9 : s.ratio.value;
+  final area = (r >= 1 ? r : 1 / r) / (16 / 9);
+  final scaled = (base * area.clamp(0.5, 1.2)).round();
+  return s.fps > 30 ? (scaled * 1.4).round() : scaled;
 }
 
 const int _audioBitrate = 128000;
@@ -81,10 +165,18 @@ Map<String, Object?> buildRenderJob({
   final subs = remapSubtitles(sourceSubtitles, timeline.pieces, offsetMs: timeline.subtitleOffsetMs);
   final lanes = assignVoiceLanes(timeline.voices);
   final dur = outputDurationMs(timeline);
+  final size = outputSize(settings, aspect);
+  // Blur background needs the picture to be one continuous stream; freeze
+  // frames are separate pictures, so those jobs use black bars instead.
+  final hasFreeze = timeline.pieces.any((p) => p.freeze);
+  final fill = (settings.fill == FillMode.blur && (hasFreeze || splits.isNotEmpty)) ? FillMode.bars : settings.fill;
   return {
     'name': name,
     'videoUri': videoUri,
-    'height': settings.height,
+    'height': size.h,
+    'outW': size.w,
+    'outH': size.h,
+    'fit': settings.ratio == OutRatio.original ? 'orig' : fill.name,
     'fps': settings.fps,
     'bitrate': videoBitrate(settings),
     'estimateBytes': estimateBytes(dur, settings),
@@ -118,6 +210,46 @@ Map<String, Object?> buildRenderJob({
     if (overlays.isNotEmpty) 'overlays': overlays,
     if (splits.isNotEmpty) 'splits': splits,
   };
+}
+
+/// Longest sample, in milliseconds.
+const sampleMs = 8000;
+
+/// The first [limitMs] of the finished video: pieces are cut at that point,
+/// narration that starts later is dropped. Used for a quick test render.
+Timeline sampleTimeline(Timeline t, {int limitMs = sampleMs}) {
+  final out = <VideoPiece>[];
+  var used = 0;
+  for (final p in t.pieces) {
+    if (used >= limitMs) break;
+    final room = limitMs - used;
+    if (p.lengthMs <= room) {
+      out.add(p);
+      used += p.lengthMs;
+    } else {
+      if (room >= 200) out.add(p.withRange(p.startMs, p.startMs + room));
+      used += room;
+    }
+  }
+  return t.copyWith(
+    pieces: out,
+    voices: [for (final v in t.voices) if (v.offsetMs < limitMs) v],
+  );
+}
+
+/// Keeps the windows (maps with 's' and 'e' in output milliseconds) that start
+/// before [limitMs] and cuts the rest. Windows left shorter than [minMs] go.
+List<Map<String, Object?>> clipWindows(List<Map<String, Object?>> items, int limitMs, {int minMs = 300}) {
+  final out = <Map<String, Object?>>[];
+  for (final m in items) {
+    final s = m['s'] as int;
+    final e = m['e'] as int;
+    if (s >= limitMs) continue;
+    final e2 = e > limitMs ? limitMs : e;
+    if (e2 - s < minMs) continue;
+    out.add({...m, 'e': e2});
+  }
+  return out;
 }
 
 /// A file name that is safe on every Android file system.

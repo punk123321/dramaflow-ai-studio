@@ -9,10 +9,11 @@ import '../state/project_store.dart';
 import 'dialogs.dart';
 import 'fair_use_screen.dart';
 import 'subtitle_studio_screen.dart';
+import 'publish_screen.dart';
 import 'transformative_editor_screen.dart';
 import 'widgets.dart';
 
-enum _Action { none, workflow, library, studio, fairUse, transformative }
+enum _Action { none, workflow, library, studio, fairUse, transformative, publish }
 
 class _Module {
   const _Module(this.code, this.title, this.sub, this.color, this.phase, [this.action = _Action.none]);
@@ -34,6 +35,7 @@ const _modules = <_Module>[
   _Module('DL', 'Drama Library', 'ဇာတ်လမ်း၊ အပိုင်း', Color(0xFFFF9F43), 2, _Action.library),
   _Module('FU', 'Copyright & Fair Use', 'Upload မတင်ခင် စစ်', Color(0xFFF2C94C), 8, _Action.fairUse),
   _Module('TE', 'Transformative Editor', 'Manual · AI · Hybrid', Color(0xFF00C2A8), 9, _Action.transformative),
+  _Module('UP', 'Upload & Thumbnail', 'ခေါင်းစဉ်၊ hashtag၊ ပုံ', Color(0xFFFF6B9D), 11, _Action.publish),
 ];
 
 class HomeScreen extends StatelessWidget {
@@ -245,6 +247,8 @@ class _ModuleTile extends StatelessWidget {
         _push(context, FairUseScreen(project: target));
       case _Action.transformative:
         _push(context, TransformativeEditorScreen(project: target));
+      case _Action.publish:
+        _push(context, PublishScreen(project: target));
       case _Action.library:
       case _Action.none:
         break;
