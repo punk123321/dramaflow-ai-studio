@@ -232,7 +232,7 @@ Corner _corner(Object? v, Corner d) {
 
 /// How subtitles look. [size] is a fraction of the video height.
 class SubStyle {
-  const SubStyle({this.size = 0.05, this.color = 0xFFFFFFFF, this.background = true, this.top = false});
+  const SubStyle({this.size = 0.05, this.color = 0xFFFFFFFF, this.background = true, this.top = false, this.fade = false});
 
   final double size;
 
@@ -241,19 +241,24 @@ class SubStyle {
   final bool background;
   final bool top;
 
-  SubStyle copyWith({double? size, int? color, bool? background, bool? top}) => SubStyle(
+  /// Each line fades in and out (about a quarter of a second).
+  final bool fade;
+
+  SubStyle copyWith({double? size, int? color, bool? background, bool? top, bool? fade}) => SubStyle(
         size: size ?? this.size,
         color: color ?? this.color,
         background: background ?? this.background,
         top: top ?? this.top,
+        fade: fade ?? this.fade,
       );
 
-  Map<String, Object?> toJson() => {'size': size, 'color': color, 'bg': background, 'top': top};
+  Map<String, Object?> toJson() => {'size': size, 'color': color, 'bg': background, 'top': top, if (fade) 'fade': true};
   static SubStyle fromJson(Map<String, Object?> m) => SubStyle(
         size: ((m['size'] as num?)?.toDouble() ?? 0.05).clamp(0.02, 0.12),
         color: (m['color'] as int?) ?? 0xFFFFFFFF,
         background: (m['bg'] as bool?) ?? true,
         top: (m['top'] as bool?) ?? false,
+        fade: (m['fade'] as bool?) ?? false,
       );
 }
 

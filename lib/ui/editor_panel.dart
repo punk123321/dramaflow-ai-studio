@@ -8,6 +8,7 @@ import '../core/srt.dart';
 import '../core/stage.dart';
 import '../core/subtitle_ops.dart';
 import '../core/theme.dart';
+import '../core/sub_presets.dart';
 import '../core/timeline.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
@@ -449,6 +450,14 @@ class _EditorPanelState extends State<EditorPanel> {
         ]),
         const SizedBox(height: 12),
         _title('စာတန်း style'),
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          for (final pr in subPresets)
+            ChoiceChip(
+              label: Text(pr.label, style: const TextStyle(fontSize: 12.5)),
+              selected: matchingPreset(_tl.style)?.id == pr.id,
+              onSelected: (_) => _set(_tl.copyWith(style: pr.style)),
+            ),
+        ]),
         _slider('အရွယ်', _tl.style.size, (v) => _set(_tl.copyWith(style: _tl.style.copyWith(size: v))), min: 0.03, max: 0.09),
         _ColorRow(selected: _tl.style.color, onPick: (c) => _set(_tl.copyWith(style: _tl.style.copyWith(color: c)))),
         SwitchListTile(
@@ -464,6 +473,13 @@ class _EditorPanelState extends State<EditorPanel> {
           title: const Text('အပေါ်မှာ ထား (မဟုတ်ရင် အောက်)'),
           value: _tl.style.top,
           onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(top: v))),
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('စာတန်း fade in/out'),
+          value: _tl.style.fade,
+          onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(fade: v))),
         ),
         const SizedBox(height: 12),
         _title('Logo (ကိုယ်ပိုင်ပုံ)'),

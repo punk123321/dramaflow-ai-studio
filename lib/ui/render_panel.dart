@@ -42,6 +42,7 @@ class _RenderPanelState extends State<RenderPanel> {
   List<SrtEntry> _subs = [];
   RenderSettings _settings = const RenderSettings();
   int _free = 0;
+  bool _videoOk = true;
   bool _markedDone = false;
 
   int get _pid => widget.project.id!;
@@ -60,6 +61,8 @@ class _RenderPanelState extends State<RenderPanel> {
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
       _free = await RenderChannel.freeBytes();
+      final uri = widget.project.sourceVideoUri;
+      if (uri != null) _videoOk = await RenderChannel.uriReadable(uri);
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -111,6 +114,8 @@ class _RenderPanelState extends State<RenderPanel> {
     final te = compileOps(_tl.pieces, _plan.ops);
     final dur = outputDurationMs(_tl.copyWith(pieces: te.pieces));
     blockers.addAll(missingFiles(te, (f) => File(f).existsSync()));
+    blockers.addAll(missingEditFiles(_tl, (f) => File(f).existsSync()));
+    if (p.hasVideo && !_videoOk) blockers.add('မူရင်းဗီဒီယိုကို ဖွင့်မရတော့ပါ (ရွှေ့/ဖျက်ထားနိုင်တယ်)။ Stage 1 မှာ ဗီဒီယို ပြန်ရွေးပါ။');
     final est = estimateBytes(dur, _settings);
     final lowSpace = _free > 0 && est > 0 && _free < est + est ~/ 5 + 50 * 1048576;
     final done = rs.lastDone;

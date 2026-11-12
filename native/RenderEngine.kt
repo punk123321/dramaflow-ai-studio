@@ -99,6 +99,15 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 result.success(null)
             }
             "makeThumbnail" -> makeThumbnail(args, result)
+            "uriReadable" -> {
+                val u = args?.get("uri") as? String ?: ""
+                val ok = try {
+                    activity.contentResolver.openFileDescriptor(Uri.parse(u), "r")?.use { true } ?: false
+                } catch (e: Exception) {
+                    false
+                }
+                result.success(ok)
+            }
             "renderFreeBytes" -> result.success(StatFs(rendersDir.path).availableBytes)
             "saveToGallery" -> saveToGallery(
                 args?.get("path") as? String ?: "",
@@ -387,7 +396,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val st = job.optJSONObject("subStyle")
             val sizePx = ((st?.optDouble("size", 0.05) ?: 0.05) * base).toInt().coerceAtLeast(14)
             val color = (st?.optLong("color", 0xFFFFFFFFL) ?: 0xFFFFFFFFL).toInt()
-            overlays.add(SubtitleOverlay(list, sizePx, color, st?.optBoolean("bg", true) ?: true, st?.optBoolean("top", false) ?: false))
+            overlays.add(SubtitleOverlay(list, sizePx, color, st?.optBoolean("bg", true) ?: true, st?.optBoolean("top", false) ?: false, st?.optBoolean("fade", false) ?: false))
         }
 
         val corners = job.optJSONArray("corners")
@@ -653,19 +662,29 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         private val sizePx: Int,
         private val color: Int,
         private val background: Boolean,
-        private val top: Boolean
+        private val top: Boolean,
+        private val fade: Boolean = false
     ) : TextOverlay() {
         override fun getText(presentationTimeUs: Long): SpannableString {
             val ms = presentationTimeUs / 1000L
-            val line = subs.firstOrNull { ms >= it.startMs && ms < it.endMs }?.text
+            val cur = subs.firstOrNull { ms >= it.startMs && ms < it.endMs }
+            val line = cur?.text
             // No subtitle now: an invisible space with no background, or the
             // background colour would show as a small dark box.
             if (line == null) return SpannableString(" ")
+            // Fade: full strength in the middle, ramping over 250 ms at both ends
+            // (in 5 steps, so the picture is not redrawn on every frame).
+            var level = 1f
+            if (fade && cur != null) {
+                val edge = minOf(ms - cur.startMs, cur.endMs - ms).coerceAtLeast(0L)
+                if (edge < 250L) level = (((edge * 5) / 250L).toInt() + 1).coerceAtMost(5) / 5f
+            }
             val s = SpannableString(line)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-            s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            val fg = Color.argb((Color.alpha(color) * level).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+            s.setSpan(ForegroundColorSpan(fg), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             if (background) {
-                s.setSpan(BackgroundColorSpan(Color.argb(150, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+                s.setSpan(BackgroundColorSpan(Color.argb((150 * level).toInt(), 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             }
             return s
         }

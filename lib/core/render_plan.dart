@@ -140,6 +140,20 @@ List<List<VoiceItem>> assignVoiceLanes(List<VoiceItem> voices) {
 
 String _uri(String source) => source.startsWith('/') ? 'file://$source' : source;
 
+/// Files named by the edit (narration, music, logo) that [exists] says are
+/// gone. Content links (not starting with '/') cannot be checked here.
+List<String> missingEditFiles(Timeline t, bool Function(String path) exists) {
+  final out = <String>[];
+  for (final v in t.voices) {
+    if (v.source.startsWith('/') && !exists(v.source)) out.add('အသံဖိုင် ပျောက်နေတယ်: ${v.label}');
+  }
+  final m = t.music;
+  if (m != null && m.source.startsWith('/') && !exists(m.source)) out.add('Background music ဖိုင် ပျောက်နေတယ်: ${m.name}');
+  final l = t.logo;
+  if (l != null && l.path.startsWith('/') && !exists(l.path)) out.add('Logo ပုံ ပျောက်နေတယ်');
+  return out;
+}
+
 /// Reasons why rendering cannot start. Empty means it can.
 List<String> renderBlockers({required bool hasVideo, required Timeline timeline, required int sourceMs}) {
   final out = <String>[];

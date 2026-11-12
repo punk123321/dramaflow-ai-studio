@@ -334,3 +334,15 @@ Not built, on purpose: covering other people's watermarks, flip/mirror, voice cl
 - Confirmed OK by the user: 8-second sample render, Split Screen, blur background, 9:16 with black bars, crop.
 - Not tested yet: Brightness/Contrast, Thumbnail (frame, own picture, Gemini text).
 - Problem found: with 9:16 (TikTok/Shorts/Reels) text ran outside the picture. Fix: subtitles, labels and corner text are now wrapped to the picture width in the renderer (native/RenderEngine.kt wrapText). Phone-tested: no.
+
+## TE-12: polish (branch claude/te-12-polish)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Subtitle presets (5 looks) in the Editor | yes (limits, matching) | no |
+| Subtitle fade in/out (250 ms, 5 steps) | JSON + compiles on CI | no |
+| Warning in Render when the original video can no longer be opened | compiles on CI | no |
+| Warning when narration, music or logo files are gone | yes | no |
+| Backup of all projects to one JSON file; restore adds them as NEW projects, nothing overwritten | yes (parse, round trip, damaged input) | no |
+
+Backup does NOT contain videos, audio, pictures or finished MP4s.
+Not built: audio-based silence detection (cannot be tested without a phone, so it was left out rather than guessed).

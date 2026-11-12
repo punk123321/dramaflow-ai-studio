@@ -72,6 +72,9 @@ class RenderChannel {
   static Future<String?> saveToGallery(String path, String name) =>
       _channel.invokeMethod<String>('saveToGallery', {'path': path, 'name': name});
 
+  /// False when the original video can no longer be opened (moved, deleted, permission lost).
+  static Future<bool> uriReadable(String uri) async => (await _channel.invokeMethod<bool>('uriReadable', {'uri': uri})) ?? false;
+
   static Future<bool> deleteRender(String path) async => (await _channel.invokeMethod<bool>('deleteRender', {'path': path})) ?? false;
 
   /// A frame of the original with optional text, saved to Pictures/DramaFlow
