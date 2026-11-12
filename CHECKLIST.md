@@ -187,3 +187,150 @@ copyright checks, and none will be added.
 ## Re-check after Phase 8
 - Fixed in code: when no subtitle was showing, the renderer drew a small dark box (background colour on a blank space). Now blank = no styling. Needs a phone check.
 - Unverified assumption: zoom uses the effect clock modulo the piece length, so it works whether the clock starts at 0 per piece or runs on; a phone test must confirm it zooms smoothly in each piece.
+
+## TE review fixes (branch claude/te-review-fixes)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Plan v2: real version handling, v1 files load, newer files keep unknown fields/tools/ops | yes | no |
+| Operations list with proposed/approved/rejected; only approved+valid ops are runnable | yes | no |
+| Per-project storage and project copy include the TE plan | yes (db test) | no |
+| Tool status badges (planned vs works in Studio Editor) | yes (model) | no |
+| Unsaved-changes prompt on leaving the TE screen | no | no |
+| Branch CI artifact name differs from main | CI only | n/a |
+
+TE itself still renders nothing: operations are records. No AI is connected.
+
+## TE-2: Crop & Reframe (branch claude/te-2-crop-reframe)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved Crop & Reframe operations compile into video pieces (split, fold tiny leftovers, later wins) | yes (te_compile_test) | no |
+| Render job carries the crop; saved timeline is not changed | yes | no |
+| Native crop (Media3 MatrixTransformation, kept area centred on cx,cy) | compiles on CI | no |
+| Render screen lists TE operations that are applied or left out, with the reason | no | no |
+
+Other TE tools are still records only. Crop is a still frame crop; picture
+quality drops at high zoom because the video is enlarged, not re-shot.
+
+## TE-3: Freeze Frame (branch claude/te-3-freeze-frame)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved Freeze Frame ops insert a held still at render time (split, edge handling, hold 0.5-30 s) | yes (te_compile_test) | no |
+| Held frames keep the piece's crop; stored timeline is not changed | yes | no |
+| Original subtitles pause during a hold; later ones shift by the hold | yes | no |
+| Render screen shows where each hold lands on the edit time | no | no |
+| Native: frame taken with MediaMetadataRetriever, held as an image item (Media3) | compiles on CI | no |
+
+Known limits: narration is NOT shifted by a hold (the user adjusts it), the
+frame is taken on the main thread (a few frames are fine, many may stall), and
+how Media3 mixes an image item into a sequence that has original audio is
+unverified on a phone.
+
+## TE-4: Motion Graphics, text label and arrow (branch claude/te-4-motion-graphics)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved label/arrow ops become timed overlays on the OUTPUT time (follows cuts, reorder, held frames) | yes (te_compile_test) | no |
+| Bad text/position/size are reported, not silently dropped | yes | no |
+| Render job carries overlays; stored timeline unchanged | yes | no |
+| Native: timed text and arrow overlays (Media3 TextOverlay / BitmapOverlay) | compiles on CI | no |
+
+Not built: shapes other than an arrow, animation (fade/move), infographics.
+The arrow is drawn around its centre, not its tip. A label spans one line.
+
+## TE-5: Sound Design, one sound effect at a moment (branch claude/te-5-sound-design)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved sound ops become effects on the OUTPUT time (follows cuts and held frames) | yes (te_compile_test) | no |
+| Effects join the existing narration lanes in the render job (no new native code) | yes | no |
+| Bad file/volume, time outside the video, past the end: reported | yes | no |
+| Pick a file, volume slider in the TE dialog | no | no |
+
+Not built: ducking (lowering music under narration), fades, trimming a long
+effect, an effects library. Only use sounds you may use; the app cannot check.
+
+## TE-6: Gemini suggestions by copy/paste (branch claude/te-6-ai-proposals)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Prompt built from subtitles, duration, enabled tools and the user's instructions | yes (te_ai_test) | no |
+| Reply read from a code fence or bare JSON; every suggestion checked | yes | no |
+| Suggestions always enter as proposed/AI; compile only after the user approves | yes | no |
+| Bad suggestions listed with a reason; at most 30 taken | yes | no |
+| Copy prompt / paste reply buttons in the TE screen | no | no |
+
+No API key and no network call. Gemini's own quality is not tested here.
+
+## TE-7: Smart Cut and picture overlay (branch claude/te-7-smart-cut-pip)
+
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved Smart Cut ops remove source ranges from the render (other ops follow the cut) | yes (te_compile_test) | no |
+| "Find gaps" suggests cuts from subtitle gaps (rule-based, proposed only) | yes (te_suggest_test) | no |
+| Gemini prompt/reply understands smartCut | yes (te_ai_test) | no |
+| Picture-in-Picture: a PICTURE as a timed overlay (position, width) | yes (model) | no |
+| Native image overlay (Media3 BitmapOverlay) | compiles on CI | no |
+
+NOT built: second-video picture-in-picture, Split Screen (needs multi-input
+compositing in Media3, unverified), audio-based silence detection. A subtitle
+gap is only a guess that nothing is said there, so cuts stay proposals.
+
+## TE-8: Pre-render file check (branch claude/te-8-preflight)
+The Render screen now refuses to start when a picture or sound file used by an approved TE operation is gone (app files only; `content://` links cannot be checked in advance). Automated: yes. Phone-tested: no.
+
+## Still not built (TE)
+Split Screen and second-video picture-in-picture need Media3 multi-input compositing. Without a phone to test on, writing them blind would only add code that may not work, so they wait for the phone results of the existing tools.
+
+## Phone result (user, 2026-11-12)
+- A render with TE operations (including Freeze Frame) now produces an MP4 on the phone (APK from claude/te-8-preflight). Earlier "Asset loader error" is gone in that build.
+- Not yet confirmed one by one: Crop framing, Freeze look and timing, label/arrow, picture overlay, sound effect, Smart Cut timing, Burmese text shaping.
+- Cause of the earlier error is not proven. The build that works has the JPEG type set on the freeze picture and an input-file check before rendering.
+
+## TE-9: Brightness & Contrast (branch claude/te-9-brightness)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved look ops set brightness/contrast on video pieces (and held frames) for a time range | yes | no |
+| Native: Media3 Brightness and Contrast effects | compiles on CI | no |
+
+Mirror/flip is NOT built: its purpose here would be to get past platform
+copyright checks, and it also reverses any text in the video.
+
+## TE-10: Split Screen, EXPERIMENTAL (branch claude/te-10-split-screen)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Approved split ops become output-time windows (second picture = another moment of the SAME video) | yes (te_compile_test) | no |
+| Render job carries the windows | yes | no |
+| Native: second video sequence + Media3 VideoCompositorSettings (both pictures at half size) | compiles on CI | no |
+
+Written from the Media3 documentation without a phone to test on. Unknown until
+tested: which input index is which, whether the half-size pictures are
+positioned as intended, whether a gap in the second sequence stays invisible.
+Not built: a second video FILE, more than two panels. If a render fails or looks
+wrong with a split operation, remove that operation; other tools are unaffected.
+
+## TE-11: Ratio, fill modes, platform presets, sample render, upload text, thumbnail (branch claude/te-11-ratio-presets)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Output size from ratio (original, 16:9, 9:16, 1:1, 4:5), always even numbers | yes (publish_text_test) | no |
+| Platform presets (Shorts, TikTok/Reels, YouTube, Feed, 1:1) set ratio, size, fps, fill | yes | no |
+| Fill: black bars and crop (Media3 Presentation layouts) | compiles on CI | no |
+| Fill: blur background (second blurred copy of the same video under the real picture), EXPERIMENTAL | compiles on CI | no |
+| Blur falls back to black bars when a freeze frame or split is in the edit | yes | no |
+| Sample render: first 8 s, not saved to history, does not mark the Render stage done | yes (pieces, narration, windows) | no |
+| Upload text by Gemini copy/paste: parse + checks + credit lines from the Fair Use record | yes | no |
+| Thumbnail: one frame of the original + text, saved to Pictures/DramaFlow (Android 10+) | compiles on CI | no |
+| Thumbnail from the user's own designed picture (optional text), saved to Pictures/DramaFlow; original file untouched | compiles on CI | no |
+
+Blur background was written from the Media3 docs without a phone. Unknown until
+tested: which compositor input is drawn on top, and whether the real picture is
+sized as intended. If it looks wrong, use black bars or crop; they do not use the compositor.
+Platform presets are common settings, not a check against any platform's current rules.
+Not built, on purpose: covering other people's watermarks, flip/mirror, voice cloning, link downloading.
+
+## Phone result (user, 2026-11-12, APK from claude/te-11-ratio-presets)
+- Confirmed OK by the user: 8-second sample render, Split Screen, blur background, 9:16 with black bars, crop.
+- Not tested yet: Brightness/Contrast, Thumbnail (frame, own picture, Gemini text).
+- Problem found: with 9:16 (TikTok/Shorts/Reels) text ran outside the picture. Fix: subtitles, labels and corner text are now wrapped to the picture width in the renderer (native/RenderEngine.kt wrapText). Phone-tested: no.

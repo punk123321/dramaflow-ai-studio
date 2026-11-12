@@ -9,6 +9,8 @@ import '../core/srt.dart';
 import '../core/stage.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
+import '../core/te_compile.dart';
+import '../core/transformative_plan.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/render_channel.dart';
@@ -36,6 +38,7 @@ class _RenderPanelState extends State<RenderPanel> {
   final _repo = HandoffRepo();
   bool _loading = true;
   Timeline _tl = const Timeline();
+  TransformativePlan _plan = const TransformativePlan();
   List<SrtEntry> _subs = [];
   RenderSettings _settings = const RenderSettings();
   int _free = 0;
@@ -52,6 +55,7 @@ class _RenderPanelState extends State<RenderPanel> {
   Future<void> _load() async {
     try {
       _tl = Timeline.decode(await _repo.getDoc(_pid, DocKind.timeline));
+      _plan = TransformativePlan.decode(await _repo.getDoc(_pid, DocKind.transformativePlan));
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
@@ -60,18 +64,38 @@ class _RenderPanelState extends State<RenderPanel> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _start() async {
+  Future<void> _start({bool sample = false}) async {
     final p = widget.project;
-    final name = '${safeFileName(p.name)}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+    final rs0 = context.read<RenderStore>();
+    final oldSample = rs0.lastSample;
+    if (sample && oldSample != null) {
+      // Keep only one test file on the phone.
+      try {
+        await RenderChannel.deleteRender(oldSample.path);
+      } catch (_) {}
+    }
+    final name = '${safeFileName(p.name)}_${sample ? 'sample_' : ''}${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+    final te = compileOps(_tl.pieces, _plan.ops);
+    // Approved TE operations are applied to a copy; the saved timeline stays as it is.
+    var tl = _tl.copyWith(pieces: te.pieces, voices: [..._tl.voices, ...te.sounds]);
+    var overlays = [for (final o in te.overlays) o.toJson()];
+    var splits = [for (final x in te.splits) x.toJson()];
+    if (sample) {
+      tl = sampleTimeline(tl);
+      overlays = clipWindows(overlays, sampleMs);
+      splits = clipWindows(splits, sampleMs, minMs: minSplitMs);
+    }
     final job = buildRenderJob(
       name: name,
       videoUri: p.sourceVideoUri!,
-      timeline: _tl,
+      timeline: tl,
+      overlays: overlays,
+      splits: splits,
       sourceSubtitles: _subs,
       settings: _settings,
       aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
     );
-    await context.read<RenderStore>().start(_pid, name, job);
+    await context.read<RenderStore>().start(_pid, name, job, sample: sample);
   }
 
   @override
@@ -84,7 +108,9 @@ class _RenderPanelState extends State<RenderPanel> {
     final mine = rs.runningProjectId == _pid;
     final otherRunning = rs.running && !mine;
     final blockers = renderBlockers(hasVideo: p.hasVideo, timeline: _tl, sourceMs: p.videoDurationMs ?? 0);
-    final dur = outputDurationMs(_tl);
+    final te = compileOps(_tl.pieces, _plan.ops);
+    final dur = outputDurationMs(_tl.copyWith(pieces: te.pieces));
+    blockers.addAll(missingFiles(te, (f) => File(f).existsSync()));
     final est = estimateBytes(dur, _settings);
     final lowSpace = _free > 0 && est > 0 && _free < est + est ~/ 5 + 50 * 1048576;
     final done = rs.lastDone;
@@ -109,15 +135,72 @@ class _RenderPanelState extends State<RenderPanel> {
         const SizedBox(height: 10),
         _row('အရှည်', dur > 0 ? _dur(dur) : '—'),
         _row('အပိုင်း', '${_tl.pieces.length}'),
+        if (te.applied.isNotEmpty) _row('TE operation', '${te.applied.length} ခု ပါမယ်'),
+        for (final n in te.infos)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('TE: $n', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+          ),
+        for (final n in te.notes)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('TE: $n', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
+          ),
         _row('အသံ / music', '${_tl.voices.length} / ${_tl.music == null ? 'မရှိ' : 'ရှိ'}'),
         _row('စာတန်း', _tl.burnSubtitles ? 'ထည့်ရိုက်မယ်' : 'မထည့်'),
+        const SizedBox(height: 8),
+        const Text('Platform အတွက် အမြန်ရွေး', style: TextStyle(color: DfColors.muted, fontSize: 13)),
+        const SizedBox(height: 4),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final pr in platformPresets)
+            ActionChip(
+              label: Text(pr.label, style: const TextStyle(fontSize: 12.5)),
+              tooltip: pr.note,
+              onPressed: mine ? null : () => setState(() => _settings = pr.settings),
+            ),
+        ]),
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text(
+            'ဒါတွေက အသုံးများတဲ့ setting တွေပါ။ Platform ရဲ့ လက်ရှိစည်းမျဉ်းကို app က မစစ်ပါဘူး။ တင်ခါနီး ကိုယ်တိုင် စစ်ပါ။',
+            style: TextStyle(color: DfColors.muted, fontSize: 11.5),
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<OutRatio>(
+          key: ValueKey('r${_settings.ratio.name}'),
+          initialValue: _settings.ratio,
+          decoration: const InputDecoration(labelText: 'ဗီဒီယို ပုံသဏ္ဍာန် (ratio)'),
+          items: [for (final r in OutRatio.values) DropdownMenuItem(value: r, child: Text(r.label))],
+          onChanged: mine ? null : (v) => setState(() => _settings = _settings.copyWith(ratio: v)),
+        ),
+        if (_settings.ratio != OutRatio.original) ...[
+          const SizedBox(height: 8),
+          DropdownButtonFormField<FillMode>(
+            key: ValueKey('fill${_settings.fill.name}'),
+            initialValue: _settings.fill,
+            decoration: const InputDecoration(labelText: 'ကျန်တဲ့နေရာ ဘယ်လိုဖြည့်မလဲ'),
+            items: [for (final f in FillMode.values) DropdownMenuItem(value: f, child: Text(f.label))],
+            onChanged: mine ? null : (v) => setState(() => _settings = _settings.copyWith(fill: v)),
+          ),
+          if (_settings.fill == FillMode.blur)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                _tl.pieces.any((p) => p.freeze) || _plan.ops.any((o) => o.tool == TransformTool.splitScreen && o.runnable)
+                    ? '⚠ Freeze Frame ဒါမှမဟုတ် Split Screen ပါနေလို့ ဒီတစ်ခါ အနက်ရောင်အကွက်နဲ့ ထုတ်မယ်။'
+                    : 'Blur နောက်ခံက မူရင်းဗီဒီယိုရဲ့ ကိုယ်ပိုင်ပုံကို ချဲ့ပြီး မှုန်ထားတာပါ။ အလွတ်နေရာဖြည့်ဖို့ပဲ၊ ဘာကိုမှ ဖုံးဖို့ မဟုတ်ပါ။ စမ်းသပ်အဆင့်ပါ၊ ဖုန်းမှာ မစမ်းရသေးပါ။',
+                style: const TextStyle(color: DfColors.muted, fontSize: 11.5),
+              ),
+            ),
+        ],
         const SizedBox(height: 8),
         Row(children: [
           Expanded(
             child: DropdownButtonFormField<int>(
               key: ValueKey('h${_settings.height}'),
               initialValue: _settings.height,
-              decoration: const InputDecoration(labelText: 'ပုံအရွယ်'),
+              decoration: const InputDecoration(labelText: 'ပုံအရွယ် (အတိုဘက်)'),
               items: const [
                 DropdownMenuItem(value: 720, child: Text('720p')),
                 DropdownMenuItem(value: 1080, child: Text('1080p')),
@@ -171,6 +254,25 @@ class _RenderPanelState extends State<RenderPanel> {
             onPressed: (blockers.isNotEmpty || otherRunning) ? null : _start,
             icon: const Icon(Icons.movie_creation_outlined, size: 18),
             label: Text(otherRunning ? 'တခြား project render လုပ်နေဆဲ' : 'MP4 ထုတ်မယ်'),
+          ),
+        if (!mine)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: OutlinedButton.icon(
+              onPressed: (blockers.isNotEmpty || otherRunning) ? null : () => _start(sample: true),
+              icon: const Icon(Icons.timer_outlined, size: 18),
+              label: const Text('အစ ၈ စက္ကန့် စမ်းထုတ်ကြည့်မယ်'),
+            ),
+          ),
+        if (rs.lastSample != null && rs.lastSample!.projectId == _pid && !mine)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(children: [
+              Expanded(
+                child: Text('စမ်းထုတ်ထားတာ ${_dur(rs.lastSample!.durationMs)} · ${_mb(rs.lastSample!.sizeBytes)} (history ထဲ မသိမ်းပါ)', style: const TextStyle(fontSize: 12.5)),
+              ),
+              TextButton(onPressed: () => showVideoPreview(context, rs.lastSample!.path), child: const Text('ကြည့်မယ်')),
+            ]),
           ),
         if (done != null && done.projectId == _pid && !mine) ...[
           const SizedBox(height: 14),

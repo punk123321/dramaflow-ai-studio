@@ -26,14 +26,20 @@ class RenderStore extends ChangeNotifier {
   /// The most recent finished render (any project).
   ExportItem? lastDone;
 
+  /// The most recent short test render. It is NOT saved to the export history
+  /// and does not count as finishing the Render stage.
+  ExportItem? lastSample;
+  bool _runningSample = false;
+
   bool get running => runningProjectId != null;
 
-  Future<void> start(int projectId, String name, Map<String, Object?> job) async {
+  Future<void> start(int projectId, String name, Map<String, Object?> job, {bool sample = false}) async {
     if (running) return;
     error = null;
     canceled = false;
     percent = 0;
     runningProjectId = projectId;
+    _runningSample = sample;
     _runningName = name;
     notifyListeners();
     try {
@@ -63,7 +69,17 @@ class RenderStore extends ChangeNotifier {
       case RenderDone():
         final pid = runningProjectId;
         runningProjectId = null;
-        if (pid != null) {
+        if (pid != null && _runningSample) {
+          lastSample = ExportItem(
+            projectId: pid,
+            name: _runningName,
+            path: e.path,
+            sizeBytes: e.sizeBytes,
+            durationMs: e.durationMs,
+            height: e.height,
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+          );
+        } else if (pid != null) {
           try {
             lastDone = await _repo.insert(ExportItem(
               projectId: pid,
