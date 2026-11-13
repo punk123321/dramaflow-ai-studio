@@ -26,6 +26,7 @@ import android.provider.MediaStore
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
+import android.text.style.AlignmentSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.view.WindowManager
@@ -681,6 +682,8 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             }
             val s = SpannableString(line)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            // Every line of a wrapped subtitle is centred (the default is left-aligned).
+            s.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             val fg = Color.argb((Color.alpha(color) * level).toInt(), Color.red(color), Color.green(color), Color.blue(color))
             s.setSpan(ForegroundColorSpan(fg), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             if (background) {
@@ -784,6 +787,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             if (ms < startMs || ms >= endMs || text.isBlank()) return SpannableString(" ")
             val s = SpannableString(text)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            s.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             if (background) {
                 s.setSpan(BackgroundColorSpan(Color.argb(170, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
@@ -827,6 +831,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         override fun getText(presentationTimeUs: Long): SpannableString {
             val s = SpannableString(text)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            val rightSide = !(corner == 0 || corner == 2)
+            s.setSpan(
+                AlignmentSpan.Standard(if (rightSide) Layout.Alignment.ALIGN_OPPOSITE else Layout.Alignment.ALIGN_NORMAL),
+                0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE
+            )
             s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             s.setSpan(BackgroundColorSpan(Color.argb(110, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             return s
