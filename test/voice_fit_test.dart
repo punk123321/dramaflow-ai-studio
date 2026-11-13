@@ -38,8 +38,8 @@ void main() {
   });
 
   test('zoom is kept', () {
-    final tl = Timeline(pieces: const [VideoPiece(0, 9000, ZoomMode.values.last)], voices: [v(4000)]);
+    final tl = Timeline(pieces: const [VideoPiece(0, 9000, ZoomMode.zoomIn)], voices: [v(4000)]);
     final r = fitVideoToVoices(tl, sourceMs: 60000);
-    expect(r.timeline.pieces[0].zoom, ZoomMode.values.last);
+    expect(r.timeline.pieces[0].zoom, ZoomMode.zoomIn);
   });
 }
