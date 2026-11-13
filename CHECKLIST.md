@@ -370,3 +370,12 @@ Not verified against the real API (same as TE-13). Default picture model is gemi
 (from Google's Firebase documentation; the REST shape is the standard generateContent one).
 The prompt text is sent to Google. No copyright guarantee for generated pictures; the default
 prompt asks for original characters, no real people, no logos, no text.
+
+## TE-15: fast lane for people who already have a Burmese SRT (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Home tile "အမြန်လမ်း": pick video, bring in SRT (file or clipboard), choose original sound on/off, then Render and Save on one screen | compiles on CI | no |
+| Whole video becomes one piece (the user's own cuts are kept if they exist); subtitles are burned in | compiles on CI | no |
+| "ဒီအဆင့် မလိုဘူး၊ ကျော်မယ်" on the Gemini, TTS and Editor stages in the guided workflow (marks the stage done) | compiles on CI | no |
+
+The fast lane does not make the video index, narration or edit. A skipped stage is only marked done.
