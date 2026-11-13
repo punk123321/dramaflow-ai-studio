@@ -379,3 +379,14 @@ prompt asks for original characters, no real people, no logos, no text.
 | "ဒီအဆင့် မလိုဘူး၊ ကျော်မယ်" on the Gemini, TTS and Editor stages in the guided workflow (marks the stage done) | compiles on CI | no |
 
 The fast lane does not make the video index, narration or edit. A skipped stage is only marked done.
+
+## TE-16: cut video and SRT into parts at subtitle lines (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Parts built from break lines; each part ends exactly where the next starts, at a line start; no picture lost | yes (srt_split_test) | no |
+| Auto split every N lines / every M minutes (never mid-line); manual ✂ per line | yes | no |
+| SRT of each part counts from 0:00, text unchanged, a line crossing the cut is shortened; overlap warning | yes | no |
+| Save each part's SRT (file dialog per part) | compiles on CI | no |
+| One MP4 per part, rendered one after another, optionally saved to Gallery each time | compiles on CI | no |
+
+Parts are made from the original video only: no narration, no TE operations. Style, logo and corner text come from the Editor settings.
