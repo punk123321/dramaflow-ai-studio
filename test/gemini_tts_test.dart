@@ -132,4 +132,10 @@ void imageTests() {
     expect(p, contains('no real people'));
     expect(p, contains('no logos'));
   });
+
+  test('billing 403 explains billing', () {
+    final m = explainTtsHttp(403, 'The Gemini API free tier is not available. set up billing', 'k');
+    expect(m, contains('billing'));
+    expect(m, contains('chat'));
+  });
 }

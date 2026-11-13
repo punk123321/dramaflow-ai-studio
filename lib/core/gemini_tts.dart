@@ -180,7 +180,11 @@ String explainTtsHttp(int status, String body, String apiKey) {
   var detail = body.trim();
   if (apiKey.isNotEmpty) detail = detail.replaceAll(apiKey, '***');
   if (detail.length > 300) detail = detail.substring(0, 300);
-  final why = switch (status) {
+  final lower = body.toLowerCase();
+  final billing = (status == 403 || status == 429) && (lower.contains('billing') || lower.contains('free tier'));
+  final why = billing
+      ? 'ဒီ Google project မှာ free tier မရတော့ဘူး၊ billing ဖွင့်မှ API သုံးလို့ရမယ်။ ပိုက်ဆံမကုန်ချင်ရင် "Gemini ဖွင့်မယ်" (chat) နည်းကို သုံးပါ။'
+      : switch (status) {
     400 => 'တောင်းဆိုမှု ပုံစံ ဒါမှမဟုတ် model နာမည် မှားနိုင်တယ်။',
     401 || 403 => 'API key မမှန်ဘူး ဒါမှမဟုတ် ဒီ model ကို သုံးခွင့်မရှိဘူး။',
     404 => 'Model နာမည် မတွေ့ဘူး။ Model နာမည်ကို စစ်ပါ။',
