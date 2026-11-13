@@ -418,3 +418,4 @@ Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current p
 - Works: items 1-5 (centering/9:16 wrap, Brightness, thumbnail, presets/fade, Backup file saved) and items 7-9 (fast lane, SRT/video parts with per-part MP4, Auto quality file size).
 - Restore did not work: the file picker probably hid the .json file (MIME filter lacked application/json). Fix: picker now accepts all types, import limit raised to 50 MB. Not phone-tested yet.
 - Item 6 (Gemini API): request reached Google and the reply was read (403: free tier not available, billing needed). Result of picture/voice drawing itself is NOT confirmed. Chat route (copy/paste) needs no key. Error text now explains billing.
+- Phone-confirmed (user, 2026-11-13): Restore works after the picker fix; pause/resume between parts works; render keeps going with the screen off (TE-18).
