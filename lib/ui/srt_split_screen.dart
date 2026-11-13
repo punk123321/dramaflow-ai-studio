@@ -36,6 +36,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
   Set<int> _breaks = {};
   Timeline _tl = const Timeline();
   RenderSettings _settings = const RenderSettings();
+  RenderSettings get _eff => _settings.copyWith(sourceBps: sourceBitsPerSecond(widget.project.videoSize, widget.project.videoDurationMs));
   bool _keepSound = true;
   bool _toGallery = true;
   bool _loading = true;
@@ -139,7 +140,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         videoUri: p.sourceVideoUri!,
         timeline: tl,
         sourceSubtitles: _lines,
-        settings: _settings,
+        settings: _eff,
         aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
       );
       await rs.start(_pid, name, job);
@@ -290,11 +291,18 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
             key: ValueKey('sh${_settings.height}'),
             initialValue: _settings.height,
             decoration: const InputDecoration(labelText: 'အရွယ်'),
-            items: const [DropdownMenuItem(value: 720, child: Text('720p')), DropdownMenuItem(value: 1080, child: Text('1080p'))],
+            items: const [DropdownMenuItem(value: 480, child: Text('480p')), DropdownMenuItem(value: 720, child: Text('720p')), DropdownMenuItem(value: 1080, child: Text('1080p'))],
             onChanged: _running ? null : (v) => setState(() => _settings = _settings.copyWith(height: v)),
           ),
         ),
       ]),
+      DropdownButtonFormField<int>(
+        key: ValueKey('sq${_settings.videoKbps}'),
+        initialValue: _settings.videoKbps,
+        decoration: const InputDecoration(labelText: 'အရည်အသွေး (ဖိုင်အရွယ်ကို ထိန်း)'),
+        items: [for (final k in qualityChoices) DropdownMenuItem(value: k, child: Text(qualityLabel(k)))],
+        onChanged: _running ? null : (v) => setState(() => _settings = _settings.copyWith(videoKbps: v)),
+      ),
       SwitchListTile(
         dense: true,
         contentPadding: EdgeInsets.zero,

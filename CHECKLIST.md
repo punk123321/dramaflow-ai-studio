@@ -390,3 +390,12 @@ The fast lane does not make the video index, narration or edit. A skipped stage 
 | One MP4 per part, rendered one after another, optionally saved to Gallery each time | compiles on CI | no |
 
 Parts are made from the original video only: no narration, no TE operations. Style, logo and corner text come from the Editor settings.
+
+## TE-17: output file size control (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Quality menu (Auto, 1 to 8 Mbps) and 480p in Render and in the SRT split screen | yes (bitrate and estimate tests) | no |
+| Auto sets the video bitrate close to the original file's (never above the normal value for the size) | yes | no |
+| Real file size matches the estimate | no | no |
+
+Reason: the fixed 4 or 8 Mbps made a 1 GB original into about 6 GB. The size shown before rendering is an estimate; the encoder can differ.

@@ -37,7 +37,14 @@ enum FillMode {
 }
 
 class RenderSettings {
-  const RenderSettings({this.height = 720, this.fps = 30, this.ratio = OutRatio.original, this.fill = FillMode.bars});
+  const RenderSettings({
+    this.height = 720,
+    this.fps = 30,
+    this.ratio = OutRatio.original,
+    this.fill = FillMode.bars,
+    this.videoKbps = 0,
+    this.sourceBps = 0,
+  });
 
   /// Shorter side of the output in pixels (720 or 1080). For a landscape video
   /// this is the height, for a vertical one the width.
@@ -46,12 +53,33 @@ class RenderSettings {
   final OutRatio ratio;
   final FillMode fill;
 
-  RenderSettings copyWith({int? height, int? fps, OutRatio? ratio, FillMode? fill}) => RenderSettings(
+  /// Video bitrate in kilobits per second. 0 = automatic: close to the original
+  /// file's bitrate, never above the normal value for the chosen size.
+  final int videoKbps;
+
+  /// Overall bitrate of the original file in bits per second (file size x 8 /
+  /// length), 0 when unknown. Set by the screen, not chosen by the user.
+  final int sourceBps;
+
+  RenderSettings copyWith({int? height, int? fps, OutRatio? ratio, FillMode? fill, int? videoKbps, int? sourceBps}) => RenderSettings(
         height: height ?? this.height,
         fps: fps ?? this.fps,
         ratio: ratio ?? this.ratio,
         fill: fill ?? this.fill,
+        videoKbps: videoKbps ?? this.videoKbps,
+        sourceBps: sourceBps ?? this.sourceBps,
       );
+}
+
+/// Choices for the quality menu (kbps). 0 is automatic.
+const qualityChoices = [0, 1000, 1500, 2000, 3000, 4000, 6000, 8000];
+
+String qualityLabel(int kbps) => kbps == 0 ? 'Auto (မူရင်းဖိုင်နဲ့ ကပ်)' : '${kbps >= 1000 ? (kbps / 1000).toStringAsFixed(kbps % 1000 == 0 ? 0 : 1) : kbps} Mbps';
+
+/// Original file's overall bitrate from its size and length; 0 when unknown.
+int sourceBitsPerSecond(int? sizeBytes, int? durationMs) {
+  if (sizeBytes == null || durationMs == null || sizeBytes <= 0 || durationMs <= 0) return 0;
+  return (sizeBytes * 8 * 1000 / durationMs).round();
 }
 
 int _even(double v) {
@@ -97,12 +125,21 @@ const platformPresets = <PlatformPreset>[
 
 /// Video bitrate in bits per second for the chosen size and frame rate.
 int videoBitrate(RenderSettings s) {
-  final base = s.height >= 1080 ? 8000000 : 4000000;
+  if (s.videoKbps > 0) return s.videoKbps * 1000;
+  final base = s.height >= 1080 ? 8000000 : (s.height >= 720 ? 4000000 : 1800000);
   // Other shapes have more or fewer pixels than 16:9 at the same short side.
   final r = s.ratio == OutRatio.original ? 16 / 9 : s.ratio.value;
   final area = (r >= 1 ? r : 1 / r) / (16 / 9);
-  final scaled = (base * area.clamp(0.5, 1.2)).round();
-  return s.fps > 30 ? (scaled * 1.4).round() : scaled;
+  var scaled = (base * area.clamp(0.5, 1.2)).round();
+  if (s.fps > 30) scaled = (scaled * 1.4).round();
+  if (s.sourceBps > 0) {
+    // Stay near the original: a bigger bitrate only makes a bigger file, not a better picture.
+    final near = ((s.sourceBps - 128000) * 1.2).round();
+    final floor = 800000;
+    final target = near < floor ? floor : near;
+    return target < scaled ? target : scaled;
+  }
+  return scaled;
 }
 
 const int _audioBitrate = 128000;
