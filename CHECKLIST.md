@@ -419,3 +419,9 @@ Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current p
 - Restore did not work: the file picker probably hid the .json file (MIME filter lacked application/json). Fix: picker now accepts all types, import limit raised to 50 MB. Not phone-tested yet.
 - Item 6 (Gemini API): request reached Google and the reply was read (403: free tier not available, billing needed). Result of picture/voice drawing itself is NOT confirmed. Chat route (copy/paste) needs no key. Error text now explains billing.
 - Phone-confirmed (user, 2026-11-13): Restore works after the picker fix; pause/resume between parts works; render keeps going with the screen off (TE-18).
+
+## TE-19: fit video to narration (te-12)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| "ဗီဒီယိုကို အသံအတိုင်း ညှိ": piece N gets the length of voice N, voice starts at its piece; undo button | pending CI | **No** |
+Rules: pairs by order; piece end moves in the original video (the file is never changed); video too short is reported; extra voices/pieces are reported. Preview still does not play narration with the video.

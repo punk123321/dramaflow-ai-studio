@@ -10,6 +10,7 @@ import '../core/subtitle_ops.dart';
 import '../core/theme.dart';
 import '../core/sub_presets.dart';
 import '../core/timeline.dart';
+import '../core/voice_fit.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
@@ -258,6 +259,31 @@ class _EditorPanelState extends State<EditorPanel> {
 
   // ---- voice, music, subtitles ----
 
+  Timeline? _beforeFit;
+
+  Future<void> _fitToVoices() async {
+    final ok = await _confirm(
+      'ဗီဒီယိုကို အသံအတိုင်း ညှိမလား?',
+      'ဗီဒီယိုအပိုင်း ၁ ↔ အသံ ၁၊ အပိုင်း ၂ ↔ အသံ ၂ ... အစဉ်လိုက် တွဲမယ်။\n'
+      'အပိုင်းတစ်ခုချင်းရဲ့ အဆုံးကို အသံအရှည်အတိုင်း တိုး/လျှော့မယ်၊ အသံကို သူ့အပိုင်းစတဲ့နေရာမှာ စစေမယ်။\n'
+      'မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။ ပြီးရင် "နောက်ပြန်" နဲ့ ပြန်ယူလို့ရတယ်။\n\n'
+      'အရင်ဆုံး အပိုင်းတွေကို ဇာတ်ဝင်ခန်းအလိုက် ဖြတ်ထားပြီး၊ အသံတစ်ခုချင်း အစဉ်တူဖြစ်နေရမယ်။',
+    );
+    if (ok != true) return;
+    await _stopPlayback();
+    final r = fitVideoToVoices(_tl, sourceMs: _sourceMs);
+    _beforeFit = _tl;
+    await _set(r.timeline, msg: 'အပိုင်း/အသံ ${r.fitted} စုံ ညှိပြီး။${r.notes.isEmpty ? '' : '\n${r.notes.join('\n')}'}');
+  }
+
+  Future<void> _undoFit() async {
+    final b = _beforeFit;
+    if (b == null) return;
+    _beforeFit = null;
+    await _stopPlayback();
+    await _set(b, msg: 'ညှိတာ နောက်ပြန်ပြီး');
+  }
+
   Future<void> _voicesFromStage3() async {
     final clips = await _audioRepo.forProject(_pid);
     if (clips.isEmpty) {
@@ -414,6 +440,11 @@ class _EditorPanelState extends State<EditorPanel> {
         const SizedBox(height: 12),
         _title('၂။ အသံ (narration) · ${_tl.voices.length} ခု'),
         OutlinedButton(onPressed: _voicesFromStage3, child: const Text('အဆင့် ၃ က အသံတွေ အစဉ်လိုက်ထည့်')),
+        if (_tl.pieces.isNotEmpty && _tl.voices.isNotEmpty)
+          Wrap(spacing: 8, children: [
+            FilledButton.tonal(onPressed: _fitToVoices, child: const Text('ဗီဒီယိုကို အသံအတိုင်း ညှိ')),
+            if (_beforeFit != null) OutlinedButton(onPressed: _undoFit, child: const Text('နောက်ပြန်')),
+          ]),
         for (var i = 0; i < _tl.voices.length; i++) _voiceRow(i),
         const SizedBox(height: 12),
         _title('၃။ Background music'),
