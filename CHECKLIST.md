@@ -413,3 +413,7 @@ Fix (user report 2026-11-13): wrapped subtitle lines were left-aligned inside th
 | SRT split: "ခဏရပ်/ဆက်လုပ်" before the next part (multi-part runs) | pending CI | **No** |
 
 Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current part ends; a single file can only be cancelled. Some phones' battery savers can still stop background work.
+
+## Phone result (user, 2026-11-13, te-12 APK)
+- Works: items 1-5 (centering/9:16 wrap, Brightness, thumbnail, presets/fade, Backup file saved).
+- Restore did not work: the file picker probably hid the .json file (MIME filter lacked application/json). Fix: picker now accepts all types, import limit raised to 50 MB. Not phone-tested yet.

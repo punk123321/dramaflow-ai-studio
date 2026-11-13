@@ -48,7 +48,7 @@ class MainActivity : FlutterActivity() {
     private val micPermissionCode = 4201
     private val geminiPackage = "com.google.android.apps.bard"
     private val maxShareChars = 200_000
-    private val maxImportBytes = 5 * 1024 * 1024
+    private val maxImportBytes = 50 * 1024 * 1024
 
     private val pending = HashMap<Int, MethodChannel.Result>()
     private var pendingSaveText: String? = null
@@ -212,7 +212,7 @@ class MainActivity : FlutterActivity() {
             type = "*/*"
             putExtra(
                 Intent.EXTRA_MIME_TYPES,
-                arrayOf("text/plain", "text/*", "application/x-subrip", "application/octet-stream")
+                arrayOf("*/*", "text/plain", "text/*", "application/json", "application/x-subrip", "application/octet-stream")
             )
         }
         launch(pickTextCode, intent)
@@ -727,7 +727,7 @@ class MainActivity : FlutterActivity() {
                 if (n < 0) break
                 total += n
                 if (total > maxImportBytes) {
-                    throw IllegalStateException("File is larger than 5 MB")
+                    throw IllegalStateException("File is larger than 50 MB")
                 }
                 buf.write(chunk, 0, n)
             }
