@@ -79,7 +79,7 @@ List<int> overlappingBreaks(List<SrtEntry> sorted, Set<int> breaks) => [
     ];
 
 /// The SRT of one part, with times counted from the start of that part. A line
-/// that crosses the cut is shortened to the part. Text is never changed.
+/// that crosses the cut appears in both parts, shortened to each. Text is never changed.
 String partSrt(List<SrtEntry> sorted, SplitPart part) =>
     serializeSrt(remapSubtitles(sorted, [VideoPiece(part.startMs, part.endMs)]));
 

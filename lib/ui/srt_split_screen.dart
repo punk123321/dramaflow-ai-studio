@@ -262,7 +262,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         TextButton(onPressed: _running ? null : () => setState(() => _breaks = {}), child: const Text('ခွဲထားတာ အားလုံး ဖျက်')),
       SectionTitle('အပိုင်း ${parts.length} ခု'),
       if (overlaps.isNotEmpty)
-        Text('⚠ ${overlaps.length} နေရာမှာ ရှေ့စာကြောင်း ဆက်ပြောနေတုန်း ဖြတ်ရတယ်။ အဲဒီစာကြောင်းကို ရှေ့အပိုင်းမှာ တိုပြီး ပြမယ်။', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
+        Text('⚠ ${overlaps.length} နေရာမှာ ရှေ့စာကြောင်း ဆက်ပြောနေတုန်း ဖြတ်ရတယ်။ အဲဒီစာကြောင်းက အပိုင်းနှစ်ခုလုံးမှာ ပါမယ် (ရှေ့မှာ အဖြတ်ထိ၊ နောက်မှာ ကျန်တဲ့အပိုင်း)။', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
       for (var i = 0; i < parts.length; i++)
         Card(
           child: ListTile(

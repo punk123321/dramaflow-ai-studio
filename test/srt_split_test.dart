@@ -61,7 +61,7 @@ void main() {
     expect(first.length, 3);
   });
 
-  test('a line crossing the cut is shortened in the part that ends, and noted', () {
+  test('a line crossing the cut is kept in both parts, shortened to each, and noted', () {
     final l = [
       const SrtEntry(1, 0, 6000, 'a'),
       const SrtEntry(2, 5000, 9000, 'b'),
@@ -71,8 +71,11 @@ void main() {
     final first = parseSrt(partSrt(l, p[0])).entries;
     expect(first.single.endMs, 5000);
     final second = parseSrt(partSrt(l, p[1])).entries;
-    expect(second.first.startMs, 0);
-    expect(second.first.text, 'b');
+    // The rest of line a (5 s to 6 s) is still in the picture, so it opens the second part.
+    expect(second.length, 2);
+    expect(second.map((e) => e.text).toSet(), {'a', 'b'});
+    expect(second.every((e) => e.startMs == 0), isTrue);
+    expect(second.firstWhere((e) => e.text == 'a').endMs, 1000);
   });
 
   test('file names are numbered with enough digits', () {
