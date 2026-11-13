@@ -41,7 +41,7 @@ jobs:
           python3 native/patch_gradle.py android/app
           grep -n "dramaflow" android/app/build.gradle* | head
           python3 native/patch_manifest.py android/app/src/main/AndroidManifest.xml
-          grep -n "RECORD_AUDIO\|TTS_SERVICE" android/app/src/main/AndroidManifest.xml
+          grep -n "RECORD_AUDIO\|TTS_SERVICE\|INTERNET" android/app/src/main/AndroidManifest.xml
 
       # A plugin's lint check (video_player_android) crashes inside lint itself
       # on the current runner image. It is a check, not part of the app, so it

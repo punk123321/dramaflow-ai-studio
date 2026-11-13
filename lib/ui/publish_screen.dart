@@ -260,7 +260,7 @@ class _PublishScreenState extends State<PublishScreen> {
                 const SizedBox(height: 6),
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
-                  title: const Text('Gemini ကို ပုံဆွဲခိုင်းမယ်', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  title: const Text('Gemini ကို ပုံဆွဲခိုင်းမယ်', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   children: [
                     TextField(
                       controller: _imgPrompt,
