@@ -399,3 +399,5 @@ Parts are made from the original video only: no narration, no TE operations. Sty
 | Real file size matches the estimate | no | no |
 
 Reason: the fixed 4 or 8 Mbps made a 1 GB original into about 6 GB. The size shown before rendering is an estimate; the encoder can differ.
+
+TE-16 addition: every part has its own "MP4" button (renders just that part, then saves it to Gallery if the switch is on) next to "SRT". Phone-tested: no.

@@ -43,6 +43,9 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
   bool _running = false;
   bool _stop = false;
   int _doneParts = 0;
+  int _runTotal = 0;
+  String _runLabel = '';
+  Set<int> _finished = {};
   String? _msg;
   bool _err = false;
 
@@ -108,7 +111,9 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     return c.future;
   }
 
-  Future<void> _renderAll(List<SplitPart> parts) async {
+  /// Renders the given parts one after another (one part for the per-part button).
+  /// [indexes] are positions in [parts].
+  Future<void> _renderParts(List<SplitPart> parts, List<int> indexes) async {
     final rs = context.read<RenderStore>();
     final p = widget.project;
     if (!p.hasVideo) {
@@ -119,11 +124,15 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       _running = true;
       _stop = false;
       _doneParts = 0;
+      _runTotal = indexes.length;
+      _runLabel = indexes.length == 1 ? 'အပိုင်း ${indexes.first + 1}' : '';
+      _finished = {..._finished}..removeAll(indexes);
       _msg = null;
     });
     final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     var saved = 0;
-    for (var i = 0; i < parts.length; i++) {
+    var ok = 0;
+    for (final i in indexes) {
       if (!mounted || _stop) break;
       final part = parts[i];
       final name = '${partFileName(safeFileName(p.name), i, parts.length)}_$stamp';
@@ -149,7 +158,9 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         _say('အပိုင်း ${i + 1} မှာ ရပ်သွားတယ်: ${rs.error ?? 'ရပ်လိုက်တယ်'}', error: true);
         break;
       }
-      _doneParts = i + 1;
+      ok++;
+      _doneParts = ok;
+      _finished = {..._finished, i};
       final done = rs.lastDone;
       if (_toGallery && done != null) {
         try {
@@ -163,8 +174,10 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     }
     if (mounted) {
       setState(() => _running = false);
-      if (_doneParts == parts.length) {
-        _say('အပိုင်း $_doneParts ခု ထုတ်ပြီးပါပြီ။${_toGallery ? ' Gallery ထဲ $saved ခု သိမ်းပြီး။' : ''}');
+      if (ok == indexes.length) {
+        _say(indexes.length == 1
+            ? 'အပိုင်း ${indexes.first + 1} ထုတ်ပြီးပါပြီ။${_toGallery ? (saved > 0 ? ' Gallery ထဲ သိမ်းပြီး။' : '') : ' Stage "Save" မှာ သိမ်းနိုင်တယ်။'}'
+            : 'အပိုင်း $ok ခု ထုတ်ပြီးပါပြီ။${_toGallery ? ' Gallery ထဲ $saved ခု သိမ်းပြီး။' : ''}');
       }
     }
   }
@@ -209,6 +222,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
                                           final b = {..._breaks};
                                           if (!b.remove(i)) b.add(i);
                                           _breaks = b;
+                                          _finished = {};
                                         }),
                               ),
                       ),
@@ -235,7 +249,10 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
               ? null
               : () {
                   final n = int.tryParse(_linesC.text.trim()) ?? 0;
-                  setState(() => _breaks = breaksEveryLines(_lines.length, n));
+                  setState(() {
+                    _breaks = breaksEveryLines(_lines.length, n);
+                    _finished = {};
+                  });
                 },
           child: const Text('ခွဲ'),
         ),
@@ -250,7 +267,10 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
               ? null
               : () {
                   final m = double.tryParse(_minC.text.trim()) ?? 0;
-                  setState(() => _breaks = breaksEveryMs(_lines, (m * 60000).round()));
+                  setState(() {
+                    _breaks = breaksEveryMs(_lines, (m * 60000).round());
+                    _finished = {};
+                  });
                 },
           child: const Text('ခွဲ'),
         ),
@@ -260,7 +280,10 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         child: Text('မိနစ်နဲ့ခွဲရင် စာကြောင်းအလယ်မှာ မဖြတ်ဘူး၊ ပစ်မှတ်ထက် နည်းနည်းရှည်နိုင်တယ်။ အောက်ကလိုင်းတိုင်းက ✂ ကို နှိပ်ပြီး ကိုယ်တိုင်လည်း ခွဲ/ပြန်ဖြုတ်လို့ရတယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
       ),
       if (_breaks.isNotEmpty)
-        TextButton(onPressed: _running ? null : () => setState(() => _breaks = {}), child: const Text('ခွဲထားတာ အားလုံး ဖျက်')),
+        TextButton(onPressed: _running ? null : () => setState(() {
+                  _breaks = {};
+                  _finished = {};
+                }), child: const Text('ခွဲထားတာ အားလုံး ဖျက်')),
       SectionTitle('အပိုင်း ${parts.length} ခု'),
       if (overlaps.isNotEmpty)
         Text('⚠ ${overlaps.length} နေရာမှာ ရှေ့စာကြောင်း ဆက်ပြောနေတုန်း ဖြတ်ရတယ်။ အဲဒီစာကြောင်းက အပိုင်းနှစ်ခုလုံးမှာ ပါမယ် (ရှေ့မှာ အဖြတ်ထိ၊ နောက်မှာ ကျန်တဲ့အပိုင်း)။', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
@@ -269,8 +292,11 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
           child: ListTile(
             dense: true,
             title: Text('အပိုင်း ${i + 1} · ${formatTime(parts[i].startMs)} → ${formatTime(parts[i].endMs)} (${formatTime(parts[i].lengthMs)})', style: const TextStyle(fontSize: 13)),
-            subtitle: Text('စာတန်း ${parts[i].lines} ကြောင်း${_running && i < _doneParts ? ' · ထုတ်ပြီး ✓' : ''}', style: const TextStyle(fontSize: 12)),
-            trailing: TextButton(onPressed: _running ? null : () => _saveSrt(parts[i], i, parts.length), child: const Text('SRT သိမ်း')),
+            subtitle: Text('စာတန်း ${parts[i].lines} ကြောင်း${_finished.contains(i) ? ' · MP4 ထုတ်ပြီး ✓' : ''}', style: const TextStyle(fontSize: 12)),
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              TextButton(onPressed: _running ? null : () => _saveSrt(parts[i], i, parts.length), child: const Text('SRT')),
+              TextButton(onPressed: (_running || rs.running) ? null : () => _renderParts(parts, [i]), child: const Text('MP4')),
+            ]),
           ),
         ),
       const SectionTitle('အပိုင်းတိုင်း MP4 ထုတ်'),
@@ -323,9 +349,9 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       ),
       const SizedBox(height: 8),
       if (_running) ...[
-        LinearProgressIndicator(value: parts.isEmpty ? null : (_doneParts + rs.percent / 100) / parts.length),
+        LinearProgressIndicator(value: _runTotal == 0 ? null : (_doneParts + rs.percent / 100) / _runTotal),
         const SizedBox(height: 4),
-        Text('အပိုင်း ${_doneParts + 1}/${parts.length} ထုတ်နေတယ် ${rs.percent}%', style: const TextStyle(fontSize: 13)),
+        Text(_runTotal == 1 ? '$_runLabel ထုတ်နေတယ် ${rs.percent}%' : 'အပိုင်း ${_doneParts + 1}/$_runTotal ထုတ်နေတယ် ${rs.percent}%', style: const TextStyle(fontSize: 13)),
         OutlinedButton(
           onPressed: () {
             setState(() => _stop = true);
@@ -335,7 +361,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         ),
       ] else
         FilledButton.icon(
-          onPressed: (parts.isEmpty || rs.running) ? null : () => _renderAll(parts),
+          onPressed: (parts.isEmpty || rs.running) ? null : () => _renderParts(parts, [for (var i = 0; i < parts.length; i++) i]),
           icon: const Icon(Icons.movie_creation_outlined, size: 18),
           label: Text('အပိုင်း ${parts.length} ခုလုံး MP4 ထုတ်မယ်'),
         ),
