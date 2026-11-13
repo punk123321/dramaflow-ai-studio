@@ -2,6 +2,7 @@ package com.dramaflow.aistudio
 
 import android.app.Activity
 import android.content.ContentValues
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -89,6 +90,40 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     private var polling = false
     private val tempFrames = ArrayList<File>()
 
+    // Background keep-alive (see RenderService). [keepAlive] holds the service up
+    // between the parts of a queue.
+    private var keepAlive = false
+    private var note = ""
+    private var lastPct = -1
+
+    private fun serviceOn() {
+        try {
+            val i = Intent(activity, RenderService::class.java)
+                .putExtra("text", if (note.isNotEmpty()) note else "Render")
+                .putExtra("percent", lastPct)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.startForegroundService(i) else activity.startService(i)
+        } catch (e: Exception) {
+            // Not allowed right now: the render still runs while the app stays open.
+        }
+    }
+
+    private fun serviceOff() {
+        if (keepAlive) return
+        try {
+            activity.stopService(Intent(activity, RenderService::class.java))
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun askNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            // Only decides whether the progress notification is shown; the render does not depend on it.
+            activity.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 4199)
+        }
+    }
+
     private val rendersDir: File
         get() = File(activity.filesDir, "renders").apply { mkdirs() }
 
@@ -97,6 +132,18 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             "renderStart" -> start(args?.get("job") as? String ?: "", result)
             "renderCancel" -> {
                 cancel()
+                result.success(null)
+            }
+            "renderKeepAlive" -> {
+                keepAlive = args?.get("on") as? Boolean ?: false
+                note = args?.get("text") as? String ?: ""
+                if (keepAlive) {
+                    askNotificationPermission()
+                    serviceOn()
+                } else {
+                    lastPct = -1
+                    serviceOff()
+                }
                 result.success(null)
             }
             "makeThumbnail" -> makeThumbnail(args, result)
@@ -184,6 +231,9 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 .build()
             transformer = t
             activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            askNotificationPermission()
+            lastPct = 0
+            serviceOn()
             t.start(composition, part.absolutePath)
             startPolling()
             result.success(null)
@@ -191,6 +241,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             transformer = null
             clearTempFrames()
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            serviceOff()
             result.error("render_failed", e.message ?: e.toString(), null)
         }
     }
@@ -859,6 +910,10 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 }
                 if (t.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {
                     channel.invokeMethod("renderProgress", hashMapOf("percent" to holder.progress))
+                    if (holder.progress != lastPct) {
+                        lastPct = holder.progress
+                        serviceOn()
+                    }
                 }
                 main.postDelayed(this, 500)
             }
@@ -874,6 +929,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             polling = false
             clearTempFrames()
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            serviceOff()
             if (ok && part != null && fin != null && part.exists() && part.renameTo(fin)) {
                 channel.invokeMethod(
                     "renderDone",
@@ -892,6 +948,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         transformer = null
         polling = false
         activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        serviceOff()
         partFile?.delete()
         channel.invokeMethod("renderCanceled", null)
     }

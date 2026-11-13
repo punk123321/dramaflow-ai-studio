@@ -66,6 +66,16 @@ class RenderChannel {
 
   static Future<void> cancel() => _channel.invokeMethod('renderCancel');
 
+  /// Keeps the background service (and its notification) up between the parts
+  /// of a queue, so the phone does not stop the app while it waits.
+  static Future<void> keepAlive(bool on, {String text = ''}) async {
+    try {
+      await _channel.invokeMethod('renderKeepAlive', {'on': on, 'text': text});
+    } catch (_) {
+      // Best effort: the render itself does not depend on it.
+    }
+  }
+
   static Future<int> freeBytes() async => (await _channel.invokeMethod<int>('renderFreeBytes')) ?? 0;
 
   /// Returns the gallery link. Throws code `use_export` on Android 9 and older.

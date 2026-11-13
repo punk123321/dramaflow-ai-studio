@@ -42,6 +42,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
   bool _loading = true;
   bool _running = false;
   bool _stop = false;
+  bool _paused = false;
   int _doneParts = 0;
   int _runTotal = 0;
   String _runLabel = '';
@@ -123,6 +124,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     setState(() {
       _running = true;
       _stop = false;
+      _paused = false;
       _doneParts = 0;
       _runTotal = indexes.length;
       _runLabel = indexes.length == 1 ? 'အပိုင်း ${indexes.first + 1}' : '';
@@ -132,7 +134,15 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     var saved = 0;
     var ok = 0;
+    if (indexes.length > 1) await RenderChannel.keepAlive(true, text: 'အပိုင်း ${indexes.length} ခု');
     for (final i in indexes) {
+      // Pause: the part being made finishes first, then we wait here.
+      if (_paused && mounted && !_stop) {
+        await RenderChannel.keepAlive(true, text: 'ခဏရပ်ထားတယ် (အပိုင်း ${i + 1} မစသေး)');
+      }
+      while (_paused && mounted && !_stop) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
       if (!mounted || _stop) break;
       final part = parts[i];
       final name = '${partFileName(safeFileName(p.name), i, parts.length)}_$stamp';
@@ -172,8 +182,12 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       }
       if (mounted) setState(() {});
     }
+    await RenderChannel.keepAlive(false);
     if (mounted) {
-      setState(() => _running = false);
+      setState(() {
+        _running = false;
+        _paused = false;
+      });
       if (ok == indexes.length) {
         _say(indexes.length == 1
             ? 'အပိုင်း ${indexes.first + 1} ထုတ်ပြီးပါပြီ။${_toGallery ? (saved > 0 ? ' Gallery ထဲ သိမ်းပြီး။' : '') : ' Stage "Save" မှာ သိမ်းနိုင်တယ်။'}'
@@ -344,7 +358,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         title: const Text('တစ်ပိုင်းပြီးတိုင်း Gallery ထဲ တန်းသိမ်း'),
       ),
       const Text(
-        'သုံးမယ့် စာတန်း style၊ logo၊ ထောင့်စာသားက Editor မှာ သတ်မှတ်ထားတာကို သုံးမယ်။ အသံ (narration) နဲ့ TE operation တွေ မပါပါဘူး။ ဖုန်းမှာ အပိုင်းတွေ အများကြီးဆို အချိန်ကြာမယ်၊ app ဖွင့်ထားပါ။',
+        'သုံးမယ့် စာတန်း style၊ logo၊ ထောင့်စာသားက Editor မှာ သတ်မှတ်ထားတာကို သုံးမယ်။ အသံ (narration) နဲ့ TE operation တွေ မပါပါဘူး။ ဖုန်းမှာ အပိုင်းတွေ အများကြီးဆို အချိန်ကြာမယ်။ မျက်နှာပြင်ပိတ်လည် notification နဲ့ ဆက်ထုတ်မယ် (ဖုန်းအမျိုးအစားပေါ်မူတည်)။ ခဏရပ်ရင် လက်ရှိအပိုင်းပြီးမှ ရပ်မယ်။',
         style: TextStyle(color: DfColors.muted, fontSize: 12),
       ),
       const SizedBox(height: 8),
@@ -352,9 +366,28 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         LinearProgressIndicator(value: _runTotal == 0 ? null : (_doneParts + rs.percent / 100) / _runTotal),
         const SizedBox(height: 4),
         Text(_runTotal == 1 ? '$_runLabel ထုတ်နေတယ် ${rs.percent}%' : 'အပိုင်း ${_doneParts + 1}/$_runTotal ထုတ်နေတယ် ${rs.percent}%', style: const TextStyle(fontSize: 13)),
+        if (_runTotal > 1) ...[
+          if (_paused)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Text('ခဏရပ်ထားတယ်။ ထုတ်နေတဲ့ အပိုင်း ပြီးရင် နောက်တစ်ပိုင်း မစသေးဘူး။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+            ),
+          OutlinedButton.icon(
+            onPressed: () => setState(() => _paused = !_paused),
+            icon: Icon(_paused ? Icons.play_arrow : Icons.pause, size: 18),
+            label: Text(_paused ? 'ဆက်လုပ်မယ်' : 'ခဏရပ်မယ် (လက်ရှိအပိုင်းပြီးမှ)'),
+          ),
+        ] else
+          const Padding(
+            padding: EdgeInsets.only(bottom: 4),
+            child: Text('ဖိုင်တစ်ပိုင်းကို တစ်ဝက်မှာ ခဏရပ်လို့ မရပါ (ရပ်ရင် အစကပြန်စရမယ်)။ ဖုန်းမျက်နှာပြင်ပိတ်လည်း ဆက်ထုတ်မယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+          ),
         OutlinedButton(
           onPressed: () {
-            setState(() => _stop = true);
+            setState(() {
+              _stop = true;
+              _paused = false;
+            });
             rs.cancel();
           },
           child: const Text('ရပ်မယ်'),

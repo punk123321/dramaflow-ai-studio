@@ -403,3 +403,13 @@ Reason: the fixed 4 or 8 Mbps made a 1 GB original into about 6 GB. The size sho
 TE-16 addition: every part has its own "MP4" button (renders just that part, then saves it to Gallery if the switch is on) next to "SRT". Phone-tested: no.
 
 Fix (user report 2026-11-13): wrapped subtitle lines were left-aligned inside their box, so the text did not look centred. Subtitles and Motion labels are now centred line by line; corner text is aligned to its own side. Phone-tested: no.
+
+## TE-18 — Background render + pause (te-12)
+
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Foreground service + progress notification keeps render alive with screen off | pending CI | **No** |
+| Notification permission asked on Android 13+ | pending CI | **No** |
+| SRT split: "ခဏရပ်/ဆက်လုပ်" before the next part (multi-part runs) | pending CI | **No** |
+
+Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current part ends; a single file can only be cancelled. Some phones' battery savers can still stop background work.
