@@ -425,3 +425,9 @@ Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current p
 |---|---|---|
 | "ဗီဒီယိုကို အသံအတိုင်း ညှိ": piece N gets the length of voice N, voice starts at its piece; undo button | pending CI | **No** |
 Rules: pairs by order; piece end moves in the original video (the file is never changed); video too short is reported; extra voices/pieces are reported. Preview still does not play narration with the video.
+
+## TE-20: Video Recap, Gemini watches the video (te-12)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Home tile "Video Recap": per-part prompt (5 parts per prompt), Gemini open/copy, reply split by "=== PART n ===", save as narration script (one part = one voice) | pending CI | **No** |
+Limits: the app does NOT send the video; the user attaches it in the Gemini app. Whether Gemini can watch the video (length/size limits) and how good the script is are NOT checked. Parts come from Video Index, or 1-minute parts if none (then saved as the Video Index).

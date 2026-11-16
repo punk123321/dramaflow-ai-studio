@@ -11,12 +11,13 @@ import 'fair_use_screen.dart';
 import 'subtitle_studio_screen.dart';
 import 'backup_screen.dart';
 import 'quick_screen.dart';
+import 'video_recap_screen.dart';
 import 'srt_split_screen.dart';
 import 'publish_screen.dart';
 import 'transformative_editor_screen.dart';
 import 'widgets.dart';
 
-enum _Action { none, workflow, library, studio, fairUse, transformative, publish, backup, quick, srtSplit }
+enum _Action { none, workflow, library, studio, fairUse, transformative, publish, backup, quick, srtSplit, videoRecap }
 
 class _Module {
   const _Module(this.code, this.title, this.sub, this.color, this.phase, [this.action = _Action.none]);
@@ -40,6 +41,7 @@ const _modules = <_Module>[
   _Module('TE', 'Transformative Editor', 'Manual · AI · Hybrid', Color(0xFF00C2A8), 9, _Action.transformative),
   _Module('QK', 'အမြန်လမ်း', 'SRT ရှိပြီး → ဗီဒီယိုတန်းထုတ်', Color(0xFF3DDC84), 13, _Action.quick),
   _Module('SS', 'SRT နဲ့ အပိုင်းခွဲ', 'ဗီဒီယို+SRT အတိအကျဖြတ်', Color(0xFF5B8CFF), 13, _Action.srtSplit),
+  _Module('VR', 'Video Recap', 'Gemini က ဗီဒီယိုကြည့်ပြီး script', Color(0xFFB36BFF), 13, _Action.videoRecap),
   _Module('BK', 'Backup / Restore', 'Project သိမ်း/ပြန်ယူ', Color(0xFF8E9AAF), 12, _Action.backup),
   _Module('UP', 'Upload & Thumbnail', 'ခေါင်းစဉ်၊ hashtag၊ ပုံ', Color(0xFFFF6B9D), 11, _Action.publish),
 ];
@@ -260,6 +262,8 @@ class _ModuleTile extends StatelessWidget {
         _push(context, TransformativeEditorScreen(project: target));
       case _Action.srtSplit:
         _push(context, SrtSplitScreen(project: target));
+      case _Action.videoRecap:
+        _push(context, VideoRecapScreen(project: target));
       case _Action.quick:
         _push(context, QuickScreen(projectId: target.id!));
       case _Action.publish:
