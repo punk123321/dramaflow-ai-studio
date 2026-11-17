@@ -47,6 +47,9 @@ IconData _moduleIcon(String code) {
     'NW' => Icons.newspaper_outlined,
     'BK' => Icons.backup_outlined,
     'UP' => Icons.publish_outlined,
+    'TR' => Icons.translate_rounded,
+    'WH' => Icons.hearing_rounded,
+    'BM' => Icons.blur_on_rounded,
     _ => Icons.extension_outlined,
   };
 }
@@ -67,6 +70,9 @@ const _modules = <_Module>[
   _Module('NW', 'သတင်း (RSS)', 'သတင်းဖတ်၊ script ရေး', Color(0xFF2FA8FF), 14, _Action.news),
   _Module('BK', 'Backup / Restore', 'Project သိမ်း/ပြန်ယူ', Color(0xFF8E9AAF), 12, _Action.backup),
   _Module('UP', 'Upload & Thumbnail', 'ခေါင်းစဉ်၊ hashtag၊ ပုံ', Color(0xFFFF6B9D), 11, _Action.publish),
+  _Module('TR', 'Translation Studio', 'Recap / Full Translation', Color(0xFF35B6A5), 4),
+  _Module('WH', 'Whisper Subtitles', 'အသံမှ SRT အလိုအလျောက်ထုတ်', Color(0xFF62A0EA), 5),
+  _Module('BM', 'Smart Blur Masks', 'နေရာသတ်မှတ်ပြီး Blur ဖုံး', Color(0xFFB17CE8), 6),
 ];
 
 class HomeScreen extends StatelessWidget {
@@ -411,7 +417,7 @@ class _ModuleTile extends StatelessWidget {
                     child: Icon(_moduleIcon(module.code), color: c, size: 20),
                   ),
                   const Spacer(),
-                  Text(module.action == _Action.none ? 'Phase ${module.phase}' : 'သုံးလို့ရ', style: TextStyle(color: module.action == _Action.none ? DfColors.muted : DfColors.ok, fontSize: 11)),
+                  Text(module.action == _Action.none ? 'စီစဉ်ဆဲ · Phase ${module.phase}' : 'သုံးလို့ရ', style: TextStyle(color: module.action == _Action.none ? DfColors.muted : DfColors.ok, fontSize: 11)),
                 ],
               ),
               const Spacer(),
