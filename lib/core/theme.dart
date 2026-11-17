@@ -7,7 +7,9 @@ class DfColors {
   static const ink = Color(0xFFECEEF8);
   static const muted = Color(0xFF8F96B3);
   static const line = Color(0xFF262C47);
-  static const accent = Color(0xFFA46BFF);
+  static const accent = Color(0xFF8B5CF6);
+  static const secondary = Color(0xFF22D3EE);
+  static const pink = Color(0xFFEC4899);
   static const onAccent = Color(0xFF12082A);
   static const ok = Color(0xFF3DDC84);
   static const warn = Color(0xFFFF9F43);
