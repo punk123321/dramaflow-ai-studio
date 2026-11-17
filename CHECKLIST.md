@@ -440,3 +440,11 @@ Limits: the app does NOT send the video; the user attaches it in the Gemini app.
 | Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | pending CI | **No** |
 | Feed manager: add/switch off/delete, suggestions restore | pending CI | **No** |
 Rules: only headline, link, time and a ~220 character snippet are kept; no article copy, no pictures, no video from news sites. Feed links in the suggested list were NOT checked (the build session could not reach them): the user must try them on the phone. Parser is tested on sample RSS/Atom text only, not on live feeds. News data is app-wide and not part of Backup.
+
+## TE-22: Scene Recap (scene finding + contact sheet for Gemini)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Home tile "Scene Recap": scenes found from colour changes between sampled frames (range, step 1/2/4 s, max scenes), long still scenes split at 45 s, "ပေါင်း" removes a wrong cut | pending CI | **No** |
+| Contact sheet (one numbered tile per scene, 12 per sheet) saved to Pictures/DramaFlow and shared to Gemini with the prompt; prompt includes the SRT lines of each scene | pending CI | **No** |
+| Reply "=== PART n ===" read per scene, saved as the narration script (one scene = one voice) and the scenes saved as the Video Index | pending CI | **No** |
+Unproven: how fast scene finding is on a long video on the phone; how well colour differences find real cuts (fades, fast action); whether the Gemini app accepts the shared picture with text; token savings (the per-token figures are from memory, not checked). Gemini cannot hear the audio in this mode, so an SRT gives much better scripts. Speech-to-text (Whisper or similar) is NOT built.

@@ -38,6 +38,7 @@ jobs:
           cp native/MainActivity.kt "$f"
           cp native/RenderEngine.kt "$(dirname "$f")/RenderEngine.kt"
           cp native/RenderService.kt "$(dirname "$f")/RenderService.kt"
+          cp native/SceneTools.kt "$(dirname "$f")/SceneTools.kt"
           cp native/dramaflow.jks android/app/dramaflow.jks
           python3 native/patch_gradle.py android/app
           grep -n "dramaflow" android/app/build.gradle* | head

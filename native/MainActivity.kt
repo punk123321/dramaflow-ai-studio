@@ -76,6 +76,10 @@ class MainActivity : FlutterActivity() {
         rch.setMethodCallHandler { call, result ->
             if (!engine.handle(call.method, call.arguments as? Map<*, *>, result)) result.notImplemented()
         }
+        val sceneTools = SceneTools(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dramaflow.aistudio/scenes").setMethodCallHandler { call, result ->
+            if (!sceneTools.handle(call.method, call.arguments as? Map<*, *>, result)) result.notImplemented()
+        }
         ch.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickVideo" -> startPickVideo(result)
