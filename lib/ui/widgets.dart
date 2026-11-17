@@ -4,6 +4,52 @@ import '../core/stage.dart';
 import '../core/theme.dart';
 import '../data/project.dart';
 
+/// RGyi Recap compact cinematic brand mark.
+class BrandMark extends StatelessWidget {
+  const BrandMark({super.key, this.size = 36});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF9B5CFF), Color(0xFF5145CD), Color(0xFF1D9DBB)],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
+        boxShadow: [
+          BoxShadow(color: DfColors.accent.withValues(alpha: 0.28), blurRadius: 14, spreadRadius: 1),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.movie_creation_outlined, size: size * 0.72, color: Colors.white.withValues(alpha: 0.95)),
+          Positioned(
+            right: size * 0.08,
+            bottom: size * 0.08,
+            child: Container(
+              width: size * 0.38,
+              height: size * 0.38,
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.2),
+              ),
+              child: Icon(Icons.play_arrow_rounded, size: size * 0.32, color: DfColors.secondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Small drama "poster": the first character of the drama title on a gradient.
 class Poster extends StatelessWidget {
   const Poster({super.key, required this.title, this.width = 44, this.height = 58});
