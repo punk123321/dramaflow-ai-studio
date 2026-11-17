@@ -30,6 +30,33 @@ jobs:
             rm -rf _gen
           fi
 
+      # Ensure plugin artifacts are resolved from Google's Maven repository
+      # and Maven Central as well as the Gradle Plugin Portal.
+      - name: Configure Android plugin repositories
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/settings.gradle.kts")
+          if not p.exists():
+              raise SystemExit("Generated android/settings.gradle.kts is missing")
+          text = p.read_text()
+          marker = "repositories {"
+          if marker not in text:
+              raise SystemExit("Could not find pluginManagement repositories block")
+          start = text.index(marker) + len(marker)
+          block_end = text.find("}", start)
+          block = text[start:block_end]
+          additions = []
+          if "google()" not in block:
+              additions.append("google()")
+          if "mavenCentral()" not in block:
+              additions.append("mavenCentral()")
+          if additions:
+              text = text[:start] + "\\n        ".join([""] + additions) + text[start:]
+              p.write_text(text)
+          print("Android plugin repositories verified.")
+          PY
+
       # Our Android code (video picker). Replaces the template MainActivity.
       - name: Add native Android code
         run: |
