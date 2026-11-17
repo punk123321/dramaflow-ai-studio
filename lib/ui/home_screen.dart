@@ -110,6 +110,7 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
               children: [
                 if (store.error != null) ErrorBanner(store.error!),
+                _HeroBanner(onCreate: () => showNewProjectSheet(context)),
                 if (resume != null)
                   _ResumeCard(
                     project: resume,
@@ -152,6 +153,61 @@ class HomeScreen extends StatelessWidget {
                 ],
               ],
             ),
+    );
+  }
+}
+
+class _HeroBanner extends StatelessWidget {
+  const _HeroBanner({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14, top: 4),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF30205D), Color(0xFF182344), Color(0xFF102A3B)],
+        ),
+        border: Border.all(color: DfColors.accent.withValues(alpha: 0.38)),
+        boxShadow: [
+          BoxShadow(color: DfColors.accent.withValues(alpha: 0.12), blurRadius: 24, offset: const Offset(0, 8)),
+        ],
+      ),
+      child: Row(
+        children: [
+          const BrandMark(size: 54),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('YOUR CINEMATIC WORKSPACE', style: TextStyle(color: Color(0xFFB8C5E8), fontSize: 10, letterSpacing: 1.3, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 5),
+                const Text('ဇာတ်လမ်းတစ်ပုဒ်ကို Recap အဖြစ် ဖန်တီးလိုက်ပါ', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+                const SizedBox(height: 4),
+                const Text('Video · Subtitle · Voice · Production', style: TextStyle(color: Color(0xFFC5D2E8), fontSize: 11)),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Project အသစ်စမယ်'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF9B7BFF),
+                    foregroundColor: Colors.white,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
