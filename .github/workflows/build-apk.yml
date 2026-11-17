@@ -69,3 +69,5 @@ jobs:
           # unreviewed branch build is never mistaken for the main build.
           name: ${{ github.ref_name == 'main' && 'dramaflow-apk' || format('dramaflow-apk-branch-{0}', github.run_number) }}
           path: build/app/outputs/flutter-apk/app-release.apk
+          # The account's free Actions storage is small (0.5 GB), so branch builds expire quickly.
+          retention-days: ${{ github.ref_name == 'main' && 14 || 3 }}
