@@ -65,6 +65,10 @@ jobs:
           cp native/MainActivity.kt "$f"
           cp native/RenderEngine.kt "$(dirname "$f")/RenderEngine.kt"
           cp native/RenderService.kt "$(dirname "$f")/RenderService.kt"
+          mkdir -p android/app/src/main/res/drawable android/app/src/main/res/values android/app/src/main/res/mipmap-anydpi-v26
+          cp native/android/res/drawable/ic_launcher_foreground.xml android/app/src/main/res/drawable/
+          cp native/android/res/values/ic_launcher_background.xml android/app/src/main/res/values/
+          cp native/android/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/
           cp native/dramaflow.jks android/app/dramaflow.jks
           python3 native/patch_gradle.py android/app
           grep -n "dramaflow" android/app/build.gradle* | head
