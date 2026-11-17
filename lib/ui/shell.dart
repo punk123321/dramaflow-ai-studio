@@ -4,6 +4,7 @@ import 'home_screen.dart';
 import 'library_screen.dart';
 import 'placeholder_screen.dart';
 import 'workflow_screen.dart';
+import 'widgets.dart';
 
 class Shell extends StatefulWidget {
   const Shell({super.key});
