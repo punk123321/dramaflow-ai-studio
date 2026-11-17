@@ -1,4 +1,4 @@
-# DramaFlow AI Studio (Phase 1)
+# RGyi Recap — AI Movie Production Studio
 
 Personal Android app for drama recap production. Flutter UI, local SQLite, no API keys, no account.
 Package name: `com.dramaflow.aistudio`.
