@@ -36,7 +36,7 @@ class DramaFlowApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'DramaFlow AI Studio',
+      title: 'RGyi Recap — AI Movie Production Studio',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: const Shell(),
