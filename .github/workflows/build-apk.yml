@@ -95,10 +95,11 @@ jobs:
       - run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true # A full Actions artifact quota must not mark a successful APK build as failed.
         with:
           # main keeps the plain name; other branches get their own name so an
           # unreviewed branch build is never mistaken for the main build.
           name: ${{ github.ref_name == 'main' && 'dramaflow-apk' || format('dramaflow-apk-branch-{0}', github.run_number) }}
           path: build/app/outputs/flutter-apk/app-release.apk
           # The account's free Actions storage is small (0.5 GB), so branch builds expire quickly.
-          retention-days: ${{ github.ref_name == 'main' && 14 || 3 }}
+          retention-days: ${{ github.ref_name == 'main' && 7 || 1 }}
