@@ -30,6 +30,27 @@ class _Module {
   final _Action action;
 }
 
+IconData _moduleIcon(String code) {
+  return switch (code) {
+    'VI' => Icons.video_library_outlined,
+    'GM' => Icons.auto_awesome,
+    'ST' => Icons.closed_caption_outlined,
+    'TT' => Icons.record_voice_over_outlined,
+    'ED' => Icons.movie_edit_outlined,
+    'RN' => Icons.high_quality_outlined,
+    'DL' => Icons.video_collection_outlined,
+    'FU' => Icons.verified_user_outlined,
+    'TE' => Icons.tune_rounded,
+    'QK' => Icons.flash_on_outlined,
+    'SS' => Icons.subtitles_outlined,
+    'VR' => Icons.smart_display_outlined,
+    'NW' => Icons.newspaper_outlined,
+    'BK' => Icons.backup_outlined,
+    'UP' => Icons.publish_outlined,
+    _ => Icons.extension_outlined,
+  };
+}
+
 const _modules = <_Module>[
   _Module('VI', 'Video Index', 'အပိုင်းခွဲ', Color(0xFFFF9F43), 2, _Action.workflow),
   _Module('GM', 'Recap Studio', 'Gemini handoff', Color(0xFF3DDC84), 3, _Action.workflow),
@@ -100,21 +121,30 @@ class HomeScreen extends StatelessWidget {
                 else if (store.items.isEmpty)
                   const _EmptyHint(),
                 const SectionTitle('Studio'),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _modules.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    mainAxisExtent: 112,
-                  ),
-                  itemBuilder: (_, i) => _ModuleTile(
-                    module: _modules[i],
-                    onOpenWorkflow: onOpenWorkflow,
-                    onOpenLibrary: onOpenLibrary,
-                  ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 1100
+                        ? 4
+                        : constraints.maxWidth >= 720
+                            ? 3
+                            : 2;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _modules.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        mainAxisExtent: 122,
+                      ),
+                      itemBuilder: (_, i) => _ModuleTile(
+                        module: _modules[i],
+                        onOpenWorkflow: onOpenWorkflow,
+                        onOpenLibrary: onOpenLibrary,
+                      ),
+                    );
+                  },
                 ),
                 if (store.items.isNotEmpty) ...[
                   const SectionTitle('Project များ'),
@@ -298,9 +328,10 @@ class _ModuleTile extends StatelessWidget {
     final c = module.color;
     return Material(
       color: DfColors.surface,
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: DfColors.line),
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: c.withValues(alpha: 0.20)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -321,7 +352,7 @@ class _ModuleTile extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: c.withValues(alpha: 0.45)),
                     ),
-                    child: Text(module.code, style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w600)),
+                    child: Icon(_moduleIcon(module.code), color: c, size: 20),
                   ),
                   const Spacer(),
                   Text(module.action == _Action.none ? 'Phase ${module.phase}' : 'သုံးလို့ရ', style: TextStyle(color: module.action == _Action.none ? DfColors.muted : DfColors.ok, fontSize: 11)),
