@@ -41,7 +41,9 @@ class _RenderPanelState extends State<RenderPanel> {
   TransformativePlan _plan = const TransformativePlan();
   List<SrtEntry> _subs = [];
   RenderSettings _settings = const RenderSettings();
+  RenderSettings get _eff => _settings.copyWith(sourceBps: sourceBitsPerSecond(widget.project.videoSize, widget.project.videoDurationMs));
   int _free = 0;
+  bool _videoOk = true;
   bool _markedDone = false;
 
   int get _pid => widget.project.id!;
@@ -60,6 +62,8 @@ class _RenderPanelState extends State<RenderPanel> {
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
       _free = await RenderChannel.freeBytes();
+      final uri = widget.project.sourceVideoUri;
+      if (uri != null) _videoOk = await RenderChannel.uriReadable(uri);
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -92,7 +96,7 @@ class _RenderPanelState extends State<RenderPanel> {
       overlays: overlays,
       splits: splits,
       sourceSubtitles: _subs,
-      settings: _settings,
+      settings: _eff,
       aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
     );
     await context.read<RenderStore>().start(_pid, name, job, sample: sample);
@@ -111,7 +115,9 @@ class _RenderPanelState extends State<RenderPanel> {
     final te = compileOps(_tl.pieces, _plan.ops);
     final dur = outputDurationMs(_tl.copyWith(pieces: te.pieces));
     blockers.addAll(missingFiles(te, (f) => File(f).existsSync()));
-    final est = estimateBytes(dur, _settings);
+    blockers.addAll(missingEditFiles(_tl, (f) => File(f).existsSync()));
+    if (p.hasVideo && !_videoOk) blockers.add('မူရင်းဗီဒီယိုကို ဖွင့်မရတော့ပါ (ရွှေ့/ဖျက်ထားနိုင်တယ်)။ Stage 1 မှာ ဗီဒီယို ပြန်ရွေးပါ။');
+    final est = estimateBytes(dur, _eff);
     final lowSpace = _free > 0 && est > 0 && _free < est + est ~/ 5 + 50 * 1048576;
     final done = rs.lastDone;
 
@@ -202,6 +208,7 @@ class _RenderPanelState extends State<RenderPanel> {
               initialValue: _settings.height,
               decoration: const InputDecoration(labelText: 'ပုံအရွယ် (အတိုဘက်)'),
               items: const [
+                DropdownMenuItem(value: 480, child: Text('480p')),
                 DropdownMenuItem(value: 720, child: Text('720p')),
                 DropdownMenuItem(value: 1080, child: Text('1080p')),
               ],
@@ -223,6 +230,23 @@ class _RenderPanelState extends State<RenderPanel> {
             ),
           ),
         ]),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          key: ValueKey('q${_settings.videoKbps}'),
+          initialValue: _settings.videoKbps,
+          decoration: const InputDecoration(labelText: 'အရည်အသွေး (ဖိုင်အရွယ်ကို ထိန်း)'),
+          items: [for (final k in qualityChoices) DropdownMenuItem(value: k, child: Text(qualityLabel(k)))],
+          onChanged: mine ? null : (v) => setState(() => _settings = _settings.copyWith(videoKbps: v)),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            _eff.sourceBps > 0
+                ? 'မူရင်းဖိုင် ≈ ${(_eff.sourceBps / 1000000).toStringAsFixed(1)} Mbps။ Auto က ဒါနဲ့ ကပ်ပြီး ထုတ်မယ်၊ ဖိုင်ကြီးမသွားဘူး။ ဂဏန်းနိမ့်လေ ဖိုင်သေးလေ (ပုံကြည်လင်မှု ကျနိုင်)။'
+                : 'မူရင်းဖိုင် bitrate မသိလို့ Auto က အရွယ်အလိုက် ပုံမှန်တန်ဖိုး သုံးမယ်။',
+            style: const TextStyle(color: DfColors.muted, fontSize: 11.5),
+          ),
+        ),
         const SizedBox(height: 8),
         _row('ခန့်မှန်း ဖိုင်အရွယ်', est > 0 ? '≈ ${_mb(est)}' : '—'),
         _row('ဖုန်းမှာ ကျန်နေရာ', _free > 0 ? _mb(_free) : '—'),

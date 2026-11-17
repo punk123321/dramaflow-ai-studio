@@ -8,7 +8,9 @@ import '../core/srt.dart';
 import '../core/stage.dart';
 import '../core/subtitle_ops.dart';
 import '../core/theme.dart';
+import '../core/sub_presets.dart';
 import '../core/timeline.dart';
+import '../core/voice_fit.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
@@ -257,6 +259,31 @@ class _EditorPanelState extends State<EditorPanel> {
 
   // ---- voice, music, subtitles ----
 
+  Timeline? _beforeFit;
+
+  Future<void> _fitToVoices() async {
+    final ok = await _confirm(
+      'ဗီဒီယိုကို အသံအတိုင်း ညှိမလား?',
+      'ဗီဒီယိုအပိုင်း ၁ ↔ အသံ ၁၊ အပိုင်း ၂ ↔ အသံ ၂ ... အစဉ်လိုက် တွဲမယ်။\n'
+      'အပိုင်းတစ်ခုချင်းရဲ့ အဆုံးကို အသံအရှည်အတိုင်း တိုး/လျှော့မယ်၊ အသံကို သူ့အပိုင်းစတဲ့နေရာမှာ စစေမယ်။\n'
+      'မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။ ပြီးရင် "နောက်ပြန်" နဲ့ ပြန်ယူလို့ရတယ်။\n\n'
+      'အရင်ဆုံး အပိုင်းတွေကို ဇာတ်ဝင်ခန်းအလိုက် ဖြတ်ထားပြီး၊ အသံတစ်ခုချင်း အစဉ်တူဖြစ်နေရမယ်။',
+    );
+    if (ok != true) return;
+    await _stopPlayback();
+    final r = fitVideoToVoices(_tl, sourceMs: _sourceMs);
+    _beforeFit = _tl;
+    await _set(r.timeline, msg: 'အပိုင်း/အသံ ${r.fitted} စုံ ညှိပြီး။${r.notes.isEmpty ? '' : '\n${r.notes.join('\n')}'}');
+  }
+
+  Future<void> _undoFit() async {
+    final b = _beforeFit;
+    if (b == null) return;
+    _beforeFit = null;
+    await _stopPlayback();
+    await _set(b, msg: 'ညှိတာ နောက်ပြန်ပြီး');
+  }
+
   Future<void> _voicesFromStage3() async {
     final clips = await _audioRepo.forProject(_pid);
     if (clips.isEmpty) {
@@ -413,6 +440,11 @@ class _EditorPanelState extends State<EditorPanel> {
         const SizedBox(height: 12),
         _title('၂။ အသံ (narration) · ${_tl.voices.length} ခု'),
         OutlinedButton(onPressed: _voicesFromStage3, child: const Text('အဆင့် ၃ က အသံတွေ အစဉ်လိုက်ထည့်')),
+        if (_tl.pieces.isNotEmpty && _tl.voices.isNotEmpty)
+          Wrap(spacing: 8, children: [
+            FilledButton.tonal(onPressed: _fitToVoices, child: const Text('ဗီဒီယိုကို အသံအတိုင်း ညှိ')),
+            if (_beforeFit != null) OutlinedButton(onPressed: _undoFit, child: const Text('နောက်ပြန်')),
+          ]),
         for (var i = 0; i < _tl.voices.length; i++) _voiceRow(i),
         const SizedBox(height: 12),
         _title('၃။ Background music'),
@@ -449,6 +481,14 @@ class _EditorPanelState extends State<EditorPanel> {
         ]),
         const SizedBox(height: 12),
         _title('စာတန်း style'),
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          for (final pr in subPresets)
+            ChoiceChip(
+              label: Text(pr.label, style: const TextStyle(fontSize: 12.5)),
+              selected: matchingPreset(_tl.style)?.id == pr.id,
+              onSelected: (_) => _set(_tl.copyWith(style: pr.style)),
+            ),
+        ]),
         _slider('အရွယ်', _tl.style.size, (v) => _set(_tl.copyWith(style: _tl.style.copyWith(size: v))), min: 0.03, max: 0.09),
         _ColorRow(selected: _tl.style.color, onPick: (c) => _set(_tl.copyWith(style: _tl.style.copyWith(color: c)))),
         SwitchListTile(
@@ -464,6 +504,13 @@ class _EditorPanelState extends State<EditorPanel> {
           title: const Text('အပေါ်မှာ ထား (မဟုတ်ရင် အောက်)'),
           value: _tl.style.top,
           onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(top: v))),
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text('စာတန်း fade in/out'),
+          value: _tl.style.fade,
+          onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(fade: v))),
         ),
         const SizedBox(height: 12),
         _title('Logo (ကိုယ်ပိုင်ပုံ)'),

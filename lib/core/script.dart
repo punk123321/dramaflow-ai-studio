@@ -11,10 +11,14 @@ final RegExp _sentence = RegExp(r'[^။.!?。！？]+[။.!?。！？]*|[။.!?�
 List<String> splitScript(String text, {int maxChars = 1500}) {
   final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
   if (normalized.isEmpty) return [];
-  final pieces = <String>[];
+  final pieces = <String?>[]; // null = hard break between parts
   for (final line in normalized.split('\n')) {
     final t = line.trim();
     if (t.isEmpty) continue;
+    if (t == '---') {
+      if (pieces.isNotEmpty && pieces.last != null) pieces.add(null);
+      continue;
+    }
     for (final m in _sentence.allMatches(t)) {
       final u = m.group(0)!.trim();
       if (u.isEmpty) continue;
@@ -30,6 +34,13 @@ List<String> splitScript(String text, {int maxChars = 1500}) {
   final chunks = <String>[];
   final cur = StringBuffer();
   for (final p in pieces) {
+    if (p == null) {
+      if (cur.isNotEmpty) {
+        chunks.add(cur.toString());
+        cur.clear();
+      }
+      continue;
+    }
     if (cur.isNotEmpty && cur.length + 1 + p.length > maxChars) {
       chunks.add(cur.toString());
       cur.clear();

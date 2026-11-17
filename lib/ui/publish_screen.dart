@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/fair_use.dart';
+import '../core/gemini_tts.dart';
+import 'package:path_provider/path_provider.dart';
 import '../core/publish_text.dart';
 import '../core/theme.dart';
+import '../data/ai_settings_repo.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
 import '../platform/gemini_open.dart';
+import '../platform/gemini_tts_client.dart';
 import '../platform/render_channel.dart';
 import 'widgets.dart';
 
@@ -29,6 +33,10 @@ class _PublishScreenState extends State<PublishScreen> {
   final _repo = HandoffRepo();
   final _desc = TextEditingController();
   final _thumbText = TextEditingController();
+  final _imgPrompt = TextEditingController();
+  GeminiTtsSettings _ai = const GeminiTtsSettings();
+  String _aspect = '16:9';
+  bool _drawing = false;
   PublishText _text = const PublishText();
   FairUseRecord _fair = const FairUseRecord();
   String _script = '';
@@ -53,6 +61,7 @@ class _PublishScreenState extends State<PublishScreen> {
   void dispose() {
     _desc.dispose();
     _thumbText.dispose();
+    _imgPrompt.dispose();
     super.dispose();
   }
 
@@ -62,6 +71,8 @@ class _PublishScreenState extends State<PublishScreen> {
       _fair = FairUseRecord.decode(await _repo.getDoc(_pid, DocKind.fairUse));
       _script = await _repo.getDoc(_pid, DocKind.script) ?? '';
       _desc.text = _text.description;
+      _ai = await AiSettingsRepo().load();
+      _imgPrompt.text = defaultImagePrompt(widget.project.dramaTitle);
     } catch (e) {
       _error = 'ဖတ်လို့မရပါ: $e';
     }
@@ -148,6 +159,26 @@ class _PublishScreenState extends State<PublishScreen> {
     if (mounted) setState(() => _busy = false);
   }
 
+  /// Gemini draws a picture from the prompt (internet, the user's own key, only on tap).
+  Future<void> _draw() async {
+    setState(() {
+      _drawing = true;
+      _error = null;
+    });
+    try {
+      final img = await geminiDraw(_ai, _imgPrompt.text.trim(), _aspect);
+      final dir = await getTemporaryDirectory();
+      final f = File('${dir.path}/gemini_thumb_${DateTime.now().millisecondsSinceEpoch}.${img.extension}');
+      await f.writeAsBytes(img.bytes, flush: true);
+      _ownPic = f.path;
+      _thumbPath = f.path;
+      _thumbNote = 'Gemini ဆွဲထားတဲ့ ပုံပါ။ ကြိုက်ရင် အောက်မှာ စာထည့်ပြီး "ကိုယ့်ပုံကို သိမ်းမယ်" နှိပ်ပါ။ မကြိုက်ရင် ထပ်ဆွဲခိုင်းပါ။';
+    } catch (e) {
+      _error = e is GeminiTtsException ? e.message : 'ဆွဲလို့မရပါ: $e';
+    }
+    if (mounted) setState(() => _drawing = false);
+  }
+
   Future<void> _pickOwn() async {
     try {
       final f = await AudioChannel.pickImage();
@@ -227,6 +258,60 @@ class _PublishScreenState extends State<PublishScreen> {
                 const SectionTitle('Thumbnail'),
                 const Text('မူရင်းဗီဒီယိုထဲက frame တစ်ခုကို ယူပြီး စာထည့်မယ်။ မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
                 const SizedBox(height: 6),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Gemini ကို ပုံဆွဲခိုင်းမယ်', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  children: [
+                    TextField(
+                      controller: _imgPrompt,
+                      minLines: 3,
+                      maxLines: 6,
+                      decoration: const InputDecoration(labelText: 'ဘာဆွဲခိုင်းမလဲ (ပြင်လို့ရ)', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 6, children: [
+                      for (final a in imageAspects)
+                        ChoiceChip(label: Text(a), selected: _aspect == a, onSelected: (_) => setState(() => _aspect = a)),
+                    ]),
+                    const SizedBox(height: 6),
+                    const Text('နည်း ၁ — Gemini app (chat) နဲ့၊ API key မလိုပါ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        final msg = await openInGemini('${_imgPrompt.text.trim()}\nMake the picture $_aspect shaped.');
+                        _toast('$msg ပုံထွက်ရင် Gemini ထဲမှာ သိမ်း (Download) ပြီး ပြန်လာ၊ အောက်က "ကိုယ်တိုင်ဒီဇိုင်းဆွဲထားတဲ့ ပုံ ရွေးမယ်" ကို နှိပ်ပါ။');
+                      },
+                      icon: const Icon(Icons.open_in_new, size: 18),
+                      label: const Text('Gemini app ဖွင့်ပြီး ဆွဲခိုင်းမယ်'),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'ပုံထွက်လာရင် Gemini ထဲမှာ သိမ်းပါ။ ပြီးရင် ဒီ app က "ကိုယ်တိုင်ဒီဇိုင်းဆွဲထားတဲ့ ပုံ ရွေးမယ်" နဲ့ ရွေးပြီး စာထည့်၊ သိမ်းလို့ရတယ်။ '
+                      'Gemini app ထဲမှာ ပုံဆွဲခွင့် ရှိမရှိက ကိုယ့် account ပေါ် မူတည်တယ်။',
+                      style: TextStyle(fontSize: 11.5, color: DfColors.muted),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('နည်း ၂ — API နဲ့ (app ထဲမှာ တန်းဆွဲ)${_ai.ready ? '' : ' · key မရှိသေး'}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    if (!_ai.ready)
+                      const Text('API key ကို Stage 3 → Audio → "Gemini API အသံ" မှာ ထည့်ပါ (key တစ်ခုတည်းကို သုံးတယ်)။', style: TextStyle(color: DfColors.warn, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    FilledButton.tonalIcon(
+                      onPressed: (!_ai.ready || _drawing || _busy) ? null : _draw,
+                      icon: const Icon(Icons.auto_awesome, size: 18),
+                      label: Text(_drawing ? 'ဆွဲနေတယ်...' : 'API နဲ့ ဆွဲမယ်'),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4, bottom: 8),
+                      child: Text(
+                        'နည်း ၂ နှိပ်တဲ့အခါ အပေါ်က prompt စာသားကို Google ဆီ internet နဲ့ ပို့ပါတယ်။ ကိုယ့် key ရဲ့ သုံးခွင့်/ကုန်ကျစရိတ် ကျတယ်။ '
+                        'ဇာတ်ကားထဲက တကယ့်ဇာတ်ဆောင်၊ ဇာတ်ကောင်၊ logo ကို အတိအကျ ဆွဲခိုင်းတာမျိုး မလုပ်ပါနဲ့၊ ကိုယ်ပိုင်ပုံစံပဲ ခိုင်းပါ။ '
+                        'ထွက်လာတဲ့ ပုံက ကိုယ်ပိုင်မူပိုင်ခွင့် ကိစ္စ ကင်းတယ်လို့ ကျွန်တော် အာမခံလို့ မရပါဘူး၊ တင်ခင် ကိုယ်တိုင်ကြည့်ပါ။ '
+                        'ဒါကို Google ကို တကယ်မခေါ်ကြည့်ရသေးလို့ error ပေါ်ရင် စာကို ပြောပြပါ။',
+                        style: TextStyle(fontSize: 11.5, color: DfColors.muted),
+                      ),
+                    ),
+                  ],
+                ),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _pickOwn,
                   icon: const Icon(Icons.brush_outlined, size: 18),

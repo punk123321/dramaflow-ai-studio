@@ -141,6 +141,15 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
                   children: [
                     const Divider(color: DfColors.line, height: 1),
                     const SizedBox(height: 10),
+                    if (!done && (s == Stage.copy || s == Stage.tts || s == Stage.edit))
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => store.setStageDone(p, s, true),
+                          icon: const Icon(Icons.skip_next, size: 18),
+                          label: const Text('ဒီအဆင့် မလိုဘူး၊ ကျော်မယ်'),
+                        ),
+                      ),
                     if (s == Stage.videoIndex)
                       VideoIndexPanel(project: p)
                     else if (s == Stage.copy)

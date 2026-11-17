@@ -57,6 +57,12 @@ class AudioChannel {
     return _file(r!);
   }
 
+  /// Stores audio made elsewhere (a WAV from the Gemini API) in the app's audio folder.
+  static Future<AudioFile> saveAudioBytes(String name, Uint8List bytes) async {
+    final r = await _channel.invokeMapMethod<String, Object?>('saveAudioBytes', {'name': name, 'bytes': bytes});
+    return _file(r!);
+  }
+
   /// Null when the user cancels.
   static Future<AudioFile?> pickAudio() async {
     final r = await _channel.invokeMapMethod<String, Object?>('pickAudio');

@@ -30,6 +30,9 @@ class HandoffChannel {
     }
   }
 
+  /// Opens an http(s) address in the phone's browser. False when it cannot.
+  static Future<bool> openUrl(String url) async => (await _channel.invokeMethod<bool>('openUrl', {'url': url})) ?? false;
+
   /// Returns null when the user cancels. Throws [PlatformException] when the
   /// file cannot be read.
   static Future<PickedText?> pickTextFile() async {

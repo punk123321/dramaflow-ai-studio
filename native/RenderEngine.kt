@@ -2,6 +2,7 @@ package com.dramaflow.aistudio
 
 import android.app.Activity
 import android.content.ContentValues
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -26,6 +27,7 @@ import android.provider.MediaStore
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
+import android.text.style.AlignmentSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.view.WindowManager
@@ -88,6 +90,40 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     private var polling = false
     private val tempFrames = ArrayList<File>()
 
+    // Background keep-alive (see RenderService). [keepAlive] holds the service up
+    // between the parts of a queue.
+    private var keepAlive = false
+    private var note = ""
+    private var lastPct = -1
+
+    private fun serviceOn() {
+        try {
+            val i = Intent(activity, RenderService::class.java)
+                .putExtra("text", if (note.isNotEmpty()) note else "Render")
+                .putExtra("percent", lastPct)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.startForegroundService(i) else activity.startService(i)
+        } catch (e: Exception) {
+            // Not allowed right now: the render still runs while the app stays open.
+        }
+    }
+
+    private fun serviceOff() {
+        if (keepAlive) return
+        try {
+            activity.stopService(Intent(activity, RenderService::class.java))
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun askNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            activity.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            // Only decides whether the progress notification is shown; the render does not depend on it.
+            activity.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 4199)
+        }
+    }
+
     private val rendersDir: File
         get() = File(activity.filesDir, "renders").apply { mkdirs() }
 
@@ -98,7 +134,28 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 cancel()
                 result.success(null)
             }
+            "renderKeepAlive" -> {
+                keepAlive = args?.get("on") as? Boolean ?: false
+                note = args?.get("text") as? String ?: ""
+                if (keepAlive) {
+                    askNotificationPermission()
+                    serviceOn()
+                } else {
+                    lastPct = -1
+                    serviceOff()
+                }
+                result.success(null)
+            }
             "makeThumbnail" -> makeThumbnail(args, result)
+            "uriReadable" -> {
+                val u = args?.get("uri") as? String ?: ""
+                val ok = try {
+                    activity.contentResolver.openFileDescriptor(Uri.parse(u), "r")?.use { true } ?: false
+                } catch (e: Exception) {
+                    false
+                }
+                result.success(ok)
+            }
             "renderFreeBytes" -> result.success(StatFs(rendersDir.path).availableBytes)
             "saveToGallery" -> saveToGallery(
                 args?.get("path") as? String ?: "",
@@ -174,6 +231,9 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 .build()
             transformer = t
             activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            askNotificationPermission()
+            lastPct = 0
+            serviceOn()
             t.start(composition, part.absolutePath)
             startPolling()
             result.success(null)
@@ -181,6 +241,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             transformer = null
             clearTempFrames()
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            serviceOff()
             result.error("render_failed", e.message ?: e.toString(), null)
         }
     }
@@ -387,7 +448,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val st = job.optJSONObject("subStyle")
             val sizePx = ((st?.optDouble("size", 0.05) ?: 0.05) * base).toInt().coerceAtLeast(14)
             val color = (st?.optLong("color", 0xFFFFFFFFL) ?: 0xFFFFFFFFL).toInt()
-            overlays.add(SubtitleOverlay(list, sizePx, color, st?.optBoolean("bg", true) ?: true, st?.optBoolean("top", false) ?: false))
+            overlays.add(SubtitleOverlay(list, sizePx, color, st?.optBoolean("bg", true) ?: true, st?.optBoolean("top", false) ?: false, st?.optBoolean("fade", false) ?: false))
         }
 
         val corners = job.optJSONArray("corners")
@@ -653,19 +714,31 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         private val sizePx: Int,
         private val color: Int,
         private val background: Boolean,
-        private val top: Boolean
+        private val top: Boolean,
+        private val fade: Boolean = false
     ) : TextOverlay() {
         override fun getText(presentationTimeUs: Long): SpannableString {
             val ms = presentationTimeUs / 1000L
-            val line = subs.firstOrNull { ms >= it.startMs && ms < it.endMs }?.text
+            val cur = subs.firstOrNull { ms >= it.startMs && ms < it.endMs }
+            val line = cur?.text
             // No subtitle now: an invisible space with no background, or the
             // background colour would show as a small dark box.
             if (line == null) return SpannableString(" ")
+            // Fade: full strength in the middle, ramping over 250 ms at both ends
+            // (in 5 steps, so the picture is not redrawn on every frame).
+            var level = 1f
+            if (fade && cur != null) {
+                val edge = minOf(ms - cur.startMs, cur.endMs - ms).coerceAtLeast(0L)
+                if (edge < 250L) level = (((edge * 5) / 250L).toInt() + 1).coerceAtMost(5) / 5f
+            }
             val s = SpannableString(line)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-            s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            // Every line of a wrapped subtitle is centred (the default is left-aligned).
+            s.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            val fg = Color.argb((Color.alpha(color) * level).toInt(), Color.red(color), Color.green(color), Color.blue(color))
+            s.setSpan(ForegroundColorSpan(fg), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             if (background) {
-                s.setSpan(BackgroundColorSpan(Color.argb(150, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+                s.setSpan(BackgroundColorSpan(Color.argb((150 * level).toInt(), 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             }
             return s
         }
@@ -765,6 +838,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             if (ms < startMs || ms >= endMs || text.isBlank()) return SpannableString(" ")
             val s = SpannableString(text)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            s.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             if (background) {
                 s.setSpan(BackgroundColorSpan(Color.argb(170, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
@@ -808,6 +882,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         override fun getText(presentationTimeUs: Long): SpannableString {
             val s = SpannableString(text)
             s.setSpan(AbsoluteSizeSpan(sizePx), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+            val rightSide = !(corner == 0 || corner == 2)
+            s.setSpan(
+                AlignmentSpan.Standard(if (rightSide) Layout.Alignment.ALIGN_OPPOSITE else Layout.Alignment.ALIGN_NORMAL),
+                0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE
+            )
             s.setSpan(ForegroundColorSpan(color), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             s.setSpan(BackgroundColorSpan(Color.argb(110, 0, 0, 0)), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
             return s
@@ -831,6 +910,10 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 }
                 if (t.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {
                     channel.invokeMethod("renderProgress", hashMapOf("percent" to holder.progress))
+                    if (holder.progress != lastPct) {
+                        lastPct = holder.progress
+                        serviceOn()
+                    }
                 }
                 main.postDelayed(this, 500)
             }
@@ -846,6 +929,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             polling = false
             clearTempFrames()
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            serviceOff()
             if (ok && part != null && fin != null && part.exists() && part.renameTo(fin)) {
                 channel.invokeMethod(
                     "renderDone",
@@ -864,6 +948,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         transformer = null
         polling = false
         activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        serviceOff()
         partFile?.delete()
         channel.invokeMethod("renderCanceled", null)
     }

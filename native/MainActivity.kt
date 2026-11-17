@@ -48,7 +48,7 @@ class MainActivity : FlutterActivity() {
     private val micPermissionCode = 4201
     private val geminiPackage = "com.google.android.apps.bard"
     private val maxShareChars = 200_000
-    private val maxImportBytes = 5 * 1024 * 1024
+    private val maxImportBytes = 50 * 1024 * 1024
 
     private val pending = HashMap<Int, MethodChannel.Result>()
     private var pendingSaveText: String? = null
@@ -85,6 +85,16 @@ class MainActivity : FlutterActivity() {
                         result.success(shareText(text, gemini))
                     }
                     "pickTextFile" -> startPickText(result)
+                    "openUrl" -> {
+                        val u = call.argument<String>("url") ?: ""
+                        val ok = (u.startsWith("https://") || u.startsWith("http://")) && try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            true
+                        } catch (e: Exception) {
+                            false
+                        }
+                        result.success(ok)
+                    }
                     "saveTextFile" -> {
                         val name = call.argument<String>("name") ?: "subtitles.srt"
                         val text = call.argument<String>("text") ?: ""
@@ -113,6 +123,30 @@ class MainActivity : FlutterActivity() {
                         call.argument<String>("name") ?: "audio.wav",
                         call.argument<String>("mime") ?: "application/octet-stream"
                     )
+                    "saveAudioBytes" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val safe = (call.argument<String>("name") ?: "api_" + System.currentTimeMillis()).replace(Regex("[^A-Za-z0-9_.-]"), "_")
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("empty", "No audio", null)
+                        } else {
+                            worker.execute {
+                                try {
+                                    val out = File(audioDir(), "$safe.wav")
+                                    out.writeBytes(bytes)
+                                    val d = durationOf(out.absolutePath)
+                                    runOnUiThread {
+                                        if (d > 0L) result.success(hashMapOf("path" to out.absolutePath, "durationMs" to d, "sizeBytes" to out.length()))
+                                        else {
+                                            out.delete()
+                                            result.error("empty_audio", "The audio could not be read", null)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    runOnUiThread { result.error("save_failed", e.message ?: e.toString(), null) }
+                                }
+                            }
+                        }
+                    }
                     "deleteFile" -> {
                         val f = File(call.argument<String>("path") ?: "")
                         val ok = f.absolutePath.startsWith(File(filesDir, "audio").absolutePath) && f.delete()
@@ -188,7 +222,7 @@ class MainActivity : FlutterActivity() {
             type = "*/*"
             putExtra(
                 Intent.EXTRA_MIME_TYPES,
-                arrayOf("text/plain", "text/*", "application/x-subrip", "application/octet-stream")
+                arrayOf("*/*", "text/plain", "text/*", "application/json", "application/x-subrip", "application/octet-stream")
             )
         }
         launch(pickTextCode, intent)
@@ -703,7 +737,7 @@ class MainActivity : FlutterActivity() {
                 if (n < 0) break
                 total += n
                 if (total > maxImportBytes) {
-                    throw IllegalStateException("File is larger than 5 MB")
+                    throw IllegalStateException("File is larger than 50 MB")
                 }
                 buf.write(chunk, 0, n)
             }

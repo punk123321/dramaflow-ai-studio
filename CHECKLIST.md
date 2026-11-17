@@ -334,3 +334,109 @@ Not built, on purpose: covering other people's watermarks, flip/mirror, voice cl
 - Confirmed OK by the user: 8-second sample render, Split Screen, blur background, 9:16 with black bars, crop.
 - Not tested yet: Brightness/Contrast, Thumbnail (frame, own picture, Gemini text).
 - Problem found: with 9:16 (TikTok/Shorts/Reels) text ran outside the picture. Fix: subtitles, labels and corner text are now wrapped to the picture width in the renderer (native/RenderEngine.kt wrapText). Phone-tested: no.
+
+## TE-12: polish (branch claude/te-12-polish)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Subtitle presets (5 looks) in the Editor | yes (limits, matching) | no |
+| Subtitle fade in/out (250 ms, 5 steps) | JSON + compiles on CI | no |
+| Warning in Render when the original video can no longer be opened | compiles on CI | no |
+| Warning when narration, music or logo files are gone | yes | no |
+| Backup of all projects to one JSON file; restore adds them as NEW projects, nothing overwritten | yes (parse, round trip, damaged input) | no |
+
+Backup does NOT contain videos, audio, pictures or finished MP4s.
+Not built: audio-based silence detection (cannot be tested without a phone, so it was left out rather than guessed).
+
+## TE-13: optional Gemini API narration (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Key, model and voice saved locally; works with no key (phone TTS, Mic, files unchanged) | yes (settings round trip) | no |
+| Request body for both model families, reply reading (base64 PCM/WAV), WAV header, error text without the key | yes (gemini_tts_test) | no |
+| Network call (dart:io HttpClient), INTERNET permission added to the manifest patch | compiles on CI | no |
+| Audio saved to the app's audio folder and used as a normal narration clip | compiles on CI | no |
+
+NOT verified: the real Gemini reply. The request shape for the newer "interactions" endpoint
+was taken from the public docs and could not be called from the build machine. If the first
+call fails, the app shows Google's error text; send it and the request is adjusted.
+The key is plain text in the app's private database and is not in backups. Chunk text is sent to Google.
+
+## TE-14: Gemini draws the thumbnail (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Request (picture + aspect ratio), reply reading, settings with a separate picture model | yes (gemini_tts_test) | no |
+| Publish screen: prompt, shape, "Gemini နဲ့ ဆွဲမယ်"; the result goes through the same own-picture path (add text, save to Pictures/DramaFlow) | compiles on CI | no |
+
+Not verified against the real API (same as TE-13). Default picture model is gemini-3.1-flash-image
+(from Google's Firebase documentation; the REST shape is the standard generateContent one).
+The prompt text is sent to Google. No copyright guarantee for generated pictures; the default
+prompt asks for original characters, no real people, no logos, no text.
+
+## TE-15: fast lane for people who already have a Burmese SRT (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Home tile "အမြန်လမ်း": pick video, bring in SRT (file or clipboard), choose original sound on/off, then Render and Save on one screen | compiles on CI | no |
+| Whole video becomes one piece (the user's own cuts are kept if they exist); subtitles are burned in | compiles on CI | no |
+| "ဒီအဆင့် မလိုဘူး၊ ကျော်မယ်" on the Gemini, TTS and Editor stages in the guided workflow (marks the stage done) | compiles on CI | no |
+
+The fast lane does not make the video index, narration or edit. A skipped stage is only marked done.
+
+## TE-16: cut video and SRT into parts at subtitle lines (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Parts built from break lines; each part ends exactly where the next starts, at a line start; no picture lost | yes (srt_split_test) | no |
+| Auto split every N lines / every M minutes (never mid-line); manual ✂ per line | yes | no |
+| SRT of each part counts from 0:00, text unchanged, a line crossing the cut is shortened; overlap warning | yes | no |
+| Save each part's SRT (file dialog per part) | compiles on CI | no |
+| One MP4 per part, rendered one after another, optionally saved to Gallery each time | compiles on CI | no |
+
+Parts are made from the original video only: no narration, no TE operations. Style, logo and corner text come from the Editor settings.
+
+## TE-17: output file size control (same branch)
+| Item | Automated | Phone-tested |
+|---|---|---|
+| Quality menu (Auto, 1 to 8 Mbps) and 480p in Render and in the SRT split screen | yes (bitrate and estimate tests) | no |
+| Auto sets the video bitrate close to the original file's (never above the normal value for the size) | yes | no |
+| Real file size matches the estimate | no | no |
+
+Reason: the fixed 4 or 8 Mbps made a 1 GB original into about 6 GB. The size shown before rendering is an estimate; the encoder can differ.
+
+TE-16 addition: every part has its own "MP4" button (renders just that part, then saves it to Gallery if the switch is on) next to "SRT". Phone-tested: no.
+
+Fix (user report 2026-11-13): wrapped subtitle lines were left-aligned inside their box, so the text did not look centred. Subtitles and Motion labels are now centred line by line; corner text is aligned to its own side. Phone-tested: no.
+
+## TE-18 — Background render + pause (te-12)
+
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Foreground service + progress notification keeps render alive with screen off | pending CI | **No** |
+| Notification permission asked on Android 13+ | pending CI | **No** |
+| SRT split: "ခဏရပ်/ဆက်လုပ်" before the next part (multi-part runs) | pending CI | **No** |
+
+Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current part ends; a single file can only be cancelled. Some phones' battery savers can still stop background work.
+
+## Phone result (user, 2026-11-13, te-12 APK)
+- Works: items 1-5 (centering/9:16 wrap, Brightness, thumbnail, presets/fade, Backup file saved) and items 7-9 (fast lane, SRT/video parts with per-part MP4, Auto quality file size).
+- Restore did not work: the file picker probably hid the .json file (MIME filter lacked application/json). Fix: picker now accepts all types, import limit raised to 50 MB. Not phone-tested yet.
+- Item 6 (Gemini API): request reached Google and the reply was read (403: free tier not available, billing needed). Result of picture/voice drawing itself is NOT confirmed. Chat route (copy/paste) needs no key. Error text now explains billing.
+- Phone-confirmed (user, 2026-11-13): Restore works after the picker fix; pause/resume between parts works; render keeps going with the screen off (TE-18).
+
+## TE-19: fit video to narration (te-12)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| "ဗီဒီယိုကို အသံအတိုင်း ညှိ": piece N gets the length of voice N, voice starts at its piece; undo button | pending CI | **No** |
+Rules: pairs by order; piece end moves in the original video (the file is never changed); video too short is reported; extra voices/pieces are reported. Preview still does not play narration with the video.
+
+## TE-20: Video Recap, Gemini watches the video (te-12)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Home tile "Video Recap": per-part prompt (5 parts per prompt), Gemini open/copy, reply split by "=== PART n ===", save as narration script (one part = one voice) | pending CI | **No** |
+Limits: the app does NOT send the video; the user attaches it in the Gemini app. Whether Gemini can watch the video (length/size limits) and how good the script is are NOT checked. Parts come from Video Index, or 1-minute parts if none (then saved as the Video Index).
+
+## TE-21: News (RSS) reader inside DramaFlow (te-12)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Home tile "သတင်း (RSS)": loads the user's RSS/Atom feeds, newest first, category chips, pull to refresh, cached for offline | pending CI | **No** |
+| Tap a story: new layer slides in (title, source, age, snippet, "မူရင်းမှာ ဖတ်" opens the browser) | pending CI | **No** |
+| Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | pending CI | **No** |
+| Feed manager: add/switch off/delete, suggestions restore | pending CI | **No** |
+Rules: only headline, link, time and a ~220 character snippet are kept; no article copy, no pictures, no video from news sites. Feed links in the suggested list were NOT checked (the build session could not reach them): the user must try them on the phone. Parser is tested on sample RSS/Atom text only, not on live feeds. News data is app-wide and not part of Backup.

@@ -136,6 +136,44 @@ Sure!
     });
   });
 
+  group('file size control', () {
+    test('auto with a known source stays near the original and never above the normal value', () {
+      // a 1 GB, 2 hour file is about 1.1 Mbps
+      final src = sourceBitsPerSecond(1073741824, 2 * 3600 * 1000);
+      expect(src, inInclusiveRange(1100000, 1250000));
+      final b = videoBitrate(RenderSettings(height: 720, sourceBps: src));
+      expect(b, lessThan(1500000));
+      expect(b, greaterThanOrEqualTo(800000));
+      // a very high bitrate source is capped at the normal value
+      expect(videoBitrate(const RenderSettings(height: 720, sourceBps: 30000000)), 4000000);
+    });
+
+    test('auto without a known source uses the normal value for the size', () {
+      expect(videoBitrate(const RenderSettings(height: 1080)), 8000000);
+      expect(videoBitrate(const RenderSettings(height: 480)), 1800000);
+    });
+
+    test('a chosen quality wins and sets the estimate', () {
+      expect(videoBitrate(const RenderSettings(videoKbps: 1500, sourceBps: 30000000)), 1500000);
+      final small = estimateBytes(7200000, const RenderSettings(videoKbps: 1500));
+      final big = estimateBytes(7200000, const RenderSettings(videoKbps: 6000));
+      expect(small, lessThan(big));
+      // 2 h at 1.5 Mbps + audio is about 1.5 GB
+      expect(small, inInclusiveRange(1400000000, 1700000000));
+    });
+
+    test('source bitrate is 0 when size or length is unknown', () {
+      expect(sourceBitsPerSecond(null, 1000), 0);
+      expect(sourceBitsPerSecond(100, 0), 0);
+    });
+
+    test('quality labels', () {
+      expect(qualityLabel(0), contains('Auto'));
+      expect(qualityLabel(1500), '1.5 Mbps');
+      expect(qualityLabel(4000), '4 Mbps');
+    });
+  });
+
   group('sample render', () {
     test('cuts the pieces at the limit and keeps their order', () {
       final tl = Timeline(pieces: const [VideoPiece(0, 5000), VideoPiece(20000, 30000)]);
