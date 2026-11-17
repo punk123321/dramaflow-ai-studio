@@ -61,14 +61,21 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(text: 'Drama'),
-              TextSpan(text: 'Flow', style: TextStyle(color: DfColors.accent)),
-            ],
-          ),
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const BrandMark(size: 34),
+            const SizedBox(width: 10),
+            Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(text: 'RGyi ', style: TextStyle(fontWeight: FontWeight.w800)),
+                  TextSpan(text: 'Recap', style: TextStyle(color: DfColors.accent, fontWeight: FontWeight.w800)),
+                ],
+              ),
+              style: const TextStyle(fontSize: 21, letterSpacing: -0.5),
+            ),
+          ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
