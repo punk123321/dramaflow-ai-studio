@@ -431,3 +431,12 @@ Rules: pairs by order; piece end moves in the original video (the file is never 
 |---|---|---|
 | Home tile "Video Recap": per-part prompt (5 parts per prompt), Gemini open/copy, reply split by "=== PART n ===", save as narration script (one part = one voice) | pending CI | **No** |
 Limits: the app does NOT send the video; the user attaches it in the Gemini app. Whether Gemini can watch the video (length/size limits) and how good the script is are NOT checked. Parts come from Video Index, or 1-minute parts if none (then saved as the Video Index).
+
+## TE-21: News (RSS) reader inside DramaFlow (te-12)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Home tile "သတင်း (RSS)": loads the user's RSS/Atom feeds, newest first, category chips, pull to refresh, cached for offline | pending CI | **No** |
+| Tap a story: new layer slides in (title, source, age, snippet, "မူရင်းမှာ ဖတ်" opens the browser) | pending CI | **No** |
+| Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | pending CI | **No** |
+| Feed manager: add/switch off/delete, suggestions restore | pending CI | **No** |
+Rules: only headline, link, time and a ~220 character snippet are kept; no article copy, no pictures, no video from news sites. Feed links in the suggested list were NOT checked (the build session could not reach them): the user must try them on the phone. Parser is tested on sample RSS/Atom text only, not on live feeds. News data is app-wide and not part of Backup.

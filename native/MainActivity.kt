@@ -85,6 +85,16 @@ class MainActivity : FlutterActivity() {
                         result.success(shareText(text, gemini))
                     }
                     "pickTextFile" -> startPickText(result)
+                    "openUrl" -> {
+                        val u = call.argument<String>("url") ?: ""
+                        val ok = (u.startsWith("https://") || u.startsWith("http://")) && try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            true
+                        } catch (e: Exception) {
+                            false
+                        }
+                        result.success(ok)
+                    }
                     "saveTextFile" -> {
                         val name = call.argument<String>("name") ?: "subtitles.srt"
                         val text = call.argument<String>("text") ?: ""
