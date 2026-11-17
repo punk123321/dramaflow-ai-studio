@@ -52,7 +52,7 @@ jobs:
           if "mavenCentral()" not in block:
               additions.append("mavenCentral()")
           if additions:
-              text = text[:start] + "\\n        ".join([""] + additions) + text[start:]
+              text = text[:start] + "\n        ".join([""] + additions) + text[start:]
               p.write_text(text)
           print("Android plugin repositories verified.")
           PY
