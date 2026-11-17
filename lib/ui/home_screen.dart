@@ -36,7 +36,7 @@ IconData _moduleIcon(String code) {
     'GM' => Icons.auto_awesome,
     'ST' => Icons.closed_caption_outlined,
     'TT' => Icons.record_voice_over_outlined,
-    'ED' => Icons.movie_edit_outlined,
+    'ED' => Icons.movie_outlined,
     'RN' => Icons.high_quality_outlined,
     'DL' => Icons.video_collection_outlined,
     'FU' => Icons.verified_user_outlined,
