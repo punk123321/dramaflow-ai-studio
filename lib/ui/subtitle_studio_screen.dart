@@ -333,8 +333,13 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
                           final e = _entries[i];
                           final isBad = bad.contains(i);
                           return Card(
-                            color: i == _selected ? DfColors.accent.withValues(alpha: 0.12) : DfColors.surface,
-                            margin: const EdgeInsets.only(bottom: 6),
+                            color: i == _selected ? DfColors.accent.withValues(alpha: 0.18) : DfColors.surface,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              side: BorderSide(color: i == _selected ? DfColors.accent : DfColors.line),
+                            ),
                             child: ListTile(
                               dense: true,
                               onTap: () => _edit(i),
@@ -350,8 +355,60 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
                         },
                       ),
                     ),
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                        child: Row(children: [
+                          Expanded(child: _BarButton(icon: Icons.schedule, label: 'အချိန်ရွှေ့', color: const Color(0xFF2F6BFF), onTap: _shiftDialog)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _BarButton(
+                              icon: Icons.edit,
+                              label: 'ပြင်',
+                              color: const Color(0xFF1FB45A),
+                              onTap: () => _edit(_selected.clamp(0, _entries.length - 1)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: _BarButton(icon: Icons.download, label: 'SRT သိမ်း', color: DfColors.accentDeep, onTap: _saveFile)),
+                        ]),
+                      ),
+                    ),
                   ],
                 ),
+    );
+  }
+}
+
+/// Coloured square-ish button used in the bottom bar of the studio screens.
+class _BarButton extends StatelessWidget {
+  const _BarButton({required this.icon, required this.label, required this.color, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        height: 58,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: DfGradients.tile(color)),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 22),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -369,11 +426,19 @@ class _Preview extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      height: 96,
+      height: 112,
       width: double.infinity,
       alignment: Alignment.bottomCenter,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(10)),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: DfColors.line),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF26215E), Color(0xFF0A0B1E)],
+        ),
+      ),
       child: Text(
         entry.text,
         textAlign: TextAlign.center,

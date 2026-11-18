@@ -118,38 +118,137 @@ class DfScaffold extends StatelessWidget {
 }
 
 /// Wide violet gradient button, used for the main action of a page.
+/// With `onPressed: null` it is shown dimmed and does nothing.
 class GradientButton extends StatelessWidget {
   const GradientButton({super.key, required this.label, required this.icon, required this.onPressed});
 
   final String label;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        height: 52,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: DfGradients.primary,
-          boxShadow: [
-            BoxShadow(color: DfColors.accent.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6)),
-          ],
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onPressed,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.white),
-              const SizedBox(width: 8),
-              Text(label, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-            ],
+    final on = onPressed != null;
+    return Opacity(
+      opacity: on ? 1 : 0.45,
+      child: Material(
+        color: Colors.transparent,
+        child: Ink(
+          height: 52,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: DfGradients.primary,
+            boxShadow: on
+                ? [BoxShadow(color: DfColors.accent.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))]
+                : null,
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onPressed,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Rounded dark card used to group the parts of a studio page.
+class DfCard extends StatelessWidget {
+  const DfCard({super.key, required this.child, this.title, this.margin = const EdgeInsets.only(bottom: 12)});
+
+  final Widget child;
+  final String? title;
+  final EdgeInsetsGeometry margin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: margin,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: DfColors.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: DfColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(title!, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            ),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+/// One line of a checklist: green tick when [ok], grey circle otherwise.
+class CheckLine extends StatelessWidget {
+  const CheckLine(this.text, {super.key, required this.ok});
+
+  final String text;
+  final bool ok;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(ok ? Icons.check_circle : Icons.radio_button_unchecked, size: 20, color: ok ? DfColors.ok : DfColors.muted),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
+        ],
+      ),
+    );
+  }
+}
+
+/// Big circular progress with the percentage in the middle.
+class ProgressRing extends StatelessWidget {
+  const ProgressRing({super.key, required this.percent, this.size = 104});
+
+  /// 0 means "no progress known yet" (the ring spins).
+  final int percent;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox.expand(
+            child: CircularProgressIndicator(
+              value: percent <= 0 ? null : percent / 100,
+              strokeWidth: 10,
+              strokeCap: StrokeCap.round,
+              backgroundColor: DfColors.line,
+              color: DfColors.ok,
+            ),
+          ),
+          Text(percent <= 0 ? '…' : '$percent%', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+        ],
       ),
     );
   }

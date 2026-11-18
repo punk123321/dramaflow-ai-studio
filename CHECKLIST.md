@@ -466,3 +466,11 @@ The old keystore and its password were committed in the repo. A new key is creat
 | Home: "Project အသစ်" is a wide gradient button under the tiles (the floating button covered the resume card); duplicate "ဆက်လုပ်ရန်" title removed | Yes (CI green, run 44228633814) | **No** |
 | Settings tab is a real screen: optional Gemini key + model (save / remove), Backup / Restore link, short About | Yes (CI green, run 44228633814) | **No** |
 Unproven: how each inner screen looks on the phone (only Home has been seen in a screenshot). The inner screens keep their old layouts; only the background, app bar, buttons and chips changed. No Language/Theme switch (nothing to switch yet). No Projects tab. Voice Clone is deliberately not built.
+
+## TE-25: inner screens restyled (Render Center, Subtitle Studio, Workflow)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Render Center: "ထုတ်ဖို့ အဆင်သင့်လား" checklist (video readable, pieces, voices, subtitles), progress ring with % and a time-left guess (elapsed ÷ percent, a guess only), gradient "MP4 ထုတ်မယ်" button | pending CI | **No** |
+| Subtitle Studio: rounded list cards, bigger preview, bottom bar "အချိန်ရွှေ့ / ပြင် / SRT သိမ်း" (the same actions as the menu) | pending CI | **No** |
+| Workflow: project header and step cards in the new card style | pending CI | **No** |
+Unproven: how they look on the phone. Not done yet: Voice Studio tabs, Video Editor tool row, "Projects" tab, Translation Studio screen. The progress steps in the mockup ("Preparing / Applying subtitles / Rendering") are NOT shown because the render engine does not report such steps; only the percent is real.

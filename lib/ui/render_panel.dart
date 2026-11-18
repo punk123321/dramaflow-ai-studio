@@ -16,6 +16,7 @@ import '../data/project.dart';
 import '../platform/render_channel.dart';
 import '../state/project_store.dart';
 import '../state/render_store.dart';
+import 'widgets.dart';
 
 String _mb(int bytes) => '${(bytes / 1048576).toStringAsFixed(bytes < 10485760 ? 1 : 0)} MB';
 
@@ -45,6 +46,7 @@ class _RenderPanelState extends State<RenderPanel> {
   int _free = 0;
   bool _videoOk = true;
   bool _markedDone = false;
+  DateTime? _t0; // when the running render was first seen, for the time-left guess
 
   int get _pid => widget.project.id!;
 
@@ -131,6 +133,18 @@ class _RenderPanelState extends State<RenderPanel> {
       });
     }
 
+    String? left;
+    if (mine) {
+      _t0 ??= DateTime.now();
+      final pct = rs.percent;
+      if (pct >= 5) {
+        final ms = (DateTime.now().difference(_t0!).inMilliseconds * (100 - pct) / pct).round();
+        left = _dur(ms);
+      }
+    } else {
+      _t0 = null;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -139,22 +153,31 @@ class _RenderPanelState extends State<RenderPanel> {
           style: TextStyle(color: DfColors.muted, fontSize: 13),
         ),
         const SizedBox(height: 10),
-        _row('အရှည်', dur > 0 ? _dur(dur) : '—'),
-        _row('အပိုင်း', '${_tl.pieces.length}'),
-        if (te.applied.isNotEmpty) _row('TE operation', '${te.applied.length} ခု ပါမယ်'),
-        for (final n in te.infos)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('TE: $n', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+        DfCard(
+          title: 'ထုတ်ဖို့ အဆင်သင့်လား',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CheckLine('မူရင်းဗီဒီယို ဖွင့်လို့ရ', ok: p.hasVideo && _videoOk),
+              CheckLine('အပိုင်း ${_tl.pieces.length} ခု', ok: _tl.pieces.isNotEmpty),
+              CheckLine('အသံ ${_tl.voices.length} ခု · music ${_tl.music == null ? 'မရှိ' : 'ရှိ'}', ok: _tl.voices.isNotEmpty),
+              CheckLine('စာတန်း ${_tl.burnSubtitles ? 'ထည့်ရိုက်မယ်' : 'မထည့်'}', ok: _tl.burnSubtitles),
+              const SizedBox(height: 6),
+              _row('အရှည်', dur > 0 ? _dur(dur) : '—'),
+              if (te.applied.isNotEmpty) _row('TE operation', '${te.applied.length} ခု ပါမယ်'),
+              for (final n in te.infos)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('TE: $n', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+                ),
+              for (final n in te.notes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('TE: $n', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
+                ),
+            ],
           ),
-        for (final n in te.notes)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('TE: $n', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
-          ),
-        _row('အသံ / music', '${_tl.voices.length} / ${_tl.music == null ? 'မရှိ' : 'ရှိ'}'),
-        _row('စာတန်း', _tl.burnSubtitles ? 'ထည့်ရိုက်မယ်' : 'မထည့်'),
-        const SizedBox(height: 8),
+        ),
         const Text('Platform အတွက် အမြန်ရွေး', style: TextStyle(color: DfColors.muted, fontSize: 13)),
         const SizedBox(height: 4),
         Wrap(spacing: 6, runSpacing: 6, children: [
@@ -268,16 +291,34 @@ class _RenderPanelState extends State<RenderPanel> {
           const Padding(padding: EdgeInsets.only(top: 6), child: Text('Render ကို ရပ်လိုက်ပါပြီ။ ဖိုင်အပျက် မကျန်ပါ။', style: TextStyle(fontSize: 13))),
         const SizedBox(height: 8),
         if (mine) ...[
-          LinearProgressIndicator(value: rs.percent <= 0 ? null : rs.percent / 100),
-          const SizedBox(height: 6),
-          Text('ထုတ်နေတယ် ${rs.percent}%', style: const TextStyle(fontSize: 13)),
-          const SizedBox(height: 6),
+          DfCard(
+            child: Row(
+              children: [
+                ProgressRing(percent: rs.percent),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('ထုတ်နေတယ်…', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      const Text('ခဏစောင့်ပါ', style: TextStyle(color: DfColors.muted)),
+                      if (left != null) ...[
+                        const SizedBox(height: 6),
+                        Text('ကျန်ခန့် $left (ခန့်မှန်းချက်)', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           OutlinedButton(onPressed: rs.cancel, child: const Text('ရပ်မယ်')),
         ] else
-          FilledButton.icon(
+          GradientButton(
             onPressed: (blockers.isNotEmpty || otherRunning) ? null : _start,
-            icon: const Icon(Icons.movie_creation_outlined, size: 18),
-            label: Text(otherRunning ? 'တခြား project render လုပ်နေဆဲ' : 'MP4 ထုတ်မယ်'),
+            icon: Icons.movie_creation_outlined,
+            label: otherRunning ? 'တခြား project render လုပ်နေဆဲ' : 'MP4 ထုတ်မယ်',
           ),
         if (!mine)
           Padding(
