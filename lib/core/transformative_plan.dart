@@ -165,6 +165,26 @@ class TransformOp {
         extra: extra,
       );
 
+  /// Same operation with some fields changed. Unknown fields are kept.
+  TransformOp copyWith({
+    int? startMs,
+    int? endMs,
+    String? note,
+    Map<String, Object?>? params,
+    OpStatus? status,
+  }) =>
+      TransformOp(
+        id: id,
+        tool: tool,
+        startMs: startMs ?? this.startMs,
+        endMs: endMs ?? this.endMs,
+        note: note ?? this.note,
+        params: params ?? this.params,
+        status: status ?? this.status,
+        source: source,
+        extra: extra,
+      );
+
   Map<String, Object?> toJson() => {
         ...extra,
         'id': id,
@@ -263,6 +283,10 @@ class TransformativePlan {
 
   TransformativePlan setOpStatus(String id, OpStatus status) =>
       copyWith(ops: [for (final o in ops) o.id == id ? o.withStatus(status) : o]);
+
+  /// Replaces the operation with the same id (used after the user edits it).
+  TransformativePlan replaceOp(TransformOp op) =>
+      copyWith(ops: [for (final o in ops) o.id == op.id ? op : o]);
 
   TransformativePlan removeOp(String id) => copyWith(ops: [for (final o in ops) if (o.id != id) o]);
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -7,9 +8,12 @@ import 'package:video_player/video_player.dart';
 import '../core/srt.dart';
 import '../core/stage.dart';
 import '../core/subtitle_ops.dart';
+import '../core/te_compile.dart';
+import '../core/te_preview.dart';
 import '../core/theme.dart';
 import '../core/sub_presets.dart';
 import '../core/timeline.dart';
+import '../core/transformative_plan.dart';
 import '../core/voice_fit.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
@@ -18,6 +22,8 @@ import '../data/segment_repo.dart';
 import '../platform/audio_channel.dart';
 import '../state/project_store.dart';
 import 'subtitle_studio_screen.dart';
+import 'te_ops_section.dart';
+import 'widgets.dart';
 
 /// Stage 4: arrange the video pieces, narration, music and subtitles.
 /// This only writes an edit description. The original video is never changed;
@@ -48,6 +54,8 @@ class _EditorPanelState extends State<EditorPanel> {
   bool _playAll = false;
   bool _switching = false;
   int _posMs = 0;
+  TransformativePlan _plan = const TransformativePlan();
+  Future<bool>? _initFuture;
 
   int get _pid => widget.project.id!;
   int get _sourceMs => widget.project.videoDurationMs ?? 0;
@@ -71,10 +79,26 @@ class _EditorPanelState extends State<EditorPanel> {
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
+      _plan = TransformativePlan.decode(await _repo.getDoc(_pid, DocKind.transformativePlan));
     } catch (e) {
       _error = 'ဖတ်လို့မရပါ: $e';
     }
     if (mounted) setState(() => _loading = false);
+    // Show the first frame right away so effects can be previewed without pressing play.
+    if (mounted && widget.project.hasVideo) _ensurePlayer();
+  }
+
+  /// Every change to the TE plan is saved at once (no separate save button).
+  Future<void> _setPlan(TransformativePlan p) async {
+    setState(() {
+      _plan = p;
+      _error = null;
+    });
+    try {
+      await _repo.setDoc(_pid, DocKind.transformativePlan, p.encode());
+    } catch (e) {
+      if (mounted) setState(() => _error = 'သိမ်းလို့မရပါ: $e');
+    }
   }
 
   Future<void> _set(Timeline t, {String? msg}) async {
@@ -92,8 +116,15 @@ class _EditorPanelState extends State<EditorPanel> {
 
   // ---- preview ----
 
-  Future<bool> _ensurePlayer() async {
-    if (_vc != null) return true;
+  Future<bool> _ensurePlayer() {
+    if (_vc != null) return Future.value(true);
+    return _initFuture ??= _initPlayer().then((ok) {
+      if (!ok) _initFuture = null;
+      return ok;
+    });
+  }
+
+  Future<bool> _initPlayer() async {
     final uri = widget.project.sourceVideoUri;
     if (uri == null) return false;
     try {
@@ -147,6 +178,50 @@ class _EditorPanelState extends State<EditorPanel> {
     _playingPiece = null;
     await _vc?.pause();
     if (mounted) setState(() {});
+  }
+
+  Future<void> _seek(int ms) async {
+    if (!await _ensurePlayer()) return;
+    final c = _vc!;
+    final dur = c.value.duration.inMilliseconds;
+    final to = ms < 0 ? 0 : (dur > 0 && ms > dur ? dur : ms);
+    await c.seekTo(Duration(milliseconds: to));
+    if (mounted) setState(() => _posMs = to);
+  }
+
+  Future<void> _togglePlay() async {
+    if (!await _ensurePlayer()) return;
+    final c = _vc!;
+    if (c.value.isPlaying) {
+      await _stopPlayback();
+      return;
+    }
+    _playingPiece = null;
+    _playAll = false;
+    final dur = c.value.duration.inMilliseconds;
+    if (dur > 0 && c.value.position.inMilliseconds >= dur - 200) await c.seekTo(Duration.zero);
+    await c.play();
+    if (mounted) setState(() {});
+  }
+
+  /// Moving a label/arrow/picture on the preview: updates the plan in memory
+  /// while dragging; [_dragEnd] saves it.
+  void _dragMotion(String opId, double dx, double dy) {
+    final o = _plan.ops.where((e) => e.id == opId).firstOrNull;
+    if (o == null) return;
+    final x = o.params['x'];
+    final y = o.params['y'];
+    if (x is! num || y is! num) return;
+    final nx = (x + dx).clamp(0.0, 1.0).toDouble();
+    final ny = (y + dy).clamp(0.0, 1.0).toDouble();
+    setState(() => _plan = _plan.replaceOp(o.copyWith(params: {...o.params, 'x': nx, 'y': ny})));
+  }
+
+  void _dragEnd(String opId) {
+    final o = _plan.ops.where((e) => e.id == opId).firstOrNull;
+    if (o == null) return;
+    double r(Object? v) => double.parse(((v as num).toDouble()).toStringAsFixed(2));
+    _setPlan(_plan.replaceOp(o.copyWith(params: {...o.params, 'x': r(o.params['x']), 'y': r(o.params['y'])})));
   }
 
   String? get _currentSubtitle {
@@ -413,9 +488,10 @@ class _EditorPanelState extends State<EditorPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။ ဒီမှာ ရွေးထားတာတွေက "ဘယ်လိုထုတ်မလဲ" ဆိုတဲ့ စာရင်းပဲ။ တကယ်ထုတ်တာ အဆင့် ၅ (Render) မှာပါ။',
-          style: TextStyle(color: DfColors.muted, fontSize: 13),
+        const InfoHint(
+          'မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။ ဒီမှာ ရွေးထားတာတွေက "ဘယ်လိုထုတ်မလဲ" ဆိုတဲ့ စာရင်းပဲ။ တကယ်ထုတ်တာ အဆင့် ၅ (Render) မှာပါ။ '
+          'Preview ကို လိုတဲ့နေရာ ရွှေ့ပြီး effect (ဖြတ်၊ zoom၊ freeze၊ စာသား၊ အသံ …) ထည့်၊ ချက်ချင်းကြည့်၊ ပြင်လို့ရတယ်။',
+          label: 'ဘယ်လိုအလုပ်လုပ်လဲ',
         ),
         const SizedBox(height: 8),
         if (_msg != null || _error != null)
@@ -429,6 +505,15 @@ class _EditorPanelState extends State<EditorPanel> {
             child: Text(_error ?? _msg!, style: const TextStyle(fontSize: 13)),
           ),
         _preview(),
+        _title('Effect စာရင်း · ${_plan.ops.length} ခု'),
+        TeOpsSection(
+          project: widget.project,
+          plan: _plan,
+          posMs: _posMs,
+          onPlan: _setPlan,
+          onSeek: _seek,
+        ),
+        const SizedBox(height: 14),
         _title('၁။ ဗီဒီယို အပိုင်းများ · ${_t(_tl.videoMs)}'),
         Wrap(spacing: 8, children: [
           OutlinedButton(onPressed: _fromIndex, child: const Text('Video Index က ယူ')),
@@ -447,23 +532,7 @@ class _EditorPanelState extends State<EditorPanel> {
           ]),
         for (var i = 0; i < _tl.voices.length; i++) _voiceRow(i),
         const SizedBox(height: 12),
-        _title('၃။ Background music'),
-        if (_tl.music == null)
-          OutlinedButton(onPressed: _pickMusic, child: const Text('Music ရွေး'))
-        else ...[
-          Text('${_tl.music!.name} · ${_t(_tl.music!.durationMs)}', style: const TextStyle(fontSize: 13)),
-          _slider('Music အသံ', _tl.music!.volume, (v) => _set(_tl.copyWith(music: _tl.music!.copyWith(volume: v)))),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('တိုရင် ထပ်ဖွင့်'),
-            value: _tl.music!.loop,
-            onChanged: (v) => _set(_tl.copyWith(music: _tl.music!.copyWith(loop: v))),
-          ),
-          TextButton(onPressed: () => _set(_tl.copyWith(clearMusic: true)), child: const Text('Music ဖျက်')),
-        ],
-        const SizedBox(height: 12),
-        _title('၄။ စာတန်း'),
+        _title('၃။ စာတန်း'),
         SwitchListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
@@ -479,6 +548,30 @@ class _EditorPanelState extends State<EditorPanel> {
             child: const Text('Subtitle Studio'),
           ),
         ]),
+        const SizedBox(height: 12),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('Music · စာတန်း style · Logo · မူရင်းအသံ', style: TextStyle(fontWeight: FontWeight.w600, color: DfColors.accent)),
+            children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        _title('၄။ Background music'),
+        if (_tl.music == null)
+          OutlinedButton(onPressed: _pickMusic, child: const Text('Music ရွေး'))
+        else ...[
+          Text('${_tl.music!.name} · ${_t(_tl.music!.durationMs)}', style: const TextStyle(fontSize: 13)),
+          _slider('Music အသံ', _tl.music!.volume, (v) => _set(_tl.copyWith(music: _tl.music!.copyWith(volume: v)))),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('တိုရင် ထပ်ဖွင့်'),
+            value: _tl.music!.loop,
+            onChanged: (v) => _set(_tl.copyWith(music: _tl.music!.copyWith(loop: v))),
+          ),
+          TextButton(onPressed: () => _set(_tl.copyWith(clearMusic: true)), child: const Text('Music ဖျက်')),
+        ],
         const SizedBox(height: 12),
         _title('စာတန်း style'),
         Wrap(spacing: 6, runSpacing: 4, children: [
@@ -549,6 +642,11 @@ class _EditorPanelState extends State<EditorPanel> {
         _title('၅။ မူရင်းဗီဒီယို အသံ'),
         _slider('အသံ', _tl.originalVolume, (v) => _set(_tl.copyWith(originalVolume: v))),
         const SizedBox(height: 12),
+              ]),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         _title('စစ်ဆေးချက်'),
         if (issues.isEmpty)
           const Text('ပြဿနာ မတွေ့ပါ ✓', style: TextStyle(color: DfColors.ok, fontSize: 13))
@@ -580,30 +678,169 @@ class _EditorPanelState extends State<EditorPanel> {
     if (_previewError != null) {
       return Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(_previewError!, style: const TextStyle(color: DfColors.warn, fontSize: 13)));
     }
-    if (c == null) return const SizedBox.shrink();
+    if (c == null) {
+      return const Padding(padding: EdgeInsets.only(bottom: 10), child: SizedBox(height: 160, child: Center(child: CircularProgressIndicator())));
+    }
+    final ops = _plan.ops;
+    final crop = previewCrop(ops, _posMs);
+    final look = previewLook(ops, _posMs);
+    final motions = previewMotions(ops, _posMs);
+    final badges = previewBadges(ops, _posMs);
+    final cutting = opsAt(ops, _posMs).any((o) => o.tool == TransformTool.smartCut);
     final sub = _currentSubtitle;
+    final dur = c.value.duration.inMilliseconds > 0 ? c.value.duration.inMilliseconds : _sourceMs;
+    final pos = _posMs < 0 ? 0 : (dur > 0 && _posMs > dur ? dur : _posMs);
+
+    Widget video = VideoPlayer(c);
+    if (look != null) video = ColorFiltered(colorFilter: ColorFilter.matrix(lookMatrix(look)), child: video);
+    if (crop != null) {
+      video = FractionalTranslation(
+        translation: Offset((0.5 - crop.cx) * crop.zoom, (0.5 - crop.cy) * crop.zoom),
+        child: Transform.scale(scale: crop.zoom, child: video),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Stack(alignment: Alignment.bottomCenter, children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: AspectRatio(aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio, child: VideoPlayer(c)),
+          borderRadius: BorderRadius.circular(14),
+          child: AspectRatio(
+            aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+            child: LayoutBuilder(builder: (ctx, bc) {
+              final w = bc.maxWidth;
+              final h = bc.maxHeight;
+              return ClipRect(
+                child: Stack(fit: StackFit.expand, children: [
+                  const ColoredBox(color: Colors.black),
+                  video,
+                  if (cutting) const ColoredBox(color: Color(0x99000000)),
+                  for (final m in motions) _motionOverlay(m, w, h),
+                  if (sub != null && _tl.burnSubtitles)
+                    Align(
+                      alignment: _tl.style.top ? Alignment.topCenter : Alignment.bottomCenter,
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(10, _tl.style.top ? 30 : 4, 10, 8),
+                        child: Text(
+                          sub,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, shadows: [Shadow(blurRadius: 4, color: Colors.black)]),
+                        ),
+                      ),
+                    ),
+                  if (badges.isNotEmpty)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        for (final b in badges)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(color: DfColors.accentDeep.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(8)),
+                            child: Text(b, style: const TextStyle(fontSize: 11.5, color: Colors.white)),
+                          ),
+                      ]),
+                    ),
+                ]),
+              );
+            }),
+          ),
         ),
-        if (sub != null && _tl.burnSubtitles)
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Text(
-              sub,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 15, shadows: [Shadow(blurRadius: 4, color: Colors.black)]),
+        Row(children: [
+          IconButton.filledTonal(onPressed: _togglePlay, icon: Icon(c.value.isPlaying ? Icons.pause : Icons.play_arrow)),
+          const SizedBox(width: 6),
+          Text('${_t(pos)} / ${_t(dur)}', style: const TextStyle(fontSize: 12.5, color: DfColors.muted)),
+          Expanded(
+            child: Slider(
+              value: dur > 0 ? pos.toDouble() : 0,
+              min: 0,
+              max: dur > 0 ? dur.toDouble() : 1,
+              onChanged: dur > 0 ? (v) => _seek(v.round()) : null,
             ),
           ),
-        Positioned(
-          top: 4,
-          right: 4,
-          child: IconButton.filledTonal(onPressed: _stopPlayback, icon: const Icon(Icons.pause), tooltip: 'ရပ်'),
+        ]),
+        if (dur > 0 && _plan.ops.any((o) => o.status != OpStatus.rejected))
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: SizedBox(
+              height: 12,
+              child: LayoutBuilder(builder: (ctx, bc) {
+                return Stack(children: [
+                  Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(color: DfColors.line.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)))),
+                  for (final o in _plan.ops)
+                    if (o.status != OpStatus.rejected && o.valid)
+                      Positioned(
+                        left: (bc.maxWidth * (o.startMs / dur)).clamp(0.0, bc.maxWidth).toDouble(),
+                        width: math.max(4.0, bc.maxWidth * ((o.endMs - o.startMs) / dur)),
+                        top: 0,
+                        bottom: 0,
+                        child: GestureDetector(
+                          onTap: () => _seek(o.startMs),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: (o.status == OpStatus.approved ? DfColors.ok : DfColors.warn).withValues(alpha: 0.85),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ),
+                      ),
+                ]);
+              }),
+            ),
+          ),
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text(
+            'Preview က နီးစပ်တဲ့ပုံ သက်သက် — တကယ့်ရလဒ်ကို Render မှာ ထုတ်မယ်။ စာသား/မြား/ပုံကို ဆွဲရွှေ့လို့ရတယ်။ အစိမ်း = ခွင့်ပြုပြီး၊ လိမ္မော် = စောင့်ဆိုင်း။',
+            style: TextStyle(fontSize: 11.5, color: DfColors.muted),
+          ),
         ),
       ]),
+    );
+  }
+
+  Widget _motionOverlay(PreviewMotion pm, double w, double h) {
+    final m = pm.item;
+    final Widget child;
+    switch (m.kind) {
+      case MotionKind.label:
+        child = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: m.background ? BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(4)) : null,
+          child: Text(
+            m.text,
+            style: TextStyle(
+              color: Color(m.color),
+              fontSize: (m.size * h).clamp(9.0, 90.0).toDouble(),
+              fontWeight: FontWeight.w700,
+              shadows: m.background ? null : const [Shadow(blurRadius: 3, color: Colors.black)],
+            ),
+          ),
+        );
+      case MotionKind.arrow:
+        child = Transform.rotate(
+          angle: m.angle * math.pi / 180,
+          child: Icon(Icons.arrow_forward, size: (m.size * h * 2).clamp(18.0, 140.0).toDouble(), color: Color(m.color)),
+        );
+      case MotionKind.image:
+        child = Image.file(
+          File(m.path),
+          width: m.size * w,
+          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70),
+        );
+    }
+    return Positioned(
+      left: m.x * w,
+      top: m.y * h,
+      child: FractionalTranslation(
+        translation: const Offset(-0.5, -0.5),
+        child: GestureDetector(
+          onPanUpdate: (d) => _dragMotion(pm.opId, d.delta.dx / w, d.delta.dy / h),
+          onPanEnd: (_) => _dragEnd(pm.opId),
+          child: Opacity(opacity: pm.proposed ? 0.7 : 1, child: child),
+        ),
+      ),
     );
   }
 
