@@ -482,3 +482,15 @@ Unproven: how they look on the phone. Not done yet: Voice Studio tabs, Video Edi
 | Render: resolution / fps / quality moved into a collapsed "အဆင့်မြင့် setting" (its summary line shows the current values); "ဖုန်းမှာ ကျန်နေရာ" row removed (the low-space warning stays) | Yes (CI green, run 44264606257) | **No** |
 | Subtitle Studio: only empty / bad-time / overlapping lines count as problems; "hard to read fast / long line" are only counted, not flagged on each line | Yes (CI green, run 44264606257) | **No** |
 Unproven: how it looks on the phone. The rule thresholds (17 characters per second, 42 per line) did not change.
+
+## TE-27: Video Editor + TE are one editor
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| One screen (Home "Video Editor" tile and Workflow Stage 4): preview, effect list, pieces, narration, subtitles; the separate "Transformative Editor" tile and its Mode selector are gone (the stored mode is kept) | Yes (CI green, run 44309080019) | **No** |
+| Preview shows the first frame at once, scrubber with effect markers (green = approved, orange = proposed), play/pause | Yes (same run) | **No** |
+| Effects drawn on the preview at the playhead: crop/zoom, brightness/contrast, text/arrow/picture; badges for cut, freeze, split, sound. Proposed (AI) effects are shown too, slightly faded, so a suggestion can be judged before approving. It is an **approximation**; the render makes the real result | Yes (same run) | **No** |
+| Text/arrow/picture can be dragged on the preview (position saved on release) | Yes (same run) | **No** |
+| Effect list: tap = jump to its start, approve / reject / edit (same dialog, pre-filled) / delete, "add at playhead", "approve all pending", find quiet stretches, Gemini copy-paste (collapsed) | Yes (same run) | **No** |
+| TE plan saves at once on every change (no save button) | Yes (same run) | **No** |
+| Pure helper `te_preview.dart` (which effects are active at a time, crop, look matrix, badges) | Yes, 9 tests (same run) | n/a |
+Unproven: how the preview overlays line up with the render on a real video; the dragging gesture inside a scrolling page; the marker bar alignment with the slider (approximate). Smart cut is only dimmed in the preview, playback does not skip it. Split screen and Sound are shown as badges only. APK: artifact `dramaflow-apk-branch-119`. Not merged to main.
