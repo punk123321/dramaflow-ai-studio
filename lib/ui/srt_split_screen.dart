@@ -201,7 +201,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     final rs = context.watch<RenderStore>();
     final parts = _parts;
     final overlaps = overlappingBreaks(_lines, _breaks);
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('SRT နဲ့ ဗီဒီယို အပိုင်းခွဲ')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

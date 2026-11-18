@@ -89,7 +89,7 @@ class _NewsScreenState extends State<NewsScreen> {
     final catByFeed = {for (final f in _feeds) f.id: f.category};
     final shown = _items.where((i) => _filter.isEmpty || catByFeed[i.feedId] == _filter).toList();
     final now = DateTime.now().millisecondsSinceEpoch;
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('သတင်း'), actions: [
         IconButton(onPressed: _refreshing ? null : _refresh, icon: const Icon(Icons.refresh), tooltip: 'ပြန်ယူ'),
         IconButton(onPressed: _manage, icon: const Icon(Icons.rss_feed), tooltip: 'RSS စာရင်း'),
@@ -232,7 +232,7 @@ class _NewsStoryScreenState extends State<NewsStoryScreen> {
     final it = widget.item;
     final now = DateTime.now().millisecondsSinceEpoch;
     final age = ageText(it.publishedMs, now);
-    return Scaffold(
+    return DfScaffold(
       body: CustomScrollView(slivers: [
         SliverAppBar(
           pinned: true,
@@ -361,7 +361,7 @@ class _FeedManagerScreenState extends State<FeedManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('RSS စာရင်း'), actions: [IconButton(onPressed: _add, icon: const Icon(Icons.add), tooltip: 'ထည့်')]),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

@@ -256,10 +256,10 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return Scaffold(appBar: AppBar(title: const Text('Scene Recap')), body: const Center(child: CircularProgressIndicator()));
+    if (_loading) return DfScaffold(appBar: AppBar(title: const Text('Scene Recap')), body: const Center(child: CircularProgressIndicator()));
     final has = widget.project.hasVideo && widget.project.sourceVideoUri != null;
     final groups = sheetGroups(_scenes.length);
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Scene Recap')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Text(

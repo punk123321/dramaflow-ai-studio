@@ -7,6 +7,7 @@ import '../core/theme.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/handoff_channel.dart';
+import 'widgets.dart';
 
 /// Phase 4: edit subtitles line by line. Works on a copy kept in the
 /// database (documents / studio_srt). The source SRT from Stage 2 is never
@@ -244,7 +245,7 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
     final bad = problems.map((p) => p.pos).toSet();
     final shown = _problemsOnly ? [for (var i = 0; i < _entries.length; i++) if (bad.contains(i)) i] : List<int>.generate(_entries.length, (i) => i);
 
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(
         title: const Text('Subtitle Studio'),
         actions: [

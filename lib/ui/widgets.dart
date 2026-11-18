@@ -93,3 +93,64 @@ class ErrorBanner extends StatelessWidget {
     );
   }
 }
+
+/// Scaffold with the app's indigo page gradient behind it. The gradient is
+/// opaque, so a page pushed over another page does not show it through.
+class DfScaffold extends StatelessWidget {
+  const DfScaffold({super.key, this.appBar, required this.body, this.floatingActionButton});
+
+  final PreferredSizeWidget? appBar;
+  final Widget body;
+  final Widget? floatingActionButton;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(gradient: DfGradients.page),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: appBar,
+        floatingActionButton: floatingActionButton,
+        body: body,
+      ),
+    );
+  }
+}
+
+/// Wide violet gradient button, used for the main action of a page.
+class GradientButton extends StatelessWidget {
+  const GradientButton({super.key, required this.label, required this.icon, required this.onPressed});
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        height: 52,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: DfGradients.primary,
+          boxShadow: [
+            BoxShadow(color: DfColors.accent.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6)),
+          ],
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -458,3 +458,11 @@ Unproven: how it looks on a real phone (no screenshot was taken, there is no loc
 
 ## Signing key moved out of the repo (before making the repo public)
 The old keystore and its password were committed in the repo. A new key is created outside the repo; the workflow reads it from the GitHub secrets `DF_KEYSTORE_BASE64` and `DF_KEY_PASSWORD` and stops with a clear error if they are missing. The old key is still in git history, so it must be treated as public and never used again. **APKs signed with the new key do not install over APKs signed with the old key: back up in the app, uninstall, install, restore.** Compiles on CI: yes (4c5832e; build with the new secrets worked, the APK signature itself was not inspected). Phone-tested: **No**.
+
+## TE-24: UI refresh, all screens
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Every screen except Home sits on the same indigo gradient (shared `DfScaffold`), transparent app bar with bold title | pending CI | **No** |
+| Home: "Project အသစ်" is a wide gradient button under the tiles (the floating button covered the resume card); duplicate "ဆက်လုပ်ရန်" title removed | pending CI | **No** |
+| Settings tab is a real screen: optional Gemini key + model (save / remove), Backup / Restore link, short About | pending CI | **No** |
+Unproven: how each inner screen looks on the phone (only Home has been seen in a screenshot). The inner screens keep their old layouts; only the background, app bar, buttons and chips changed. No Language/Theme switch (nothing to switch yet). No Projects tab. Voice Clone is deliberately not built.

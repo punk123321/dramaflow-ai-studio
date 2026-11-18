@@ -75,10 +75,18 @@ ThemeData buildTheme() {
       fontFamilyFallback: burmeseFallback,
     ),
     appBarTheme: const AppBarTheme(
-      backgroundColor: DfColors.bg,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       foregroundColor: DfColors.ink,
       elevation: 0,
       scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: DfColors.ink,
+        fontFamilyFallback: burmeseFallback,
+      ),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: const Color(0xFF0C0E2B),

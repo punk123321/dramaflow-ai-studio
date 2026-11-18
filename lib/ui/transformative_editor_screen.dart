@@ -11,6 +11,7 @@ import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
 import '../platform/gemini_open.dart';
+import 'widgets.dart';
 
 /// TE-1: a separate, persisted planning workspace. Actual effect rendering is
 /// added in later TE phases through the existing timeline and Render Center.
@@ -203,7 +204,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const DfScaffold(body: Center(child: CircularProgressIndicator()));
     }
     return PopScope(
       canPop: !_dirty,
@@ -217,7 +218,7 @@ class _TransformativeEditorScreenState extends State<TransformativeEditorScreen>
   }
 
   Widget _scaffold(BuildContext context) {
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(
         title: const Text('TE · Transformative Editor'),
         actions: [

@@ -132,11 +132,6 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: DfColors.bg,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showNewProjectSheet(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Project အသစ်'),
-      ),
       body: DecoratedBox(
         decoration: const BoxDecoration(gradient: DfGradients.page),
         child: SafeArea(
@@ -174,8 +169,14 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
+                    GradientButton(
+                      label: 'Project အသစ်',
+                      icon: Icons.add_rounded,
+                      onPressed: () => showNewProjectSheet(context),
+                    ),
                     if (resume != null) ...[
-                      const SectionTitle('ဆက်လုပ်ရန်'),
+                      const SizedBox(height: 14),
                       _ResumeCard(
                         project: resume,
                         onResume: () {

@@ -135,12 +135,12 @@ class _QuickScreenState extends State<QuickScreen> {
   Widget build(BuildContext context) {
     final store = context.watch<ProjectStore>();
     final p = _project(store);
-    if (p == null) return const Scaffold(body: Center(child: Text('Project မတွေ့ပါ')));
+    if (p == null) return const DfScaffold(body: Center(child: Text('Project မတွေ့ပါ')));
     final dur = p.videoDurationMs ?? 0;
     final lastEnd = _entries.isEmpty ? 0 : _entries.map((e) => e.endMs).reduce((a, b) => a > b ? a : b);
     final tooLong = dur > 0 && lastEnd > dur + 2000;
 
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('အမြန်လမ်း (SRT ရှိပြီးသား)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Text(

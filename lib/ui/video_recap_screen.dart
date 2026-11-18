@@ -154,9 +154,9 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return Scaffold(appBar: AppBar(title: const Text('Video Recap')), body: const Center(child: CircularProgressIndicator()));
+    if (_loading) return DfScaffold(appBar: AppBar(title: const Text('Video Recap')), body: const Center(child: CircularProgressIndicator()));
     final has = widget.project.hasVideo && _parts.isNotEmpty;
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Video Recap (Gemini က ဗီဒီယိုကြည့်ပြီး ရေး)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Text(

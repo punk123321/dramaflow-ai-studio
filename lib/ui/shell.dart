@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
 import 'library_screen.dart';
-import 'placeholder_screen.dart';
+import 'settings_screen.dart';
 import 'workflow_screen.dart';
 
 class Shell extends StatefulWidget {
@@ -27,7 +27,7 @@ class _ShellState extends State<Shell> {
           ),
           const WorkflowScreen(),
           const LibraryScreen(),
-          const PlaceholderScreen(title: 'Settings', phase: 4),
+          const SettingsScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(

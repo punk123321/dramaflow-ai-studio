@@ -35,7 +35,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       _open = null;
     }
 
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Recap Workflow')),
       body: p == null
           ? const Center(
