@@ -408,9 +408,9 @@ Fix (user report 2026-11-13): wrapped subtitle lines were left-aligned inside th
 
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Foreground service + progress notification keeps render alive with screen off | pending CI | **No** |
-| Notification permission asked on Android 13+ | pending CI | **No** |
-| SRT split: "ခဏရပ်/ဆက်လုပ်" before the next part (multi-part runs) | pending CI | **No** |
+| Foreground service + progress notification keeps render alive with screen off | Yes (CI green, 4c5832e) | **No** |
+| Notification permission asked on Android 13+ | Yes (CI green, 4c5832e) | **No** |
+| SRT split: "ခဏရပ်/ဆက်လုပ်" before the next part (multi-part runs) | Yes (CI green, 4c5832e) | **No** |
 
 Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current part ends; a single file can only be cancelled. Some phones' battery savers can still stop background work.
 
@@ -423,38 +423,38 @@ Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current p
 ## TE-19: fit video to narration (te-12)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| "ဗီဒီယိုကို အသံအတိုင်း ညှိ": piece N gets the length of voice N, voice starts at its piece; undo button | pending CI | **No** |
+| "ဗီဒီယိုကို အသံအတိုင်း ညှိ": piece N gets the length of voice N, voice starts at its piece; undo button | Yes (CI green, 4c5832e) | **No** |
 Rules: pairs by order; piece end moves in the original video (the file is never changed); video too short is reported; extra voices/pieces are reported. Preview still does not play narration with the video.
 
 ## TE-20: Video Recap, Gemini watches the video (te-12)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Home tile "Video Recap": per-part prompt (5 parts per prompt), Gemini open/copy, reply split by "=== PART n ===", save as narration script (one part = one voice) | pending CI | **No** |
+| Home tile "Video Recap": per-part prompt (5 parts per prompt), Gemini open/copy, reply split by "=== PART n ===", save as narration script (one part = one voice) | Yes (CI green, 4c5832e) | **No** |
 Limits: the app does NOT send the video; the user attaches it in the Gemini app. Whether Gemini can watch the video (length/size limits) and how good the script is are NOT checked. Parts come from Video Index, or 1-minute parts if none (then saved as the Video Index).
 
 ## TE-21: News (RSS) reader inside DramaFlow (te-12)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Home tile "သတင်း (RSS)": loads the user's RSS/Atom feeds, newest first, category chips, pull to refresh, cached for offline | pending CI | **No** |
-| Tap a story: new layer slides in (title, source, age, snippet, "မူရင်းမှာ ဖတ်" opens the browser) | pending CI | **No** |
-| Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | pending CI | **No** |
-| Feed manager: add/switch off/delete, suggestions restore | pending CI | **No** |
+| Home tile "သတင်း (RSS)": loads the user's RSS/Atom feeds, newest first, category chips, pull to refresh, cached for offline | Yes (CI green, 4c5832e) | **No** |
+| Tap a story: new layer slides in (title, source, age, snippet, "မူရင်းမှာ ဖတ်" opens the browser) | Yes (CI green, 4c5832e) | **No** |
+| Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | Yes (CI green, 4c5832e) | **No** |
+| Feed manager: add/switch off/delete, suggestions restore | Yes (CI green, 4c5832e) | **No** |
 Rules: only headline, link, time and a ~220 character snippet are kept; no article copy, no pictures, no video from news sites. Feed links in the suggested list were NOT checked (the build session could not reach them): the user must try them on the phone. Parser is tested on sample RSS/Atom text only, not on live feeds. News data is app-wide and not part of Backup.
 
 ## TE-22: Scene Recap (scene finding + contact sheet for Gemini)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Home tile "Scene Recap": scenes found from colour changes between sampled frames (range, step 1/2/4 s, max scenes), long still scenes split at 45 s, "ပေါင်း" removes a wrong cut | pending CI | **No** |
-| Contact sheet (one numbered tile per scene, 12 per sheet) saved to Pictures/DramaFlow and shared to Gemini with the prompt; prompt includes the SRT lines of each scene | pending CI | **No** |
-| Reply "=== PART n ===" read per scene, saved as the narration script (one scene = one voice) and the scenes saved as the Video Index | pending CI | **No** |
+| Home tile "Scene Recap": scenes found from colour changes between sampled frames (range, step 1/2/4 s, max scenes), long still scenes split at 45 s, "ပေါင်း" removes a wrong cut | Yes (CI green, 4c5832e) | **No** |
+| Contact sheet (one numbered tile per scene, 12 per sheet) saved to Pictures/DramaFlow and shared to Gemini with the prompt; prompt includes the SRT lines of each scene | Yes (CI green, 4c5832e) | **No** |
+| Reply "=== PART n ===" read per scene, saved as the narration script (one scene = one voice) and the scenes saved as the Video Index | Yes (CI green, 4c5832e) | **No** |
 Unproven: how fast scene finding is on a long video on the phone; how well colour differences find real cuts (fades, fast action); whether the Gemini app accepts the shared picture with text; token savings (the per-token figures are from memory, not checked). Gemini cannot hear the audio in this mode, so an SRT gives much better scripts. Speech-to-text (Whisper or similar) is NOT built.
 
 ## TE-23: UI refresh (indigo/violet theme, big gradient tiles)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| New theme: deep indigo page gradient, violet accent, rounded buttons/chips/snackbars/bottom bar | pending CI | **No** |
-| Home: hero banner, six big gradient tiles (Recap Studio, Voice Studio, Subtitle Studio, Video Editor, Render Center, More Tools), "More Tools" sheet holds every other module | pending CI | **No** |
+| New theme: deep indigo page gradient, violet accent, rounded buttons/chips/snackbars/bottom bar | Yes (CI green, 4c5832e) | **No** |
+| Home: hero banner, six big gradient tiles (Recap Studio, Voice Studio, Subtitle Studio, Video Editor, Render Center, More Tools), "More Tools" sheet holds every other module | Yes (CI green, 4c5832e) | **No** |
 Unproven: how it looks on a real phone (no screenshot was taken, there is no local Flutter), tile text fit with Burmese fonts, contrast on the other screens after the colour change. Only the home screen was redesigned; the other screens only pick up the new colours and button/chip shapes. No "Projects" tab, no Translation Studio / Voice Clone screens (voice cloning is deliberately not built).
 
 ## Signing key moved out of the repo (before making the repo public)
-The old keystore and its password were committed in the repo. A new key is created outside the repo; the workflow reads it from the GitHub secrets `DF_KEYSTORE_BASE64` and `DF_KEY_PASSWORD` and stops with a clear error if they are missing. The old key is still in git history, so it must be treated as public and never used again. **APKs signed with the new key do not install over APKs signed with the old key: back up in the app, uninstall, install, restore.** Compiles on CI: pending (needs the two secrets). Phone-tested: **No**.
+The old keystore and its password were committed in the repo. A new key is created outside the repo; the workflow reads it from the GitHub secrets `DF_KEYSTORE_BASE64` and `DF_KEY_PASSWORD` and stops with a clear error if they are missing. The old key is still in git history, so it must be treated as public and never used again. **APKs signed with the new key do not install over APKs signed with the old key: back up in the app, uninstall, install, restore.** Compiles on CI: yes (4c5832e; build with the new secrets worked, the APK signature itself was not inspected). Phone-tested: **No**.
