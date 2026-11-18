@@ -462,7 +462,7 @@ The old keystore and its password were committed in the repo. A new key is creat
 ## TE-24: UI refresh, all screens
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Every screen except Home sits on the same indigo gradient (shared `DfScaffold`), transparent app bar with bold title | pending CI | **No** |
-| Home: "Project အသစ်" is a wide gradient button under the tiles (the floating button covered the resume card); duplicate "ဆက်လုပ်ရန်" title removed | pending CI | **No** |
-| Settings tab is a real screen: optional Gemini key + model (save / remove), Backup / Restore link, short About | pending CI | **No** |
+| Every screen except Home sits on the same indigo gradient (shared `DfScaffold`), transparent app bar with bold title | Yes (CI green, run 44228633814) | **No** |
+| Home: "Project အသစ်" is a wide gradient button under the tiles (the floating button covered the resume card); duplicate "ဆက်လုပ်ရန်" title removed | Yes (CI green, run 44228633814) | **No** |
+| Settings tab is a real screen: optional Gemini key + model (save / remove), Backup / Restore link, short About | Yes (CI green, run 44228633814) | **No** |
 Unproven: how each inner screen looks on the phone (only Home has been seen in a screenshot). The inner screens keep their old layouts; only the background, app bar, buttons and chips changed. No Language/Theme switch (nothing to switch yet). No Projects tab. Voice Clone is deliberately not built.
