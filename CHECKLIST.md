@@ -474,3 +474,11 @@ Unproven: how each inner screen looks on the phone (only Home has been seen in a
 | Subtitle Studio: rounded list cards, bigger preview, bottom bar "အချိန်ရွှေ့ / ပြင် / SRT သိမ်း" (the same actions as the menu) | Yes (CI green, run 44260535793) | **No** |
 | Workflow: project header and step cards in the new card style | Yes (CI green, run 44260535793) | **No** |
 Unproven: how they look on the phone. Not done yet: Voice Studio tabs, Video Editor tool row, "Projects" tab, Translation Studio screen. The progress steps in the mockup ("Preparing / Applying subtitles / Rendering") are NOT shown because the render engine does not report such steps; only the percent is real.
+
+## TE-26: less clutter
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Long explanation paragraphs (Render, Video Recap, Scene Recap, Quick, SRT split) shrink to one "ℹ ရှင်းလင်းချက်" line, tap to read | pending CI | **No** |
+| Render: resolution / fps / quality moved into a collapsed "အဆင့်မြင့် setting" (its summary line shows the current values); "ဖုန်းမှာ ကျန်နေရာ" row removed (the low-space warning stays) | pending CI | **No** |
+| Subtitle Studio: only empty / bad-time / overlapping lines count as problems; "hard to read fast / long line" are only counted, not flagged on each line | pending CI | **No** |
+Unproven: how it looks on the phone. The rule thresholds (17 characters per second, 42 per line) did not change.

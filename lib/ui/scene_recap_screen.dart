@@ -314,7 +314,7 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
                 trailing: i == 0 ? null : TextButton(onPressed: () => _merge(i), child: const Text('ပေါင်း')),
               ),
             const SectionTitle('၃။ Gemini ကို ပို့'),
-            const Text('အုပ်စုတစ်ခုချင်း (scene ၁၂ ခုစီ) ပို့ပါ။ ပုံနဲ့ prompt ကို Gemini ဆီ တစ်ခါတည်း ပို့မယ်၊ prompt ကိုလည်း ကူးထားမယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+            const InfoHint('အုပ်စုတစ်ခုချင်း (scene ၁၂ ခုစီ) ပို့ပါ။ ပုံနဲ့ prompt ကို Gemini ဆီ တစ်ခါတည်း ပို့မယ်၊ prompt ကိုလည်း ကူးထားမယ်။'),
             for (final g in groups) ...[
               const SizedBox(height: 8),
               Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [

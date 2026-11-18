@@ -248,10 +248,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
 
   Widget _header(RenderStore rs, List<SplitPart> parts, List<int> overlaps) {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Text(
-        'ဗီဒီယိုကို စာတန်းလိုင်းရဲ့ စချိန်မှာ အတိအကျ ဖြတ်မယ်၊ အပိုင်းတိုင်းအတွက် SRT ကိုလည်း အဲဒီအပိုင်းရဲ့ အစကနေ (0:00) ပြန်ရေးပေးမယ်။ မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။',
-        style: TextStyle(color: DfColors.muted, fontSize: 13),
-      ),
+      const InfoHint('ဗီဒီယိုကို စာတန်းလိုင်းရဲ့ စချိန်မှာ အတိအကျ ဖြတ်မယ်၊ အပိုင်းတိုင်းအတွက် SRT ကိုလည်း အဲဒီအပိုင်းရဲ့ အစကနေ (0:00) ပြန်ရေးပေးမယ်။ မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။'),
       const SectionTitle('အလိုအလျောက် ခွဲ'),
       Row(children: [
         Expanded(
@@ -291,7 +288,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       ]),
       const Padding(
         padding: EdgeInsets.only(top: 4),
-        child: Text('မိနစ်နဲ့ခွဲရင် စာကြောင်းအလယ်မှာ မဖြတ်ဘူး၊ ပစ်မှတ်ထက် နည်းနည်းရှည်နိုင်တယ်။ အောက်ကလိုင်းတိုင်းက ✂ ကို နှိပ်ပြီး ကိုယ်တိုင်လည်း ခွဲ/ပြန်ဖြုတ်လို့ရတယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+        child: const InfoHint('မိနစ်နဲ့ခွဲရင် စာကြောင်းအလယ်မှာ မဖြတ်ဘူး၊ ပစ်မှတ်ထက် နည်းနည်းရှည်နိုင်တယ်။ အောက်ကလိုင်းတိုင်းက ✂ ကို နှိပ်ပြီး ကိုယ်တိုင်လည်း ခွဲ/ပြန်ဖြုတ်လို့ရတယ်။'),
       ),
       if (_breaks.isNotEmpty)
         TextButton(onPressed: _running ? null : () => setState(() {
@@ -357,10 +354,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         onChanged: _running ? null : (v) => setState(() => _toGallery = v),
         title: const Text('တစ်ပိုင်းပြီးတိုင်း Gallery ထဲ တန်းသိမ်း'),
       ),
-      const Text(
-        'သုံးမယ့် စာတန်း style၊ logo၊ ထောင့်စာသားက Editor မှာ သတ်မှတ်ထားတာကို သုံးမယ်။ အသံ (narration) နဲ့ TE operation တွေ မပါပါဘူး။ ဖုန်းမှာ အပိုင်းတွေ အများကြီးဆို အချိန်ကြာမယ်။ မျက်နှာပြင်ပိတ်လည် notification နဲ့ ဆက်ထုတ်မယ် (ဖုန်းအမျိုးအစားပေါ်မူတည်)။ ခဏရပ်ရင် လက်ရှိအပိုင်းပြီးမှ ရပ်မယ်။',
-        style: TextStyle(color: DfColors.muted, fontSize: 12),
-      ),
+      const InfoHint('သုံးမယ့် စာတန်း style၊ logo၊ ထောင့်စာသားက Editor မှာ သတ်မှတ်ထားတာကို သုံးမယ်။ အသံ (narration) နဲ့ TE operation တွေ မပါပါဘူး။ ဖုန်းမှာ အပိုင်းတွေ အများကြီးဆို အချိန်ကြာမယ်။ မျက်နှာပြင်ပိတ်လည် notification နဲ့ ဆက်ထုတ်မယ် (ဖုန်းအမျိုးအစားပေါ်မူတည်)။ ခဏရပ်ရင် လက်ရှိအပိုင်းပြီးမှ ရပ်မယ်။'),
       const SizedBox(height: 8),
       if (_running) ...[
         LinearProgressIndicator(value: _runTotal == 0 ? null : (_doneParts + rs.percent / 100) / _runTotal),

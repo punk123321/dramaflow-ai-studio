@@ -241,7 +241,10 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final problems = findProblems(_entries);
+    final all = findProblems(_entries);
+    // Only real faults are flagged. "Hard to read fast" lines are just counted: auto-made English captions trip that rule on almost every line.
+    final problems = all.where(_isSerious).toList();
+    final soft = all.length - problems.length;
     final bad = problems.map((p) => p.pos).toSet();
     final shown = _problemsOnly ? [for (var i = 0; i < _entries.length; i++) if (bad.contains(i)) i] : List<int>.generate(_entries.length, (i) => i);
 
@@ -302,7 +305,7 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
                       child: Row(children: [
                         Expanded(
                           child: Text(
-                            '${_entries.length} ကြောင်း · ပြဿနာ ${problems.length}',
+                            '${_entries.length} ကြောင်း · ပြဿနာ ${problems.length}${soft > 0 ? ' · ဖတ်ရခက်/ရှည် $soft' : ''}',
                             style: const TextStyle(color: DfColors.muted, fontSize: 13),
                           ),
                         ),
@@ -416,6 +419,9 @@ class _BarButton extends StatelessWidget {
 extension on SrtEntry {
   SrtEntry withTextAndTime(String t, int s, int e) => SrtEntry(index, s, e, t);
 }
+
+/// Faults that break the subtitle file; speed / length notes are not counted as faults.
+bool _isSerious(SubProblem p) => p.kind == ProblemKind.empty || p.kind == ProblemKind.badRange || p.kind == ProblemKind.overlap;
 
 class _Preview extends StatelessWidget {
   const _Preview({required this.entry});

@@ -148,10 +148,7 @@ class _RenderPanelState extends State<RenderPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Stage 4 မှာ စီစဉ်ထားတာကို MP4 အသစ်အဖြစ် ထုတ်မယ်။ မူရင်းဗီဒီယိုကို မထိပါဘူး။ ထုတ်နေတုန်း app ကို ဖွင့်ထားပါ (screen ကို ဖွင့်ထားပေးမယ်)။',
-          style: TextStyle(color: DfColors.muted, fontSize: 13),
-        ),
+        const InfoHint('Stage 4 မှာ စီစဉ်ထားတာကို MP4 အသစ်အဖြစ် ထုတ်မယ်။ မူရင်းဗီဒီယိုကို မထိပါဘူး။ ထုတ်နေတုန်း app ကို ဖွင့်ထားပါ (screen ကို ဖွင့်ထားပေးမယ်)။'),
         const SizedBox(height: 10),
         DfCard(
           title: 'ထုတ်ဖို့ အဆင်သင့်လား',
@@ -188,13 +185,7 @@ class _RenderPanelState extends State<RenderPanel> {
               onPressed: mine ? null : () => setState(() => _settings = pr.settings),
             ),
         ]),
-        const Padding(
-          padding: EdgeInsets.only(top: 4),
-          child: Text(
-            'ဒါတွေက အသုံးများတဲ့ setting တွေပါ။ Platform ရဲ့ လက်ရှိစည်းမျဉ်းကို app က မစစ်ပါဘူး။ တင်ခါနီး ကိုယ်တိုင် စစ်ပါ။',
-            style: TextStyle(color: DfColors.muted, fontSize: 11.5),
-          ),
-        ),
+        const InfoHint('ဒါတွေက အသုံးများတဲ့ setting တွေပါ။ Platform ရဲ့ လက်ရှိစည်းမျဉ်းကို app က မစစ်ပါဘူး။ တင်ခါနီး ကိုယ်တိုင် စစ်ပါ။', label: 'Preset အကြောင်း'),
         const SizedBox(height: 8),
         DropdownButtonFormField<OutRatio>(
           key: ValueKey('r${_settings.ratio.name}'),
@@ -213,16 +204,21 @@ class _RenderPanelState extends State<RenderPanel> {
             onChanged: mine ? null : (v) => setState(() => _settings = _settings.copyWith(fill: v)),
           ),
           if (_settings.fill == FillMode.blur)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                _tl.pieces.any((p) => p.freeze) || _plan.ops.any((o) => o.tool == TransformTool.splitScreen && o.runnable)
-                    ? '⚠ Freeze Frame ဒါမှမဟုတ် Split Screen ပါနေလို့ ဒီတစ်ခါ အနက်ရောင်အကွက်နဲ့ ထုတ်မယ်။'
-                    : 'Blur နောက်ခံက မူရင်းဗီဒီယိုရဲ့ ကိုယ်ပိုင်ပုံကို ချဲ့ပြီး မှုန်ထားတာပါ။ အလွတ်နေရာဖြည့်ဖို့ပဲ၊ ဘာကိုမှ ဖုံးဖို့ မဟုတ်ပါ။ စမ်းသပ်အဆင့်ပါ၊ ဖုန်းမှာ မစမ်းရသေးပါ။',
-                style: const TextStyle(color: DfColors.muted, fontSize: 11.5),
-              ),
+            InfoHint(
+              _tl.pieces.any((p) => p.freeze) || _plan.ops.any((o) => o.tool == TransformTool.splitScreen && o.runnable)
+                  ? '⚠ Freeze Frame ဒါမှမဟုတ် Split Screen ပါနေလို့ ဒီတစ်ခါ အနက်ရောင်အကွက်နဲ့ ထုတ်မယ်။'
+                  : 'Blur နောက်ခံက မူရင်းဗီဒီယိုရဲ့ ကိုယ်ပိုင်ပုံကို ချဲ့ပြီး မှုန်ထားတာပါ။ အလွတ်နေရာဖြည့်ဖို့ပဲ၊ ဘာကိုမှ ဖုံးဖို့ မဟုတ်ပါ။ စမ်းသပ်အဆင့်ပါ၊ ဖုန်းမှာ မစမ်းရသေးပါ။',
+              label: 'Blur အကြောင်း',
             ),
         ],
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('အဆင့်မြင့် setting', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: Text('${_settings.height}p · ${_settings.fps} fps · ${qualityLabel(_settings.videoKbps)}', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+            children: [
         const SizedBox(height: 8),
         Row(children: [
           Expanded(
@@ -261,18 +257,17 @@ class _RenderPanelState extends State<RenderPanel> {
           items: [for (final k in qualityChoices) DropdownMenuItem(value: k, child: Text(qualityLabel(k)))],
           onChanged: mine ? null : (v) => setState(() => _settings = _settings.copyWith(videoKbps: v)),
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            _eff.sourceBps > 0
-                ? 'မူရင်းဖိုင် ≈ ${(_eff.sourceBps / 1000000).toStringAsFixed(1)} Mbps။ Auto က ဒါနဲ့ ကပ်ပြီး ထုတ်မယ်၊ ဖိုင်ကြီးမသွားဘူး။ ဂဏန်းနိမ့်လေ ဖိုင်သေးလေ (ပုံကြည်လင်မှု ကျနိုင်)။'
-                : 'မူရင်းဖိုင် bitrate မသိလို့ Auto က အရွယ်အလိုက် ပုံမှန်တန်ဖိုး သုံးမယ်။',
-            style: const TextStyle(color: DfColors.muted, fontSize: 11.5),
-          ),
+        InfoHint(
+          _eff.sourceBps > 0
+              ? 'မူရင်းဖိုင် ≈ ${(_eff.sourceBps / 1000000).toStringAsFixed(1)} Mbps။ Auto က ဒါနဲ့ ကပ်ပြီး ထုတ်မယ်၊ ဖိုင်ကြီးမသွားဘူး။ ဂဏန်းနိမ့်လေ ဖိုင်သေးလေ (ပုံကြည်လင်မှု ကျနိုင်)။'
+              : 'မူရင်းဖိုင် bitrate မသိလို့ Auto က အရွယ်အလိုက် ပုံမှန်တန်ဖိုး သုံးမယ်။',
+          label: 'အရည်အသွေး အကြောင်း',
         ),
         const SizedBox(height: 8),
+            ],
+          ),
+        ),
         _row('ခန့်မှန်း ဖိုင်အရွယ်', est > 0 ? '≈ ${_mb(est)}' : '—'),
-        _row('ဖုန်းမှာ ကျန်နေရာ', _free > 0 ? _mb(_free) : '—'),
         if (lowSpace)
           const Padding(
             padding: EdgeInsets.only(top: 4),

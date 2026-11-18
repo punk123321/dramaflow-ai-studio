@@ -253,3 +253,48 @@ class ProgressRing extends StatelessWidget {
     );
   }
 }
+
+/// Long explanation that stays out of the way: one small line, tap to read it.
+class InfoHint extends StatefulWidget {
+  const InfoHint(this.text, {super.key, this.label = 'ရှင်းလင်းချက်'});
+
+  final String text;
+  final String label;
+
+  @override
+  State<InfoHint> createState() => _InfoHintState();
+}
+
+class _InfoHintState extends State<InfoHint> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => setState(() => _open = !_open),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.info_outline, size: 16, color: DfColors.muted),
+                const SizedBox(width: 6),
+                Text(widget.label, style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+                Icon(_open ? Icons.expand_less : Icons.expand_more, size: 18, color: DfColors.muted),
+              ],
+            ),
+            if (_open)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(widget.text, style: const TextStyle(color: DfColors.muted, fontSize: 12.5, height: 1.4)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

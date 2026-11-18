@@ -211,7 +211,7 @@ class _QuickScreenState extends State<QuickScreen> {
           ),
         if (_prepared > 0) ...[
           const SectionTitle('၄။ ဗီဒီယို ထုတ်'),
-          const Text('Ratio (9:16 စသည်)၊ Platform preset၊ ၈ စက္ကန့် စမ်းထုတ်တာတွေလည်း ဒီမှာ ရွေးလို့ရတယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12.5)),
+          const InfoHint('Ratio (9:16 စသည်)၊ Platform preset၊ ၈ စက္ကန့် စမ်းထုတ်တာတွေလည်း ဒီမှာ ရွေးလို့ရတယ်။'),
           const SizedBox(height: 8),
           RenderPanel(key: ValueKey('quick-render-$_prepared'), project: p),
           const SectionTitle('၅။ Gallery ထဲ သိမ်း'),
