@@ -448,3 +448,10 @@ Rules: only headline, link, time and a ~220 character snippet are kept; no artic
 | Contact sheet (one numbered tile per scene, 12 per sheet) saved to Pictures/DramaFlow and shared to Gemini with the prompt; prompt includes the SRT lines of each scene | pending CI | **No** |
 | Reply "=== PART n ===" read per scene, saved as the narration script (one scene = one voice) and the scenes saved as the Video Index | pending CI | **No** |
 Unproven: how fast scene finding is on a long video on the phone; how well colour differences find real cuts (fades, fast action); whether the Gemini app accepts the shared picture with text; token savings (the per-token figures are from memory, not checked). Gemini cannot hear the audio in this mode, so an SRT gives much better scripts. Speech-to-text (Whisper or similar) is NOT built.
+
+## TE-23: UI refresh (indigo/violet theme, big gradient tiles)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| New theme: deep indigo page gradient, violet accent, rounded buttons/chips/snackbars/bottom bar | pending CI | **No** |
+| Home: hero banner, six big gradient tiles (Recap Studio, Voice Studio, Subtitle Studio, Video Editor, Render Center, More Tools), "More Tools" sheet holds every other module | pending CI | **No** |
+Unproven: how it looks on a real phone (no screenshot was taken, there is no local Flutter), tile text fit with Burmese fonts, contrast on the other screens after the colour change. Only the home screen was redesigned; the other screens only pick up the new colours and button/chip shapes. No "Projects" tab, no Translation Studio / Voice Clone screens (voice cloning is deliberately not built).

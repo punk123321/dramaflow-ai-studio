@@ -50,55 +50,59 @@ const _modules = <_Module>[
   _Module('UP', 'Upload & Thumbnail', 'ခေါင်းစဉ်၊ hashtag၊ ပုံ', Color(0xFFFF6B9D), 11, _Action.publish),
 ];
 
+class _Feature {
+  const _Feature(this.code, this.icon, this.color);
+  final String code;
+  final IconData icon;
+  final Color color;
+}
+
+/// The six big tiles on the home screen. Everything else lives under "More Tools".
+const _mainFeatures = <_Feature>[
+  _Feature('GM', Icons.movie_filter_rounded, Color(0xFF2F6BFF)),
+  _Feature('TT', Icons.mic_rounded, Color(0xFF8B3DFF)),
+  _Feature('ST', Icons.closed_caption_rounded, Color(0xFF1FB45A)),
+  _Feature('ED', Icons.video_library_rounded, Color(0xFFFF7A1A)),
+  _Feature('RN', Icons.rocket_launch_rounded, Color(0xFF0FA3C4)),
+];
+
+_Module _moduleFor(String code) => _modules.firstWhere((m) => m.code == code);
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.onOpenWorkflow, required this.onOpenLibrary});
 
   final VoidCallback onOpenWorkflow;
   final VoidCallback onOpenLibrary;
 
-  @override
-  Widget build(BuildContext context) {
-    final store = context.watch<ProjectStore>();
-    final resume = store.resumeCandidate;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text.rich(
-          TextSpan(
+  void _showMore(BuildContext context) {
+    final mainCodes = _mainFeatures.map((f) => f.code).toSet();
+    final others = _modules.where((m) => !mainCodes.contains(m.code)).toList();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: DfColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const TextSpan(text: 'Drama'),
-              TextSpan(text: 'Flow', style: TextStyle(color: DfColors.accent)),
-            ],
-          ),
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showNewProjectSheet(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Project အသစ်'),
-      ),
-      body: store.loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-              children: [
-                if (store.error != null) ErrorBanner(store.error!),
-                if (resume != null)
-                  _ResumeCard(
-                    project: resume,
-                    onResume: () {
-                      store.open(resume);
-                      onOpenWorkflow();
-                    },
-                  )
-                else if (store.items.isEmpty)
-                  const _EmptyHint(),
-                const SectionTitle('Studio'),
-                GridView.builder(
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(color: DfColors.line, borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('More Tools', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              Flexible(
+                child: GridView.builder(
                   shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _modules.length,
+                  itemCount: others.length,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     mainAxisSpacing: 10,
@@ -106,17 +110,242 @@ class HomeScreen extends StatelessWidget {
                     mainAxisExtent: 112,
                   ),
                   itemBuilder: (_, i) => _ModuleTile(
-                    module: _modules[i],
-                    onOpenWorkflow: onOpenWorkflow,
-                    onOpenLibrary: onOpenLibrary,
+                    module: others[i],
+                    onTap: () {
+                      Navigator.of(sheet).pop();
+                      _openModule(context, others[i], onOpenWorkflow, onOpenLibrary);
+                    },
                   ),
                 ),
-                if (store.items.isNotEmpty) ...[
-                  const SectionTitle('Project များ'),
-                  for (final p in store.items) _ProjectTile(project: p, onOpenWorkflow: onOpenWorkflow),
-                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<ProjectStore>();
+    final resume = store.resumeCandidate;
+
+    return Scaffold(
+      backgroundColor: DfColors.bg,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showNewProjectSheet(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Project အသစ်'),
+      ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(gradient: DfGradients.page),
+        child: SafeArea(
+          bottom: false,
+          child: store.loading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                  children: [
+                    const _Hero(),
+                    const SizedBox(height: 14),
+                    if (store.error != null) ErrorBanner(store.error!),
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.45,
+                      children: [
+                        for (final f in _mainFeatures)
+                          _BigTile(
+                            title: _moduleFor(f.code).title,
+                            sub: _moduleFor(f.code).sub,
+                            icon: f.icon,
+                            color: f.color,
+                            onTap: () => _openModule(context, _moduleFor(f.code), onOpenWorkflow, onOpenLibrary),
+                          ),
+                        _BigTile(
+                          title: 'More Tools',
+                          sub: 'Scene Recap၊ သတင်း၊ Backup …',
+                          icon: Icons.apps_rounded,
+                          color: const Color(0xFF6C63B8),
+                          onTap: () => _showMore(context),
+                        ),
+                      ],
+                    ),
+                    if (resume != null) ...[
+                      const SectionTitle('ဆက်လုပ်ရန်'),
+                      _ResumeCard(
+                        project: resume,
+                        onResume: () {
+                          store.open(resume);
+                          onOpenWorkflow();
+                        },
+                      ),
+                    ] else if (store.items.isEmpty) ...[
+                      const SizedBox(height: 14),
+                      const _EmptyHint(),
+                    ],
+                    if (store.items.isNotEmpty) ...[
+                      const SectionTitle('Project များ'),
+                      for (final p in store.items) _ProjectTile(project: p, onOpenWorkflow: onOpenWorkflow),
+                    ],
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Hero extends StatelessWidget {
+  const _Hero();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 150,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: DfGradients.primary,
+        boxShadow: [
+          BoxShadow(color: DfColors.accent.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 10)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -30,
+            top: -40,
+            child: Container(
+              width: 170,
+              height: 170,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
+            ),
+          ),
+          Positioned(
+            right: 36,
+            bottom: -46,
+            child: Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.08)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'DramaFlow',
+                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                const Text(
+                  'Recap · Voice · Subtitle · Render',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'ဇာတ်လမ်းတစ်ခုကို recap ဗီဒီယိုအဖြစ် ဖုန်းထဲမှာတင် လုပ်ပါ',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.8)),
+                ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BigTile extends StatelessWidget {
+  const _BigTile({
+    required this.title,
+    required this.sub,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String title;
+  final String sub;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: DfGradients.tile(color),
+          boxShadow: [
+            BoxShadow(color: color.withValues(alpha: 0.28), blurRadius: 14, offset: const Offset(0, 6)),
+          ],
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 22),
+                    ),
+                    const Spacer(),
+                    Icon(Icons.chevron_right_rounded, color: Colors.white.withValues(alpha: 0.85)),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+                Text(
+                  sub,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.8)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -220,88 +449,86 @@ class _ResumeCard extends StatelessWidget {
   }
 }
 
-class _ModuleTile extends StatelessWidget {
-  const _ModuleTile({
-    required this.module,
-    required this.onOpenWorkflow,
-    required this.onOpenLibrary,
-  });
+/// Opens one module. Used by both the big tiles and the "More Tools" sheet.
+void _openModule(BuildContext context, _Module module, VoidCallback onOpenWorkflow, VoidCallback onOpenLibrary) {
+  final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
 
-  final _Module module;
-  final VoidCallback onOpenWorkflow;
-  final VoidCallback onOpenLibrary;
-
-  void _tap(BuildContext context) {
-    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-    if (module.action == _Action.library) {
-      onOpenLibrary();
-      return;
-    }
-    if (module.action == _Action.backup) {
-      // Works without a project, so a fresh install can restore.
-      _push(context, const BackupScreen());
-      return;
-    }
-    if (module.action == _Action.news) {
-      _push(context, const NewsScreen());
-      return;
-    }
-    if (module.action == _Action.none) {
-      messenger.showSnackBar(SnackBar(
-        content: Text('${module.title} ကို Phase ${module.phase} မှာ ရေးမယ်။ အခု မရသေးပါဘူး။'),
-      ));
-      return;
-    }
-    final store = context.read<ProjectStore>();
-    final target = store.current ?? store.resumeCandidate ?? (store.items.isNotEmpty ? store.items.first : null);
-    if (target == null || target.id == null) {
-      messenger.showSnackBar(const SnackBar(content: Text('Project တစ်ခု အရင်ဖန်တီးပါ။')));
-      return;
-    }
-    switch (module.action) {
-      case _Action.workflow:
-        store.open(target);
-        onOpenWorkflow();
-      case _Action.studio:
-        _push(context, SubtitleStudioScreen(project: target));
-      case _Action.fairUse:
-        _push(context, FairUseScreen(project: target));
-      case _Action.transformative:
-        _push(context, TransformativeEditorScreen(project: target));
-      case _Action.srtSplit:
-        _push(context, SrtSplitScreen(project: target));
-      case _Action.sceneRecap:
-        _push(context, SceneRecapScreen(project: target));
-      case _Action.videoRecap:
-        _push(context, VideoRecapScreen(project: target));
-      case _Action.quick:
-        _push(context, QuickScreen(projectId: target.id!));
-      case _Action.publish:
-        _push(context, PublishScreen(project: target));
-      case _Action.library:
-      case _Action.news:
-      case _Action.backup:
-      case _Action.none:
-        break;
-    }
-  }
-
-  void _push(BuildContext context, Widget screen) {
+  void push(Widget screen) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
+
+  if (module.action == _Action.library) {
+    onOpenLibrary();
+    return;
+  }
+  if (module.action == _Action.backup) {
+    // Works without a project, so a fresh install can restore.
+    push(const BackupScreen());
+    return;
+  }
+  if (module.action == _Action.news) {
+    push(const NewsScreen());
+    return;
+  }
+  if (module.action == _Action.none) {
+    messenger.showSnackBar(SnackBar(
+      content: Text('${module.title} ကို Phase ${module.phase} မှာ ရေးမယ်။ အခု မရသေးပါဘူး။'),
+    ));
+    return;
+  }
+  final store = context.read<ProjectStore>();
+  final target = store.current ?? store.resumeCandidate ?? (store.items.isNotEmpty ? store.items.first : null);
+  if (target == null || target.id == null) {
+    messenger.showSnackBar(const SnackBar(content: Text('Project တစ်ခု အရင်ဖန်တီးပါ။')));
+    return;
+  }
+  switch (module.action) {
+    case _Action.workflow:
+      store.open(target);
+      onOpenWorkflow();
+    case _Action.studio:
+      push(SubtitleStudioScreen(project: target));
+    case _Action.fairUse:
+      push(FairUseScreen(project: target));
+    case _Action.transformative:
+      push(TransformativeEditorScreen(project: target));
+    case _Action.srtSplit:
+      push(SrtSplitScreen(project: target));
+    case _Action.sceneRecap:
+      push(SceneRecapScreen(project: target));
+    case _Action.videoRecap:
+      push(VideoRecapScreen(project: target));
+    case _Action.quick:
+      push(QuickScreen(projectId: target.id!));
+    case _Action.publish:
+      push(PublishScreen(project: target));
+    case _Action.library:
+    case _Action.news:
+    case _Action.backup:
+    case _Action.none:
+      break;
+  }
+}
+
+/// Small tile used inside the "More Tools" sheet.
+class _ModuleTile extends StatelessWidget {
+  const _ModuleTile({required this.module, required this.onTap});
+
+  final _Module module;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = module.color;
     return Material(
-      color: DfColors.surface,
+      color: DfColors.raise,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: DfColors.line),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _tap(context),
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -321,7 +548,10 @@ class _ModuleTile extends StatelessWidget {
                     child: Text(module.code, style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w600)),
                   ),
                   const Spacer(),
-                  Text(module.action == _Action.none ? 'Phase ${module.phase}' : 'သုံးလို့ရ', style: TextStyle(color: module.action == _Action.none ? DfColors.muted : DfColors.ok, fontSize: 11)),
+                  Text(
+                    module.action == _Action.none ? 'Phase ${module.phase}' : 'သုံးလို့ရ',
+                    style: TextStyle(color: module.action == _Action.none ? DfColors.muted : DfColors.ok, fontSize: 11),
+                  ),
                 ],
               ),
               const Spacer(),
