@@ -25,6 +25,8 @@ class TeOpsSection extends StatefulWidget {
     required this.posMs,
     required this.onPlan,
     required this.onSeek,
+    required this.onSelect,
+    this.selectedId,
   });
 
   final Project project;
@@ -34,6 +36,8 @@ class TeOpsSection extends StatefulWidget {
   final int posMs;
   final ValueChanged<TransformativePlan> onPlan;
   final ValueChanged<int> onSeek;
+  final ValueChanged<String> onSelect;
+  final String? selectedId;
 
   @override
   State<TeOpsSection> createState() => _TeOpsSectionState();
@@ -165,14 +169,17 @@ class _TeOpsSectionState extends State<TeOpsSection> {
       decoration: BoxDecoration(
         color: DfColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: here ? DfColors.accent : DfColors.line, width: here ? 1.6 : 1),
+        border: Border.all(color: (here || widget.selectedId == op.id) ? DfColors.accent : DfColors.line, width: widget.selectedId == op.id ? 2 : (here ? 1.4 : 1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            onTap: () => widget.onSeek(op.startMs),
+            onTap: () {
+              widget.onSeek(op.startMs);
+              widget.onSelect(op.id);
+            },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
               child: Row(
@@ -208,7 +215,7 @@ class _TeOpsSectionState extends State<TeOpsSection> {
                   TextButton(onPressed: () => widget.onPlan(_plan.setOpStatus(op.id, OpStatus.approved)), child: const Text('ခွင့်ပြု')),
                 if (op.status != OpStatus.rejected)
                   TextButton(onPressed: () => widget.onPlan(_plan.setOpStatus(op.id, OpStatus.rejected)), child: const Text('ပယ်')),
-                TextButton(onPressed: () => _edit(op), child: const Text('ပြင်')),
+                TextButton(onPressed: () => _edit(op), child: const Text('အသေးစိတ်')),
                 IconButton(
                   tooltip: 'ဖျက်',
                   visualDensity: VisualDensity.compact,

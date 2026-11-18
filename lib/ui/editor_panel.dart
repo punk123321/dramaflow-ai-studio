@@ -22,6 +22,8 @@ import '../data/segment_repo.dart';
 import '../platform/audio_channel.dart';
 import '../state/project_store.dart';
 import 'subtitle_studio_screen.dart';
+import 'te_dialogs.dart';
+import 'te_inline_editor.dart';
 import 'te_ops_section.dart';
 import 'widgets.dart';
 
@@ -56,6 +58,9 @@ class _EditorPanelState extends State<EditorPanel> {
   int _posMs = 0;
   TransformativePlan _plan = const TransformativePlan();
   Future<bool>? _initFuture;
+  String? _selId;
+  CropFrame? _cropStart;
+  Offset _cropFocal0 = Offset.zero;
 
   int get _pid => widget.project.id!;
   int get _sourceMs => widget.project.videoDurationMs ?? 0;
@@ -93,6 +98,7 @@ class _EditorPanelState extends State<EditorPanel> {
     setState(() {
       _plan = p;
       _error = null;
+      if (_selId != null && !p.ops.any((o) => o.id == _selId)) _selId = null;
     });
     try {
       await _repo.setDoc(_pid, DocKind.transformativePlan, p.encode());
@@ -202,6 +208,82 @@ class _EditorPanelState extends State<EditorPanel> {
     if (dur > 0 && c.value.position.inMilliseconds >= dur - 200) await c.seekTo(Duration.zero);
     await c.play();
     if (mounted) setState(() {});
+  }
+
+  TransformOp? get _selected {
+    final id = _selId;
+    if (id == null) return null;
+    return _plan.ops.where((o) => o.id == id).firstOrNull;
+  }
+
+  /// Slider moves change the plan in memory (the preview follows at once);
+  /// [save] writes it.
+  void _changeOp(TransformOp o, bool save) {
+    if (save) {
+      _setPlan(_plan.replaceOp(o));
+    } else {
+      setState(() => _plan = _plan.replaceOp(o));
+    }
+  }
+
+  Future<void> _selectedDetails(TransformOp o) async {
+    final next = await showDialog<TransformOp>(context: context, builder: (_) => TeOpDialog(initial: o));
+    if (next != null) _setPlan(_plan.replaceOp(next));
+  }
+
+  /// One tap adds an effect at the playhead with sensible values and selects
+  /// it, so it can be adjusted right under the preview.
+  void _quickAdd(TransformTool tool, {String kind = ''}) {
+    final pos = _posMs < 0 ? 0 : _posMs;
+    final vd = _vc?.value.duration.inMilliseconds ?? 0;
+    final dur = vd > 0 ? vd : _sourceMs;
+    final end = dur > 0 && pos + 5000 > dur ? dur : pos + 5000;
+    Map<String, Object?> params;
+    var e = end;
+    switch (tool) {
+      case TransformTool.cropReframe:
+        params = {'zoom': 1.5, 'cx': 0.5, 'cy': 0.5};
+      case TransformTool.colorGrade:
+        params = {'brightness': 0.15, 'contrast': 0.0};
+      case TransformTool.freezeFrame:
+        params = {'hold': 3.0};
+        e = pos;
+      case TransformTool.motionGraphics:
+        params = kind == 'arrow'
+            ? {'kind': 'arrow', 'x': 0.5, 'y': 0.5, 'size': 0.08, 'color': 0xFFFF5252, 'angle': 90.0}
+            : {'kind': 'label', 'x': 0.5, 'y': 0.15, 'size': 0.06, 'color': 0xFFFFEB3B, 'text': 'စာသား', 'bg': true};
+      default:
+        params = const {};
+    }
+    final op = TransformOp(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      tool: tool,
+      startMs: pos,
+      endMs: e < pos ? pos : e,
+      params: params,
+      status: OpStatus.approved,
+    );
+    setState(() => _selId = op.id);
+    _setPlan(_plan.copyWith(ops: [..._plan.ops, op]));
+  }
+
+  Widget _quickBar() {
+    Widget chip(String label, IconData icon, VoidCallback f) => ActionChip(
+          avatar: Icon(icon, size: 16),
+          label: Text(label, style: const TextStyle(fontSize: 12.5)),
+          onPressed: f,
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(spacing: 6, runSpacing: 2, children: [
+        chip('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
+        chip('စာသား', Icons.title, () => _quickAdd(TransformTool.motionGraphics, kind: 'label')),
+        chip('မြား', Icons.arrow_forward, () => _quickAdd(TransformTool.motionGraphics, kind: 'arrow')),
+        chip('အလင်း', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
+        chip('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
+        chip('ဖြတ်', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
+      ]),
+    );
   }
 
   /// Moving a label/arrow/picture on the preview: updates the plan in memory
@@ -505,6 +587,18 @@ class _EditorPanelState extends State<EditorPanel> {
             child: Text(_error ?? _msg!, style: const TextStyle(fontSize: 13)),
           ),
         _preview(),
+        _quickBar(),
+        if (_selected case final o?)
+          TeInlineEditor(
+            key: ValueKey(o.id),
+            op: o,
+            posMs: _posMs,
+            onChange: _changeOp,
+            onStatus: (st) => _setPlan(_plan.setOpStatus(o.id, st)),
+            onDelete: () => _setPlan(_plan.removeOp(o.id)),
+            onClose: () => setState(() => _selId = null),
+            onDetails: () => _selectedDetails(o),
+          ),
         _title('Effect စာရင်း · ${_plan.ops.length} ခု'),
         TeOpsSection(
           project: widget.project,
@@ -512,6 +606,8 @@ class _EditorPanelState extends State<EditorPanel> {
           posMs: _posMs,
           onPlan: _setPlan,
           onSeek: _seek,
+          onSelect: (id) => setState(() => _selId = id),
+          selectedId: _selId,
         ),
         const SizedBox(height: 14),
         _title('၁။ ဗီဒီယို အပိုင်းများ · ${_t(_tl.videoMs)}'),
@@ -687,6 +783,10 @@ class _EditorPanelState extends State<EditorPanel> {
     final motions = previewMotions(ops, _posMs);
     final badges = previewBadges(ops, _posMs);
     final cutting = opsAt(ops, _posMs).any((o) => o.tool == TransformTool.smartCut);
+    final sel = _selected;
+    // Crop is edited by pinching/dragging the preview itself, but only while
+    // the playhead is inside that effect (that is when the crop is visible).
+    final cropEdit = (sel != null && sel.tool == TransformTool.cropReframe && opsAt([sel], _posMs).isNotEmpty) ? sel : null;
     final sub = _currentSubtitle;
     final dur = c.value.duration.inMilliseconds > 0 ? c.value.duration.inMilliseconds : _sourceMs;
     final pos = _posMs < 0 ? 0 : (dur > 0 && _posMs > dur ? dur : _posMs);
@@ -714,6 +814,30 @@ class _EditorPanelState extends State<EditorPanel> {
                 child: Stack(fit: StackFit.expand, children: [
                   const ColoredBox(color: Colors.black),
                   video,
+                  if (cropEdit != null)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onScaleStart: (d) {
+                          _cropStart = previewCrop([cropEdit], _posMs) ?? CropFrame(1.5, 0.5, 0.5);
+                          _cropFocal0 = d.focalPoint;
+                        },
+                        onScaleUpdate: (d) {
+                          final st = _cropStart;
+                          if (st == null) return;
+                          final z = (st.zoom * d.scale).clamp(1.0, 3.0).toDouble();
+                          final mv = d.focalPoint - _cropFocal0;
+                          final f = CropFrame(z, st.cx - mv.dx / (w * z), st.cy - mv.dy / (h * z)).fitted;
+                          double r(double v) => double.parse(v.toStringAsFixed(3));
+                          _changeOp(cropEdit.copyWith(params: {...cropEdit.params, 'zoom': r(f.zoom), 'cx': r(f.cx), 'cy': r(f.cy)}), false);
+                        },
+                        onScaleEnd: (_) {
+                          _cropStart = null;
+                          final cur = _selected;
+                          if (cur != null) _changeOp(cur, true);
+                        },
+                      ),
+                    ),
                   if (cutting) const ColoredBox(color: Color(0x99000000)),
                   for (final m in motions) _motionOverlay(m, w, h),
                   if (sub != null && _tl.burnSubtitles)
@@ -776,7 +900,10 @@ class _EditorPanelState extends State<EditorPanel> {
                         top: 0,
                         bottom: 0,
                         child: GestureDetector(
-                          onTap: () => _seek(o.startMs),
+                          onTap: () {
+                            setState(() => _selId = o.id);
+                            _seek(o.startMs);
+                          },
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: (o.status == OpStatus.approved ? DfColors.ok : DfColors.warn).withValues(alpha: 0.85),
@@ -792,7 +919,7 @@ class _EditorPanelState extends State<EditorPanel> {
         const Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(
-            'Preview က နီးစပ်တဲ့ပုံ သက်သက် — တကယ့်ရလဒ်ကို Render မှာ ထုတ်မယ်။ စာသား/မြား/ပုံကို ဆွဲရွှေ့လို့ရတယ်။ အစိမ်း = ခွင့်ပြုပြီး၊ လိမ္မော် = စောင့်ဆိုင်း။',
+            'Preview က နီးစပ်တဲ့ပုံ သက်သက် — တကယ့်ရလဒ်ကို Render မှာ ထုတ်မယ်။ Effect ကို ရွေးရင် အောက်မှာ တန်ဖိုးညှိလို့ရတယ်၊ Zoom ကို preview ပေါ်မှာ ညှပ်ချဲ့/ဆွဲရွှေ့၊ စာသား/မြား/ပုံကို ဆွဲရွှေ့။ အစိမ်း = ခွင့်ပြုပြီး၊ လိမ္မော် = စောင့်ဆိုင်း။',
             style: TextStyle(fontSize: 11.5, color: DfColors.muted),
           ),
         ),
@@ -836,9 +963,20 @@ class _EditorPanelState extends State<EditorPanel> {
       child: FractionalTranslation(
         translation: const Offset(-0.5, -0.5),
         child: GestureDetector(
+          onTap: () => setState(() => _selId = pm.opId),
+          onPanStart: (_) => setState(() => _selId = pm.opId),
           onPanUpdate: (d) => _dragMotion(pm.opId, d.delta.dx / w, d.delta.dy / h),
           onPanEnd: (_) => _dragEnd(pm.opId),
-          child: Opacity(opacity: pm.proposed ? 0.7 : 1, child: child),
+          child: Opacity(
+            opacity: pm.proposed ? 0.7 : 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: _selId == pm.opId ? Border.all(color: DfColors.accent, width: 1.5) : null,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: child,
+            ),
+          ),
         ),
       ),
     );
