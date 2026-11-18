@@ -478,7 +478,7 @@ Unproven: how they look on the phone. Not done yet: Voice Studio tabs, Video Edi
 ## TE-26: less clutter
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Long explanation paragraphs (Render, Video Recap, Scene Recap, Quick, SRT split) shrink to one "ℹ ရှင်းလင်းချက်" line, tap to read | pending CI | **No** |
-| Render: resolution / fps / quality moved into a collapsed "အဆင့်မြင့် setting" (its summary line shows the current values); "ဖုန်းမှာ ကျန်နေရာ" row removed (the low-space warning stays) | pending CI | **No** |
-| Subtitle Studio: only empty / bad-time / overlapping lines count as problems; "hard to read fast / long line" are only counted, not flagged on each line | pending CI | **No** |
+| Long explanation paragraphs (Render, Video Recap, Scene Recap, Quick, SRT split) shrink to one "ℹ ရှင်းလင်းချက်" line, tap to read | Yes (CI green, run 44264606257) | **No** |
+| Render: resolution / fps / quality moved into a collapsed "အဆင့်မြင့် setting" (its summary line shows the current values); "ဖုန်းမှာ ကျန်နေရာ" row removed (the low-space warning stays) | Yes (CI green, run 44264606257) | **No** |
+| Subtitle Studio: only empty / bad-time / overlapping lines count as problems; "hard to read fast / long line" are only counted, not flagged on each line | Yes (CI green, run 44264606257) | **No** |
 Unproven: how it looks on the phone. The rule thresholds (17 characters per second, 42 per line) did not change.
