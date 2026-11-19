@@ -10,16 +10,14 @@ import 'dialogs.dart';
 import 'fair_use_screen.dart';
 import 'subtitle_studio_screen.dart';
 import 'backup_screen.dart';
-import 'quick_screen.dart';
 import 'news_screen.dart';
 import 'scene_recap_screen.dart';
 import 'video_recap_screen.dart';
-import 'srt_split_screen.dart';
 import 'publish_screen.dart';
 import 'transformative_editor_screen.dart';
 import 'widgets.dart';
 
-enum _Action { none, workflow, library, studio, fairUse, transformative, publish, backup, quick, srtSplit, videoRecap, sceneRecap, news }
+enum _Action { none, workflow, library, studio, fairUse, transformative, publish, backup, videoRecap, sceneRecap, news }
 
 class _Module {
   const _Module(this.code, this.title, this.sub, this.color, this.phase, [this.action = _Action.none]);
@@ -34,14 +32,12 @@ class _Module {
 const _modules = <_Module>[
   _Module('VI', 'Video Index', 'အပိုင်းခွဲ', Color(0xFFFF9F43), 2, _Action.workflow),
   _Module('GM', 'Recap Studio', 'Gemini handoff', Color(0xFF3DDC84), 3, _Action.workflow),
-  _Module('ST', 'Subtitle Studio', 'SRT ပြင်၊ စစ်', Color(0xFF5B8CFF), 4, _Action.studio),
+  _Module('ST', 'Subtitle Studio', 'SRT ပြင်၊ အမြန်၊ ခွဲ', Color(0xFF5B8CFF), 4, _Action.studio),
   _Module('TT', 'TTS / MP3', 'အသံ ထုတ်/ဖမ်း', Color(0xFF5B8CFF), 5, _Action.workflow),
   _Module('ED', 'Video Editor', 'Preview · Effect · Timeline', Color(0xFFA46BFF), 6, _Action.transformative),
   _Module('RN', 'Render Center', 'MP4 ထုတ်', Color(0xFFF2C94C), 7, _Action.workflow),
   _Module('DL', 'Drama Library', 'ဇာတ်လမ်း၊ အပိုင်း', Color(0xFFFF9F43), 2, _Action.library),
   _Module('FU', 'Copyright & Fair Use', 'Upload မတင်ခင် စစ်', Color(0xFFF2C94C), 8, _Action.fairUse),
-  _Module('QK', 'အမြန်လမ်း', 'SRT ရှိပြီး → ဗီဒီယိုတန်းထုတ်', Color(0xFF3DDC84), 13, _Action.quick),
-  _Module('SS', 'SRT နဲ့ အပိုင်းခွဲ', 'ဗီဒီယို+SRT အတိအကျဖြတ်', Color(0xFF5B8CFF), 13, _Action.srtSplit),
   _Module('VR', 'Video Recap', 'Gemini က ဗီဒီယိုကြည့်ပြီး script', Color(0xFFB36BFF), 13, _Action.videoRecap),
   _Module('SR', 'Scene Recap', 'Scene ခွဲ + contact sheet → Gemini', Color(0xFFFF7A59), 14, _Action.sceneRecap),
   _Module('NW', 'သတင်း (RSS)', 'သတင်းဖတ်၊ script ရေး', Color(0xFF2FA8FF), 14, _Action.news),
@@ -492,14 +488,10 @@ void _openModule(BuildContext context, _Module module, VoidCallback onOpenWorkfl
       push(FairUseScreen(project: target));
     case _Action.transformative:
       push(TransformativeEditorScreen(project: target));
-    case _Action.srtSplit:
-      push(SrtSplitScreen(project: target));
     case _Action.sceneRecap:
       push(SceneRecapScreen(project: target));
     case _Action.videoRecap:
       push(VideoRecapScreen(project: target));
-    case _Action.quick:
-      push(QuickScreen(projectId: target.id!));
     case _Action.publish:
       push(PublishScreen(project: target));
     case _Action.library:

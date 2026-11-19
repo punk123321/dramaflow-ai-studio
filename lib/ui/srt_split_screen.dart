@@ -20,9 +20,12 @@ import 'widgets.dart';
 /// for each part (times counted from the start of the part) and can make an MP4
 /// for every part, one after another. The original video is never changed.
 class SrtSplitScreen extends StatefulWidget {
-  const SrtSplitScreen({super.key, required this.project});
+  const SrtSplitScreen({super.key, required this.project, this.embedded = false});
 
   final Project project;
+
+  /// Inside Subtitle Studio: no AppBar / scaffold.
+  final bool embedded;
 
   @override
   State<SrtSplitScreen> createState() => _SrtSplitScreenState();
@@ -201,122 +204,158 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     final rs = context.watch<RenderStore>();
     final parts = _parts;
     final overlaps = overlappingBreaks(_lines, _breaks);
-    return DfScaffold(
-      appBar: AppBar(title: const Text('SRT နဲ့ ဗီဒီယို အပိုင်းခွဲ')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _lines.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('SRT မရှိသေးပါ။ အမြန်လမ်း ဒါမှမဟုတ် Subtitle Studio မှာ SRT အရင်ထည့်ပါ။', style: TextStyle(color: DfColors.warn)),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _lines.length + 1,
-                  itemBuilder: (context, k) {
-                    if (k == 0) return _header(rs, parts, overlaps);
-                    final i = k - 1;
-                    final e = _lines[i];
-                    final starts = _breaks.contains(i);
-                    return Container(
-                      decoration: BoxDecoration(border: Border(top: BorderSide(color: starts ? DfColors.ok : DfColors.line, width: starts ? 2 : 0.5))),
-                      child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(e.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                        subtitle: Text('${formatTime(e.startMs)} → ${formatTime(e.endMs)}${starts ? ' · အပိုင်းအသစ် စတဲ့နေရာ' : ''}', style: TextStyle(fontSize: 11.5, color: starts ? DfColors.ok : DfColors.muted)),
-                        trailing: i == 0
-                            ? null
-                            : IconButton(
-                                tooltip: 'ဒီလိုင်းကနေ အပိုင်းအသစ်စ',
-                                icon: Icon(starts ? Icons.content_cut : Icons.content_cut_outlined, size: 18, color: starts ? DfColors.ok : DfColors.muted),
-                                onPressed: _running
-                                    ? null
-                                    : () => setState(() {
-                                          final b = {..._breaks};
-                                          if (!b.remove(i)) b.add(i);
-                                          _breaks = b;
-                                          _finished = {};
-                                        }),
-                              ),
-                      ),
-                    );
-                  },
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _lines.isEmpty
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.subtitles_off_outlined, size: 44, color: DfColors.muted),
+                    SizedBox(height: 10),
+                    Text('SRT မရှိသေးပါ', style: TextStyle(color: DfColors.muted)),
+                  ]),
                 ),
-    );
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _lines.length + 1,
+                itemBuilder: (context, k) {
+                  if (k == 0) return _header(rs, parts, overlaps);
+                  final i = k - 1;
+                  final e = _lines[i];
+                  final starts = _breaks.contains(i);
+                  return Container(
+                    decoration: BoxDecoration(border: Border(top: BorderSide(color: starts ? DfColors.ok : DfColors.line, width: starts ? 2 : 0.5))),
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(e.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                      subtitle: Text('${formatTime(e.startMs)} → ${formatTime(e.endMs)}', style: TextStyle(fontSize: 11.5, color: starts ? DfColors.ok : DfColors.muted)),
+                      trailing: i == 0
+                          ? null
+                          : IconButton(
+                              tooltip: 'ဒီလိုင်းကနေ အပိုင်းအသစ်စ',
+                              icon: Icon(starts ? Icons.content_cut : Icons.content_cut_outlined, size: 18, color: starts ? DfColors.ok : DfColors.muted),
+                              onPressed: _running
+                                  ? null
+                                  : () => setState(() {
+                                        final b = {..._breaks};
+                                        if (!b.remove(i)) b.add(i);
+                                        _breaks = b;
+                                        _finished = {};
+                                      }),
+                            ),
+                    ),
+                  );
+                },
+              );
+    if (widget.embedded) return body;
+    return DfScaffold(appBar: AppBar(title: const Text('အပိုင်းခွဲ')), body: body);
   }
+
+  Widget _label(IconData icon, String text) => Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 6),
+        child: Row(children: [
+          Icon(icon, size: 18, color: DfColors.muted),
+          const SizedBox(width: 8),
+          Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ]),
+      );
+
+  Widget _autoRow(TextEditingController c, IconData icon, String hint, VoidCallback onGo) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(children: [
+          Icon(icon, size: 20, color: DfColors.muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: c,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(isDense: true, suffixText: hint),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filledTonal(onPressed: _running ? null : onGo, icon: const Icon(Icons.content_cut), tooltip: 'ခွဲ'),
+        ]),
+      );
 
   Widget _header(RenderStore rs, List<SplitPart> parts, List<int> overlaps) {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const InfoHint('ဗီဒီယိုကို စာတန်းလိုင်းရဲ့ စချိန်မှာ အတိအကျ ဖြတ်မယ်၊ အပိုင်းတိုင်းအတွက် SRT ကိုလည်း အဲဒီအပိုင်းရဲ့ အစကနေ (0:00) ပြန်ရေးပေးမယ်။ မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။'),
-      const SectionTitle('အလိုအလျောက် ခွဲ'),
+      const InfoHint('စာတန်းလိုင်းရဲ့ စချိန်မှာ အတိအကျ ဖြတ်မယ်။ အပိုင်းတိုင်း SRT ကို 0:00 က ပြန်ရေးပေးမယ်။ မူရင်းဗီဒီယို မပြင်ပါ။'),
+      _label(Icons.auto_awesome_outlined, 'အလိုအလျောက်'),
+      _autoRow(_linesC, Icons.format_list_numbered, 'လိုင်း', () {
+        final n = int.tryParse(_linesC.text.trim()) ?? 0;
+        setState(() {
+          _breaks = breaksEveryLines(_lines.length, n);
+          _finished = {};
+        });
+      }),
+      _autoRow(_minC, Icons.timer_outlined, 'မိနစ်', () {
+        final m = double.tryParse(_minC.text.trim()) ?? 0;
+        setState(() {
+          _breaks = breaksEveryMs(_lines, (m * 60000).round());
+          _finished = {};
+        });
+      }),
       Row(children: [
-        Expanded(
-          child: TextField(controller: _linesC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'လိုင်း ဘယ်နှစ်ကြောင်းတိုင်း')),
-        ),
-        const SizedBox(width: 8),
-        FilledButton.tonal(
-          onPressed: _running
-              ? null
-              : () {
-                  final n = int.tryParse(_linesC.text.trim()) ?? 0;
-                  setState(() {
-                    _breaks = breaksEveryLines(_lines.length, n);
-                    _finished = {};
-                  });
-                },
-          child: const Text('ခွဲ'),
-        ),
+        const Icon(Icons.touch_app_outlined, size: 16, color: DfColors.muted),
+        const SizedBox(width: 6),
+        const Expanded(child: Text('အောက်က ✂ နဲ့ ကိုယ်တိုင်လည်း ခွဲ/ဖြုတ်လို့ရတယ်', style: TextStyle(color: DfColors.muted, fontSize: 12))),
+        if (_breaks.isNotEmpty)
+          IconButton(
+            onPressed: _running
+                ? null
+                : () => setState(() {
+                      _breaks = {};
+                      _finished = {};
+                    }),
+            icon: const Icon(Icons.layers_clear_outlined, size: 20),
+            tooltip: 'ခွဲထားတာ အားလုံး ဖျက်',
+          ),
       ]),
-      Row(children: [
-        Expanded(
-          child: TextField(controller: _minC, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'မိနစ် ဘယ်လောက်ပတ်လည်')),
-        ),
-        const SizedBox(width: 8),
-        FilledButton.tonal(
-          onPressed: _running
-              ? null
-              : () {
-                  final m = double.tryParse(_minC.text.trim()) ?? 0;
-                  setState(() {
-                    _breaks = breaksEveryMs(_lines, (m * 60000).round());
-                    _finished = {};
-                  });
-                },
-          child: const Text('ခွဲ'),
-        ),
-      ]),
-      const Padding(
-        padding: EdgeInsets.only(top: 4),
-        child: const InfoHint('မိနစ်နဲ့ခွဲရင် စာကြောင်းအလယ်မှာ မဖြတ်ဘူး၊ ပစ်မှတ်ထက် နည်းနည်းရှည်နိုင်တယ်။ အောက်ကလိုင်းတိုင်းက ✂ ကို နှိပ်ပြီး ကိုယ်တိုင်လည်း ခွဲ/ပြန်ဖြုတ်လို့ရတယ်။'),
-      ),
-      if (_breaks.isNotEmpty)
-        TextButton(onPressed: _running ? null : () => setState(() {
-                  _breaks = {};
-                  _finished = {};
-                }), child: const Text('ခွဲထားတာ အားလုံး ဖျက်')),
-      SectionTitle('အပိုင်း ${parts.length} ခု'),
+      _label(Icons.view_agenda_outlined, '${parts.length}'),
       if (overlaps.isNotEmpty)
-        Text('⚠ ${overlaps.length} နေရာမှာ ရှေ့စာကြောင်း ဆက်ပြောနေတုန်း ဖြတ်ရတယ်။ အဲဒီစာကြောင်းက အပိုင်းနှစ်ခုလုံးမှာ ပါမယ် (ရှေ့မှာ အဖြတ်ထိ၊ နောက်မှာ ကျန်တဲ့အပိုင်း)။', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(children: [
+            const Icon(Icons.warning_amber, size: 16, color: DfColors.warn),
+            const SizedBox(width: 6),
+            Expanded(child: Text('${overlaps.length} နေရာမှာ စာကြောင်းက အပိုင်းနှစ်ခုလုံးမှာ ပါမယ်', style: const TextStyle(color: DfColors.warn, fontSize: 12.5))),
+          ]),
+        ),
       for (var i = 0; i < parts.length; i++)
         Card(
           child: ListTile(
             dense: true,
-            title: Text('အပိုင်း ${i + 1} · ${formatTime(parts[i].startMs)} → ${formatTime(parts[i].endMs)} (${formatTime(parts[i].lengthMs)})', style: const TextStyle(fontSize: 13)),
-            subtitle: Text('စာတန်း ${parts[i].lines} ကြောင်း${_finished.contains(i) ? ' · MP4 ထုတ်ပြီး ✓' : ''}', style: const TextStyle(fontSize: 12)),
+            leading: CircleAvatar(
+              radius: 14,
+              backgroundColor: _finished.contains(i) ? DfColors.ok.withValues(alpha: 0.2) : DfColors.line,
+              child: _finished.contains(i) ? const Icon(Icons.check, size: 16, color: DfColors.ok) : Text('${i + 1}', style: const TextStyle(fontSize: 12)),
+            ),
+            title: Text('${formatTime(parts[i].startMs)} → ${formatTime(parts[i].endMs)}', style: const TextStyle(fontSize: 13)),
+            subtitle: Text('${formatTime(parts[i].lengthMs)} · ${parts[i].lines}', style: const TextStyle(fontSize: 12)),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              TextButton(onPressed: _running ? null : () => _saveSrt(parts[i], i, parts.length), child: const Text('SRT')),
-              TextButton(onPressed: (_running || rs.running) ? null : () => _renderParts(parts, [i]), child: const Text('MP4')),
+              IconButton(
+                onPressed: _running ? null : () => _saveSrt(parts[i], i, parts.length),
+                icon: const Icon(Icons.subtitles_outlined),
+                tooltip: 'SRT သိမ်း',
+              ),
+              IconButton(
+                onPressed: (_running || rs.running) ? null : () => _renderParts(parts, [i]),
+                icon: const Icon(Icons.movie_outlined),
+                tooltip: 'MP4 ထုတ်',
+              ),
             ]),
           ),
         ),
-      const SectionTitle('အပိုင်းတိုင်း MP4 ထုတ်'),
+      _label(Icons.tune, 'MP4'),
       Row(children: [
         Expanded(
           child: DropdownButtonFormField<OutRatio>(
             key: ValueKey('sr${_settings.ratio.name}'),
             initialValue: _settings.ratio,
-            decoration: const InputDecoration(labelText: 'ပုံသဏ္ဍာန်'),
+            decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.aspect_ratio, size: 20)),
             items: [for (final r in OutRatio.values) DropdownMenuItem(value: r, child: Text(r.label, style: const TextStyle(fontSize: 13)))],
             onChanged: _running ? null : (v) => setState(() => _settings = _settings.copyWith(ratio: v)),
           ),
@@ -327,74 +366,80 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
           child: DropdownButtonFormField<int>(
             key: ValueKey('sh${_settings.height}'),
             initialValue: _settings.height,
-            decoration: const InputDecoration(labelText: 'အရွယ်'),
+            decoration: const InputDecoration(isDense: true),
             items: const [DropdownMenuItem(value: 480, child: Text('480p')), DropdownMenuItem(value: 720, child: Text('720p')), DropdownMenuItem(value: 1080, child: Text('1080p'))],
             onChanged: _running ? null : (v) => setState(() => _settings = _settings.copyWith(height: v)),
           ),
         ),
       ]),
+      const SizedBox(height: 8),
       DropdownButtonFormField<int>(
         key: ValueKey('sq${_settings.videoKbps}'),
         initialValue: _settings.videoKbps,
-        decoration: const InputDecoration(labelText: 'အရည်အသွေး (ဖိုင်အရွယ်ကို ထိန်း)'),
+        decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.high_quality_outlined, size: 20)),
         items: [for (final k in qualityChoices) DropdownMenuItem(value: k, child: Text(qualityLabel(k)))],
         onChanged: _running ? null : (v) => setState(() => _settings = _settings.copyWith(videoKbps: v)),
       ),
       SwitchListTile(
         dense: true,
         contentPadding: EdgeInsets.zero,
+        secondary: Icon(_keepSound ? Icons.volume_up_outlined : Icons.volume_off_outlined, color: DfColors.muted),
         value: _keepSound,
         onChanged: _running ? null : (v) => setState(() => _keepSound = v),
-        title: const Text('မူရင်းဗီဒီယိုရဲ့ အသံ ထည့်မယ်'),
+        title: const Text('မူရင်းအသံ'),
       ),
       SwitchListTile(
         dense: true,
         contentPadding: EdgeInsets.zero,
+        secondary: const Icon(Icons.photo_library_outlined, color: DfColors.muted),
         value: _toGallery,
         onChanged: _running ? null : (v) => setState(() => _toGallery = v),
-        title: const Text('တစ်ပိုင်းပြီးတိုင်း Gallery ထဲ တန်းသိမ်း'),
+        title: const Text('ပြီးတိုင်း Gallery သိမ်း'),
       ),
-      const InfoHint('သုံးမယ့် စာတန်း style၊ logo၊ ထောင့်စာသားက Editor မှာ သတ်မှတ်ထားတာကို သုံးမယ်။ အသံ (narration) နဲ့ TE operation တွေ မပါပါဘူး။ ဖုန်းမှာ အပိုင်းတွေ အများကြီးဆို အချိန်ကြာမယ်။ မျက်နှာပြင်ပိတ်လည် notification နဲ့ ဆက်ထုတ်မယ် (ဖုန်းအမျိုးအစားပေါ်မူတည်)။ ခဏရပ်ရင် လက်ရှိအပိုင်းပြီးမှ ရပ်မယ်။'),
-      const SizedBox(height: 8),
+      const SizedBox(height: 4),
       if (_running) ...[
         LinearProgressIndicator(value: _runTotal == 0 ? null : (_doneParts + rs.percent / 100) / _runTotal),
         const SizedBox(height: 4),
-        Text(_runTotal == 1 ? '$_runLabel ထုတ်နေတယ် ${rs.percent}%' : 'အပိုင်း ${_doneParts + 1}/$_runTotal ထုတ်နေတယ် ${rs.percent}%', style: const TextStyle(fontSize: 13)),
-        if (_runTotal > 1) ...[
-          if (_paused)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 4),
-              child: Text('ခဏရပ်ထားတယ်။ ထုတ်နေတဲ့ အပိုင်း ပြီးရင် နောက်တစ်ပိုင်း မစသေးဘူး။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+        Text(_runTotal == 1 ? '$_runLabel ${rs.percent}%' : '${_doneParts + 1}/$_runTotal · ${rs.percent}%', style: const TextStyle(fontSize: 13)),
+        const SizedBox(height: 4),
+        Row(children: [
+          if (_runTotal > 1)
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => setState(() => _paused = !_paused),
+                icon: Icon(_paused ? Icons.play_arrow : Icons.pause, size: 18),
+                label: Text(_paused ? 'ဆက်' : 'ခဏရပ်'),
+              ),
             ),
-          OutlinedButton.icon(
-            onPressed: () => setState(() => _paused = !_paused),
-            icon: Icon(_paused ? Icons.play_arrow : Icons.pause, size: 18),
-            label: Text(_paused ? 'ဆက်လုပ်မယ်' : 'ခဏရပ်မယ် (လက်ရှိအပိုင်းပြီးမှ)'),
+          if (_runTotal > 1) const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _stop = true;
+                  _paused = false;
+                });
+                rs.cancel();
+              },
+              icon: const Icon(Icons.stop, size: 18),
+              label: const Text('ရပ်'),
+            ),
           ),
-        ] else
+        ]),
+        if (_paused)
           const Padding(
-            padding: EdgeInsets.only(bottom: 4),
-            child: Text('ဖိုင်တစ်ပိုင်းကို တစ်ဝက်မှာ ခဏရပ်လို့ မရပါ (ရပ်ရင် အစကပြန်စရမယ်)။ ဖုန်းမျက်နှာပြင်ပိတ်လည်း ဆက်ထုတ်မယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+            padding: EdgeInsets.only(top: 4),
+            child: Text('လက်ရှိအပိုင်းပြီးရင် ရပ်ထားမယ်', style: TextStyle(color: DfColors.muted, fontSize: 12)),
           ),
-        OutlinedButton(
-          onPressed: () {
-            setState(() {
-              _stop = true;
-              _paused = false;
-            });
-            rs.cancel();
-          },
-          child: const Text('ရပ်မယ်'),
-        ),
       ] else
         FilledButton.icon(
           onPressed: (parts.isEmpty || rs.running) ? null : () => _renderParts(parts, [for (var i = 0; i < parts.length; i++) i]),
           icon: const Icon(Icons.movie_creation_outlined, size: 18),
-          label: Text('အပိုင်း ${parts.length} ခုလုံး MP4 ထုတ်မယ်'),
+          label: Text('${parts.length} ခုလုံး MP4 ထုတ်'),
         ),
       if (_msg != null)
         Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13))),
-      const SectionTitle('စာတန်းလိုင်းတွေ'),
+      _label(Icons.format_list_bulleted, '${_lines.length}'),
     ]);
   }
 }

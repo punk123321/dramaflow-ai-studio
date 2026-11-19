@@ -541,3 +541,12 @@ Unproven: the render drawing of all these (native/RenderEngine.kt: fade uses a c
 | Compile: the range splits the pieces, the middle gets the speed; output length, overlay/sound/split times and subtitles follow the speed (`VideoPiece.speed`, never saved in the saved timeline) | Yes, 6 tests (same run) | n/a |
 | Preview plays at that speed while the playhead is inside the range, badge shows the speed | Yes (same run) | **No** |
 Unproven (all of it on a phone): the render result (picture and sound staying in sync at other speeds, the blurred background copy matching the length, very slow 0.25x on long ranges), the preview speed switching. Narration is placed on the OUTPUT time: after adding a Speed effect, re-check where the voices sit ("fit video to voices" is not redone automatically). Not merged to main. APK artifact `dramaflow-apk-branch-130`.
+
+## TE-33: Subtitle Studio as a hub (Quick lane, SRT edit/check, SRT split)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Subtitle Studio has three tabs along the bottom (icons): edit / check, Quick lane (SRT you already have to an MP4), split video + SRT into parts | pending CI | **No** |
+| Home: the separate "Quick lane" and "SRT split" tiles are removed; the Subtitle Studio tile opens the hub | pending CI | **No** |
+| Less text: icon buttons (video/SRT pick, undo, shift, save, per-part SRT/MP4), count + warning chip instead of sentences, short hints | pending CI | **No** |
+| Behaviour kept: all functions of the three old screens still exist; the editor reloads the SRT when you come back to its tab, the split tab reloads after the SRT was changed | pending CI | **No** |
+Unproven (phone): that all three tabs work inside one screen (render panel and long split runs keep running when switching tabs because the tabs stay alive), icons being understandable without text (tooltips on long-press), the editor reloading correctly after the quick lane brings in a new SRT. Not merged to main.
