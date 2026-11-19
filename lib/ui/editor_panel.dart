@@ -505,6 +505,7 @@ class _EditorPanelState extends State<EditorPanel> {
             FilledButton.tonal(onPressed: () => _playPiece(0, all: true), child: const Text('အကုန် ▶')),
         ]),
         for (var i = 0; i < _tl.pieces.length; i++) _pieceRow(i),
+        _teEffectTracks(),
         const SizedBox(height: 12),
         _title('၂။ အသံ (narration) · ${_tl.voices.length} ခု'),
         OutlinedButton(onPressed: _voicesFromStage3, child: const Text('အဆင့် ၃ က အသံတွေ အစဉ်လိုက်ထည့်')),
@@ -704,6 +705,133 @@ class _EditorPanelState extends State<EditorPanel> {
           child: IconButton.filledTonal(onPressed: _stopPlayback, icon: const Icon(Icons.pause), tooltip: 'ရပ်'),
         ),
       ]),
+    );
+  }
+
+  // Approved TE operations are shown as independent effect tracks.
+  // Their positions use original-source time, matching the TE operation model.
+  Widget _teEffectTracks() {
+    final ops = _tePlan.approvedOps
+        .where((o) => o.endMs > o.startMs)
+        .toList()
+      ..sort((a, b) => a.startMs.compareTo(b.startMs));
+    if (ops.isEmpty) return const SizedBox.shrink();
+
+    final total = _sourceMs > 0
+        ? _sourceMs
+        : ops.fold<int>(0, (m, o) => o.endMs > m ? o.endMs : m);
+    if (total <= 0) return const SizedBox.shrink();
+
+    IconData iconFor(TransformTool tool) => switch (tool) {
+          TransformTool.blur => Icons.blur_on,
+          TransformTool.mirrorFlip => Icons.flip,
+          TransformTool.cropReframe => Icons.crop,
+          TransformTool.colorGrade => Icons.color_lens_outlined,
+          TransformTool.freezeFrame => Icons.pause_circle_outline,
+          TransformTool.smartCut => Icons.content_cut,
+          TransformTool.pictureInPicture => Icons.picture_in_picture_alt,
+          TransformTool.motionGraphics => Icons.auto_awesome,
+          TransformTool.soundDesign => Icons.graphic_eq,
+          TransformTool.splitScreen => Icons.splitscreen,
+          TransformTool.sceneReordering => Icons.swap_vert,
+          TransformTool.commentaryVoiceOver => Icons.mic,
+          TransformTool.criticalCommentary => Icons.rate_review,
+        };
+
+    Color colorFor(TransformTool tool) => switch (tool) {
+          TransformTool.blur => const Color(0xFF55B8FF),
+          TransformTool.mirrorFlip => const Color(0xFFB48CFF),
+          TransformTool.cropReframe => const Color(0xFF54D6B0),
+          TransformTool.colorGrade => const Color(0xFFFFB454),
+          TransformTool.freezeFrame => const Color(0xFFFF7E9D),
+          TransformTool.smartCut => const Color(0xFFFFD166),
+          _ => DfColors.accent,
+        };
+
+    return Card(
+      margin: const EdgeInsets.only(top: 10),
+      color: DfColors.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Icon(Icons.layers_outlined, size: 17),
+              const SizedBox(width: 7),
+              const Expanded(
+                child: Text('TE Effect Layers', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Text('${ops.length} ခု', style: const TextStyle(fontSize: 12, color: DfColors.muted)),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: 'TE ပြင်ရန်',
+                onPressed: _openTe,
+                icon: const Icon(Icons.tune, size: 18),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            for (final op in ops)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _openTe,
+                  child: Row(children: [
+                    SizedBox(
+                      width: 104,
+                      child: Row(children: [
+                        Icon(iconFor(op.tool), size: 16, color: colorFor(op.tool)),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(op.tool.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11.5)),
+                        ),
+                      ]),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: LayoutBuilder(builder: (context, box) {
+                        final left = (op.startMs / total).clamp(0.0, 1.0) * box.maxWidth;
+                        final right = (op.endMs / total).clamp(0.0, 1.0) * box.maxWidth;
+                        final width = (right - left).clamp(5.0, box.maxWidth);
+                        return SizedBox(
+                          height: 20,
+                          child: Stack(children: [
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: DfColors.line.withValues(alpha: 0.45),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: left.clamp(0.0, (box.maxWidth - 4).clamp(0.0, double.infinity)),
+                              top: 2,
+                              bottom: 2,
+                              width: width,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: colorFor(op.tool).withValues(alpha: 0.88),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: colorFor(op.tool)),
+                                ),
+                              ),
+                            ),
+                          ]),
+                        );
+                      }),
+                    ),
+                  ]),
+                ),
+              ),
+            const SizedBox(height: 2),
+            const Text('အရောင်တန်းများသည် မူရင်းဗီဒီယိုအချိန်အလိုက် Effect သက်ရောက်မည့် အပိုင်းကို ပြသည်။',
+                style: TextStyle(fontSize: 10.5, color: DfColors.muted)),
+          ],
+        ),
+      ),
     );
   }
 
