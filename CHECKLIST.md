@@ -522,3 +522,14 @@ NOT built: Border (frame around the video), gradient text box with corner resize
 | Tool row: Box, Circle, Spot, Border added; the detail dialog keeps the values of these effects (they are edited with the sliders under the preview) | Yes (same run) | **No** |
 | Parameter checks (`motionFromParams`) for the new kinds | Yes, 5 tests (same run) | n/a |
 Unproven: the render drawing (native/RenderEngine.kt) of all of these, how closely the preview matches it, and Burmese text on the colourful label background (drawn with StaticLayout). The AI (Gemini) prompt still only suggests label and arrow. NOT built: fade in/out, speed change (slow/fast), transitions between pieces, saturation / black-and-white / warm-cool filters (the render only has brightness and contrast), Canvas (aspect/background), blur or mosaic boxes (deliberately not built: they could be used to hide someone else's watermark). Not merged to main.
+
+## TE-31: more effects (Motion Graphics kinds)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Fade in / Fade out / Flash (dip, white or colour), length slider | Yes (CI green, run 44441551934; Kotlin compiled) | **No** |
+| Vignette (dark edges), Tint (warm / cool / sepia / red / green colour wash), Cinema bars, Shade (dark gradient from top or bottom edge for readable text) | Yes (same run) | **No** |
+| Box / Circle can be filled like a marker | Yes (same run) | **No** |
+| Sticker: tap an emoji, it is added as a big label without background | Yes (same run) | **No** |
+| Tool row is longer (scrolls sideways): Text, Arrow, Box, Circle, Spot, Border, Sticker, Zoom, Filter, Freeze, Cut, Fade in/out, Flash, Tint, Vignette, Bars, Shade, Picture, Sound | Yes (same run) | **No** |
+| Parameter checks + `fadeAlpha` | Yes, 2 more tests (same run) | n/a |
+Unproven: the render drawing of all these (native/RenderEngine.kt: fade uses a changing alpha per frame, the others are full-size pictures, sharing one empty picture when hidden), memory use with many of them on a long 1080p video, emoji drawing in the render text, and the preview showing subtitles above a fade (the render covers them). Whole-video effects (Border, Vignette, Tint, Bars, Shade) are added for the whole video; trim with the start/end buttons. NOT built: black-and-white / saturation (the render has no saturation control), speed change, transitions between pieces, blur / mosaic (not built on purpose: it can hide someone else's watermark), mirror/flip, pitch change. Not merged to main. APK artifact: `dramaflow-apk-branch-126`.
