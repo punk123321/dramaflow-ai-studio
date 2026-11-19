@@ -493,7 +493,7 @@ Unproven: how it looks on the phone. The rule thresholds (17 characters per seco
 | Effect list: tap = jump to its start, approve / reject / edit (same dialog, pre-filled) / delete, "add at playhead", "approve all pending", find quiet stretches, Gemini copy-paste (collapsed) | Yes (same run) | **No** |
 | TE plan saves at once on every change (no save button) | Yes (same run) | **No** |
 | Pure helper `te_preview.dart` (which effects are active at a time, crop, look matrix, badges) | Yes, 9 tests (same run) | n/a |
-Unproven: how the preview overlays line up with the render on a real video; the dragging gesture inside a scrolling page; the marker bar alignment with the slider (approximate). Smart cut is only dimmed in the preview, playback does not skip it. Split screen and Sound are shown as badges only. APK: artifact `dramaflow-apk-branch-119`. Not merged to main.
+Unproven: how the preview overlays line up with the render on a real video; the dragging gesture inside a scrolling page; the marker bar alignment with the slider (approximate). Smart cut is only dimmed in the preview, playback does not skip it. Split screen and Sound are shown as badges only. APK: artifact `dramaflow-apk-branch-119`. Not merged to main. APK artifact `dramaflow-apk-branch-131` (check the run number in Actions).
 
 ## TE-28: edit effects directly on the preview
 | Feature | Compiles on CI | Phone-tested |
@@ -509,7 +509,7 @@ Unproven: how the preview overlays line up with the render on a real video; the 
 | Bottom tool row: Text, Arrow, Zoom, Filter, Freeze, Cut add an effect at the playhead in one tap; Picture and Sound open the detail dialog | Yes (same run) | **No** |
 | Multi-track timeline on the original video's time: ruler (tap/drag to move the playhead), Video track (kept pieces), subtitle track, one coloured block per effect (overlapping effects on separate rows), zoom in/out, follows the playhead while playing | Yes (same run) | **No** |
 | `assignLanes` helper | Yes, 2 tests (same run) | n/a |
-NOT built: Border (frame around the video), gradient text box with corner resize handles, Canvas (aspect ratio / background), AI Hook, Voice track in the timeline (narration lives on the edit time, not the original time), dragging block edges to trim, full-screen preview. Border and gradient text need changes in the render engine (native/RenderEngine.kt), which cannot be tested here. APK: `dramaflow-apk-branch-122`. Not merged to main.
+NOT built: Border (frame around the video), gradient text box with corner resize handles, Canvas (aspect ratio / background), AI Hook, Voice track in the timeline (narration lives on the edit time, not the original time), dragging block edges to trim, full-screen preview. Border and gradient text need changes in the render engine (native/RenderEngine.kt), which cannot be tested here. APK: `dramaflow-apk-branch-122`. Not merged to main. APK artifact `dramaflow-apk-branch-131` (check the run number in Actions).
 
 ## TE-30: more effects (all under Motion Graphics)
 | Feature | Compiles on CI | Phone-tested |
@@ -521,7 +521,7 @@ NOT built: Border (frame around the video), gradient text box with corner resize
 | Filter presets (dark mood, bright, high contrast, soft) set brightness/contrast only | Yes (same run) | **No** |
 | Tool row: Box, Circle, Spot, Border added; the detail dialog keeps the values of these effects (they are edited with the sliders under the preview) | Yes (same run) | **No** |
 | Parameter checks (`motionFromParams`) for the new kinds | Yes, 5 tests (same run) | n/a |
-Unproven: the render drawing (native/RenderEngine.kt) of all of these, how closely the preview matches it, and Burmese text on the colourful label background (drawn with StaticLayout). The AI (Gemini) prompt still only suggests label and arrow. NOT built: fade in/out, speed change (slow/fast), transitions between pieces, saturation / black-and-white / warm-cool filters (the render only has brightness and contrast), Canvas (aspect/background), blur or mosaic boxes (deliberately not built: they could be used to hide someone else's watermark). Not merged to main.
+Unproven: the render drawing (native/RenderEngine.kt) of all of these, how closely the preview matches it, and Burmese text on the colourful label background (drawn with StaticLayout). The AI (Gemini) prompt still only suggests label and arrow. NOT built: fade in/out, speed change (slow/fast), transitions between pieces, saturation / black-and-white / warm-cool filters (the render only has brightness and contrast), Canvas (aspect/background), blur or mosaic boxes (deliberately not built: they could be used to hide someone else's watermark). Not merged to main. APK artifact `dramaflow-apk-branch-131` (check the run number in Actions).
 
 ## TE-31: more effects (Motion Graphics kinds)
 | Feature | Compiles on CI | Phone-tested |
@@ -545,8 +545,8 @@ Unproven (all of it on a phone): the render result (picture and sound staying in
 ## TE-33: Subtitle Studio as a hub (Quick lane, SRT edit/check, SRT split)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Subtitle Studio has three tabs along the bottom (icons): edit / check, Quick lane (SRT you already have to an MP4), split video + SRT into parts | pending CI | **No** |
-| Home: the separate "Quick lane" and "SRT split" tiles are removed; the Subtitle Studio tile opens the hub | pending CI | **No** |
-| Less text: icon buttons (video/SRT pick, undo, shift, save, per-part SRT/MP4), count + warning chip instead of sentences, short hints | pending CI | **No** |
-| Behaviour kept: all functions of the three old screens still exist; the editor reloads the SRT when you come back to its tab, the split tab reloads after the SRT was changed | pending CI | **No** |
-Unproven (phone): that all three tabs work inside one screen (render panel and long split runs keep running when switching tabs because the tabs stay alive), icons being understandable without text (tooltips on long-press), the editor reloading correctly after the quick lane brings in a new SRT. Not merged to main.
+| Subtitle Studio has three tabs along the bottom (icons): edit / check, Quick lane (SRT you already have to an MP4), split video + SRT into parts | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+| Home: the separate "Quick lane" and "SRT split" tiles are removed; the Subtitle Studio tile opens the hub | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+| Less text: icon buttons (video/SRT pick, undo, shift, save, per-part SRT/MP4), count + warning chip instead of sentences, short hints | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+| Behaviour kept: all functions of the three old screens still exist; the editor reloads the SRT when you come back to its tab, the split tab reloads after the SRT was changed | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+Unproven (phone): that all three tabs work inside one screen (render panel and long split runs keep running when switching tabs because the tabs stay alive), icons being understandable without text (tooltips on long-press), the editor reloading correctly after the quick lane brings in a new SRT. Not merged to main. APK artifact `dramaflow-apk-branch-131` (check the run number in Actions).
