@@ -471,6 +471,9 @@ class _OpDialogState extends State<_OpDialog> {
   String _layout = 'leftRight';
   double _bright = 0.15;
   double _contrast = 0.0;
+  double _blurStrength = 12.0;
+  bool _flipHorizontal = true;
+  bool _flipVertical = false;
   String? _imgPath;
   double _isize = 0.25;
   AudioFile? _sound;
@@ -535,6 +538,10 @@ class _OpDialogState extends State<_OpDialog> {
         return {'brightness': r(_bright), 'contrast': r(_contrast)};
       case TransformTool.cropReframe:
         return {'zoom': r(_zoom), 'cx': r(_cx), 'cy': r(_cy)};
+      case TransformTool.blur:
+        return {'strength': r(_blurStrength)};
+      case TransformTool.mirrorFlip:
+        return {'horizontal': _flipHorizontal, 'vertical': _flipVertical};
       case TransformTool.motionGraphics:
         return {
           'kind': _kind,
@@ -741,6 +748,15 @@ class _OpDialogState extends State<_OpDialog> {
                 'စချိန်ကနေ ပုံတစ်ပုံ ရပ်ပြမယ်။ ရပ်တဲ့အချိန်ကြောင့် နောက်ပိုင်း အချိန်တွေ နောက်ကျမယ် — Render screen မှာ edit အချိန်ကို ပြမယ်။',
                 style: TextStyle(color: DfColors.muted, fontSize: 12),
               ),
+            ],
+            if (_tool == TransformTool.blur) ...[
+              _slider('Blur Strength ${_blurStrength.toStringAsFixed(1)}', _blurStrength, 0.5, 50.0, (v) => _blurStrength = v),
+              const Text('ရွေးထားတဲ့ အချိန်ပိုင်းကိုသာ မှုန်ဝါးစေမယ်။ Preview မဟုတ်ဘဲ Export မှာ အသုံးချမယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+            ],
+            if (_tool == TransformTool.mirrorFlip) ...[
+              SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('ဘယ်-ညာ (Horizontal)'), value: _flipHorizontal, onChanged: (v) => setState(() => _flipHorizontal = v)),
+              SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('အပေါ်-အောက် (Vertical)'), value: _flipVertical, onChanged: (v) => setState(() => _flipVertical = v)),
+              const Text('ဖွဲ့စည်းပုံ/မြင်ကွင်းဖန်တီးမှုအတွက်သာ ဖြစ်ပြီး မူပိုင်ခွင့်စစ်ဆေးမှုကို ရှောင်ရန် မဟုတ်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
             ],
             if (_tool == TransformTool.cropReframe) ...[
               _slider('Zoom ×${_zoom.toStringAsFixed(2)}', _zoom, 1.0, 3.0, (v) => _zoom = v),
