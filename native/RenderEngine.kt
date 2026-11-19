@@ -694,7 +694,6 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             strokeCap = Paint.Cap.ROUND
         }
         val p = paint(stroke)
-        data class BorderCorner(val x: Float, val y: Float, val sx: Float, val sy: Float)
         val rect = android.graphics.RectF(left, top, right, bottom)
         when (preset.coerceIn(0, 39)) {
             0 -> canvas.drawRect(rect, p)
@@ -705,7 +704,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             5 -> { canvas.drawRect(rect, paint(stroke * 1.8f)); canvas.drawRect(android.graphics.RectF(left + stroke * 3, top + stroke * 3, right - stroke * 3, bottom - stroke * 3), paint(stroke * 0.5f)) }
             6 -> {
                 val len = short * 0.12f
-                for ((x, y, sx, sy) in listOf(BorderCorner(left, top, 1f, 1f), BorderCorner(right, top, -1f, 1f), BorderCorner(left, bottom, 1f, -1f), BorderCorner(right, bottom, -1f, -1f))) {
+                for ((x, y, sx) in listOf(Triple(left, top, 1f), Triple(right, top, -1f), Triple(left, bottom, 1f), Triple(right, bottom, -1f))) {
                     canvas.drawLine(x, y, x + len * sx, y, p); canvas.drawLine(x, y, x, y + len * sy, p)
                 }
             }
@@ -733,7 +732,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             // inside the inset window; the frame is rendered as a full-frame overlay.
             20, 21, 22, 23, 24 -> {
                 val device = when (preset) { 20 -> Color.rgb(35, 35, 38); 21 -> Color.rgb(28, 32, 38); 22 -> Color.rgb(105, 70, 42); 23 -> Color.rgb(30, 30, 30); else -> alphaColor }
-                val shell = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = device; style = Paint.Style.STROKE; strokeWidth = short * 0.045f }
+                val shell = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = device; this.style = Paint.Style.STROKE; strokeWidth = short * 0.045f }
                 val outer = android.graphics.RectF(left, top, right, bottom)
                 canvas.drawRoundRect(outer, short * 0.055f, short * 0.055f, shell)
                 val screen = android.graphics.RectF(left + stroke * 2.2f, top + stroke * 2.2f, right - stroke * 2.2f, bottom - stroke * 2.2f)
@@ -751,7 +750,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             25, 26, 27, 28, 29 -> {
                 val cover = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     this.color = when (preset) { 25 -> Color.rgb(117, 71, 43); 26 -> Color.rgb(49, 66, 83); 27 -> Color.rgb(92, 49, 42); 28 -> Color.rgb(184, 153, 104); else -> alphaColor }
-                    style = Paint.Style.STROKE; strokeWidth = short * 0.04f
+                    this.style = Paint.Style.STROKE; strokeWidth = short * 0.04f
                 }
                 val book = android.graphics.RectF(left, top, right, bottom)
                 canvas.drawRoundRect(book, stroke * 0.8f, stroke * 0.8f, cover)
