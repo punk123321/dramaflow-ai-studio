@@ -462,6 +462,7 @@ Both effects are intended for ordinary creative framing and visual styling only,
 | Editing workspace opens TE from its own screen | yes | pending | no |
 | Returning from TE reloads the latest saved plan into Editing | yes | pending | no |
 | Approved TE operations appear as separate icon-labelled effect tracks below the video pieces | yes | pending | no |
+| TE effect tracks use compact icon-only labels; tooltips show effect names and no explanatory footer text | yes | pending | no |
 | Effect track bars are positioned using original-source time ranges | yes | pending | no |
 | Approved Blur and Mirror/Flip are previewed in the Editing video preview using source-video time ranges | yes | pending | no |
 
