@@ -45,12 +45,12 @@ class _BorderSamplePainter extends CustomPainter {
         case 1: case 5: case 12: case 18:
           canvas.drawRect(r, p); canvas.drawRect(r.deflate(5), p..strokeWidth = 1); break;
         case 3: case 4: case 13: case 15:
-          p.pathEffect = null; canvas.drawRect(r, p); break;
+          canvas.drawRect(r, p); break;
         case 6: case 11: case 17:
           final d = 13.0;
           for (final x in [r.left, r.right]) for (final y in [r.top, r.bottom]) {
             canvas.drawLine(Offset(x, y), Offset(x + (x == r.left ? d : -d), y), p);
-            canvas.drawLine(Offset(x, y), Offset(x, y + (y == r.top ? d : -d), p));
+            canvas.drawLine(Offset(x, y), Offset(x, y + (y == r.top ? d : -d)), p);
           } break;
         case 7:
           canvas.drawRect(Rect.fromLTWH(r.left, r.top, r.width, 5), fill);
@@ -79,8 +79,8 @@ class _BorderSamplePainter extends CustomPainter {
         for (var y = r.top + 9; y < r.bottom - 3; y += 5) canvas.drawLine(Offset(r.left + 5, y), Offset(r.center.dx - 3, y), p..strokeWidth = .6);
         break;
       default: // monitor, laptop, tablet, phone, projector, cinema, broadcast
-        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(index == 36 ? 9 : 3)), fill);
-        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(index == 36 ? 9 : 3)), p);
+        canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(index == 36 ? 9 : 3)), fill);
+        canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(index == 36 ? 9 : 3)), p);
         if (index == 32) {
           canvas.drawLine(Offset(r.center.dx, r.bottom), Offset(r.center.dx, size.height - 2), p);
           canvas.drawLine(Offset(r.center.dx - 10, size.height - 2), Offset(r.center.dx + 10, size.height - 2), p);
