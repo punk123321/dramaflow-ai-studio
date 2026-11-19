@@ -708,8 +708,7 @@ class _EditorPanelState extends State<EditorPanel> {
     );
   }
 
-  // Approved TE operations are shown as independent effect tracks.
-  // Their positions use original-source time, matching the TE operation model.
+  // Compact icon-first TE effect tracks keep the Editing timeline uncluttered.
   Widget _teEffectTracks() {
     final ops = _tePlan.approvedOps
         .where((o) => o.endMs > o.startMs)
@@ -749,86 +748,83 @@ class _EditorPanelState extends State<EditorPanel> {
         };
 
     return Card(
-      margin: const EdgeInsets.only(top: 10),
+      margin: const EdgeInsets.only(top: 8),
       color: DfColors.surface,
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              const Icon(Icons.layers_outlined, size: 17),
-              const SizedBox(width: 7),
+              const Icon(Icons.layers_outlined, size: 16, color: DfColors.muted),
+              const SizedBox(width: 5),
               const Expanded(
-                child: Text('TE Effect Layers', style: TextStyle(fontWeight: FontWeight.w700)),
+                child: Text('TE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: DfColors.muted)),
               ),
-              Text('${ops.length} ခု', style: const TextStyle(fontSize: 12, color: DfColors.muted)),
+              Text('${ops.length}', style: const TextStyle(fontSize: 11, color: DfColors.muted)),
               IconButton(
                 visualDensity: VisualDensity.compact,
-                tooltip: 'TE ပြင်ရန်',
+                constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                padding: EdgeInsets.zero,
+                tooltip: 'TE ဖွင့်ရန်',
                 onPressed: _openTe,
-                icon: const Icon(Icons.tune, size: 18),
+                icon: const Icon(Icons.tune, size: 16),
               ),
             ]),
-            const SizedBox(height: 4),
             for (final op in ops)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: _openTe,
-                  child: Row(children: [
-                    SizedBox(
-                      width: 104,
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Tooltip(
+                  message: op.tool.title,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(7),
+                    onTap: _openTe,
+                    child: SizedBox(
+                      height: 25,
                       child: Row(children: [
-                        Icon(iconFor(op.tool), size: 16, color: colorFor(op.tool)),
+                        SizedBox(
+                          width: 30,
+                          child: Center(
+                            child: Icon(iconFor(op.tool), size: 17, color: colorFor(op.tool)),
+                          ),
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(op.tool.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 11.5)),
+                          child: LayoutBuilder(builder: (context, box) {
+                            final left = ((op.startMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
+                            final right = ((op.endMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
+                            final width = (right - left).clamp(3.0, box.maxWidth).toDouble();
+                            return SizedBox(
+                              height: 17,
+                              child: Stack(children: [
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: DfColors.line.withValues(alpha: 0.35),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: left.clamp(0.0, box.maxWidth).toDouble(),
+                                  top: 1,
+                                  bottom: 1,
+                                  width: width,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: colorFor(op.tool).withValues(alpha: 0.82),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                ),
+                              ]),
+                            );
+                          }),
                         ),
                       ]),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: LayoutBuilder(builder: (context, box) {
-                        final left = ((op.startMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
-                        final right = ((op.endMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
-                        final width = (right - left).clamp(0.0, box.maxWidth).toDouble();
-                        return SizedBox(
-                          height: 20,
-                          child: Stack(children: [
-                            Positioned.fill(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: DfColors.line.withValues(alpha: 0.45),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: left.clamp(0.0, box.maxWidth).toDouble(),
-                              top: 2,
-                              bottom: 2,
-                              width: width,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: colorFor(op.tool).withValues(alpha: 0.88),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: colorFor(op.tool)),
-                                ),
-                              ),
-                            ),
-                          ]),
-                        );
-                      }),
-                    ),
-                  ]),
+                  ),
                 ),
               ),
-            const SizedBox(height: 2),
-            const Text('အရောင်တန်းများသည် မူရင်းဗီဒီယိုအချိန်အလိုက် Effect သက်ရောက်မည့် အပိုင်းကို ပြသည်။',
-                style: TextStyle(fontSize: 10.5, color: DfColors.muted)),
           ],
         ),
       ),
