@@ -25,7 +25,7 @@ import 'widgets.dart';
 /// sound can stay on. Everything else (ratio, presets, look, logo) is still
 /// reachable in the normal stages.
 class QuickScreen extends StatefulWidget {
-  const QuickScreen({super.key, required this.projectId, this.embedded = false, this.onSrtChanged});
+  const QuickScreen({super.key, required this.projectId, this.embedded = false, this.onSrtChanged, this.refresh = 0});
 
   final int projectId;
 
@@ -34,6 +34,9 @@ class QuickScreen extends StatefulWidget {
 
   /// Called after a new SRT has been brought in.
   final VoidCallback? onSrtChanged;
+
+  /// Changes when the SRT was edited in the editor tab: it is read again.
+  final int refresh;
 
   @override
   State<QuickScreen> createState() => _QuickScreenState();
@@ -55,6 +58,12 @@ class _QuickScreenState extends State<QuickScreen> {
   void initState() {
     super.initState();
     _loadSrt();
+  }
+
+  @override
+  void didUpdateWidget(QuickScreen old) {
+    super.didUpdateWidget(old);
+    if (old.refresh != widget.refresh) _loadSrt();
   }
 
   @override

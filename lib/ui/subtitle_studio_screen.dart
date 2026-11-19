@@ -45,8 +45,12 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
   late final Set<int> _visited = {0, _tab};
 
   /// The SRT was changed in one tab, so the split tab must read it again.
-  bool _srtDirty = false;
+  bool _splitStale = false;
   int _splitRev = 0;
+
+  /// The editor tab changed the SRT, so the quick lane must read it again.
+  bool _quickStale = false;
+  int _quickRev = 0;
 
   int get _pid => widget.project.id!;
 
@@ -61,9 +65,13 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
     setState(() {
       _tab = i;
       _visited.add(i);
-      if (i == 2 && _srtDirty) {
+      if (i == 2 && _splitStale) {
         _splitRev++;
-        _srtDirty = false;
+        _splitStale = false;
+      }
+      if (i == 1 && _quickStale) {
+        _quickRev++;
+        _quickStale = false;
       }
     });
     // The quick lane can bring in a new SRT, so the editor reads it again.
@@ -74,22 +82,30 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
     try {
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final text = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
+      final before = serializeSrt(_entries);
       if (text == null || text.trim().isEmpty) {
         _entries = [];
       } else {
         _entries = parseSrt(text).entries;
         if (studio == null) await _repo.setDoc(_pid, DocKind.studioSrt, serializeSrt(_entries));
       }
+      // The SRT was replaced elsewhere (quick lane): old undo steps would bring the old text back.
+      if (before != serializeSrt(_entries)) _undo.clear();
     } catch (e) {
       _error = 'ဖတ်လို့မရပါ: $e';
     }
     if (mounted) setState(() => _loading = false);
   }
 
+  void _markChanged() {
+    _splitStale = true;
+    _quickStale = true;
+  }
+
   Future<void> _apply(List<SrtEntry> next, {String? msg}) async {
     _undo.add(_entries);
     if (_undo.length > 30) _undo.removeAt(0);
-    _srtDirty = true;
+    _markChanged();
     setState(() {
       _entries = next;
       if (_selected >= next.length) _selected = next.isEmpty ? 0 : next.length - 1;
@@ -109,6 +125,7 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
 
   Future<void> _doUndo() async {
     if (_undo.isEmpty) return;
+    _markChanged();
     setState(() {
       _entries = _undo.removeLast();
       if (_selected >= _entries.length) _selected = _entries.isEmpty ? 0 : _entries.length - 1;
@@ -410,10 +427,10 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
         children: [
           editor,
           _visited.contains(1)
-              ? QuickScreen(embedded: true, projectId: _pid, onSrtChanged: () => _srtDirty = true)
+              ? QuickScreen(embedded: true, projectId: _pid, refresh: _quickRev, onSrtChanged: _markChanged)
               : const SizedBox.shrink(),
           _visited.contains(2)
-              ? SrtSplitScreen(key: ValueKey('split$_splitRev'), embedded: true, project: widget.project)
+              ? SrtSplitScreen(embedded: true, project: widget.project, refresh: _splitRev)
               : const SizedBox.shrink(),
         ],
       ),

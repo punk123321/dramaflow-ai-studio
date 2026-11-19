@@ -20,12 +20,16 @@ import 'widgets.dart';
 /// for each part (times counted from the start of the part) and can make an MP4
 /// for every part, one after another. The original video is never changed.
 class SrtSplitScreen extends StatefulWidget {
-  const SrtSplitScreen({super.key, required this.project, this.embedded = false});
+  const SrtSplitScreen({super.key, required this.project, this.embedded = false, this.refresh = 0});
 
   final Project project;
 
   /// Inside Subtitle Studio: no AppBar / scaffold.
   final bool embedded;
+
+  /// Changes when the SRT was edited elsewhere: the lines are read again
+  /// (not while parts are being made).
+  final int refresh;
 
   @override
   State<SrtSplitScreen> createState() => _SrtSplitScreenState();
@@ -61,6 +65,16 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(SrtSplitScreen old) {
+    super.didUpdateWidget(old);
+    if (old.refresh != widget.refresh && !_running) {
+      _breaks = {};
+      _finished = {};
+      _load();
+    }
   }
 
   @override
