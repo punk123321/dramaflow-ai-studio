@@ -250,6 +250,7 @@ Map<String, Object?> buildRenderJob({
     'subStyle': timeline.style.toJson(),
     'corners': [for (final c in timeline.corners) if (c.text.trim().isNotEmpty) c.toJson()],
     'logo': timeline.logo?.toJson(),
+    if (timeline.border != null) 'border': timeline.border!.toJson(),
     'voiceLanes': [
       for (final lane in lanes)
         [
