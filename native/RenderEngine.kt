@@ -311,14 +311,18 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 )
                 .build()
             val b = EditedMediaItem.Builder(item)
+            if (origVol <= 0f) b.setRemoveAudio(true)
             // Speed (from approved Speed operations): picture and sound play faster or slower, pitch is kept.
             val pieceSpeed = p.optDouble("sp", 1.0).toFloat()
-            if (pieceSpeed != 1f) b.setSpeed(constantSpeed(pieceSpeed))
-            if (origVol <= 0f) b.setRemoveAudio(true)
-            val audioFx = if (origVol <= 0f) emptyList<AudioProcessor>() else listOf(volume(origVol))
+            val audioFx = ArrayList<AudioProcessor>()
+            if (origVol > 0f) {
+                if (pieceSpeed != 1f) audioFx.add(androidx.media3.common.audio.SpeedChangingAudioProcessor(constantSpeed(pieceSpeed)))
+                audioFx.add(volume(origVol))
+            }
             val zoom = p.optInt("z", 0)
             val pieceUs = (p.getLong("e") - p.getLong("s")) * 1000L
             val videoFx = ArrayList<Effect>()
+            if (pieceSpeed != 1f) videoFx.add(androidx.media3.effect.SpeedChangeEffect(pieceSpeed))
             val look = p.optJSONArray("l")
             if (look != null && look.length() == 2) {
                 videoFx.add(Brightness(look.getDouble(0).toFloat()))
@@ -350,14 +354,12 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                             .build()
                     )
                     .build()
-                val fx = listOf<Effect>(
-                    Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP),
-                    GaussianBlur(25f)
-                )
-                val bgItem = EditedMediaItem.Builder(item).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx))
+                val fx = ArrayList<Effect>()
                 val bgSpeed = p.optDouble("sp", 1.0).toFloat()
-                if (bgSpeed != 1f) bgItem.setSpeed(constantSpeed(bgSpeed))
-                bg.addItem(bgItem.build())
+                if (bgSpeed != 1f) fx.add(androidx.media3.effect.SpeedChangeEffect(bgSpeed))
+                fx.add(Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP))
+                fx.add(GaussianBlur(25f))
+                bg.addItem(EditedMediaItem.Builder(item).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
             }
             sequences.add(bg.build())
             compositor = BlurFillCompositor(outW, outH)
