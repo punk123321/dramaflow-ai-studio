@@ -83,18 +83,21 @@ class LookAdjust {
 }
 
 class VideoPiece {
-  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false, this.look]);
+  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false, this.look, this.blurStrength, this.flipHorizontal = false, this.flipVertical = false]);
 
   /// A still frame of the original at [atMs], held for [holdMs]. Only the
   /// render step creates these (from approved Freeze Frame operations); they
   /// are never saved in the timeline.
-  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c, LookAdjust? l])
+  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c, LookAdjust? l, double? blur, bool flipH = false, bool flipV = false])
       : startMs = atMs,
         endMs = atMs + holdMs,
         zoom = ZoomMode.none,
         crop = c,
         freeze = true,
-        look = l;
+        look = l,
+        blurStrength = blur,
+        flipHorizontal = flipH,
+        flipVertical = flipV;
 
   /// Range inside the ORIGINAL video.
   final int startMs;
@@ -106,13 +109,18 @@ class VideoPiece {
   /// [lengthMs] how long it is held.
   final bool freeze;
   final LookAdjust? look;
+  final double? blurStrength;
+  final bool flipHorizontal;
+  final bool flipVertical;
 
   int get lengthMs => endMs - startMs;
 
-  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze, look);
-  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze, look);
-  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze, look);
-  VideoPiece withLook(LookAdjust? l) => VideoPiece(startMs, endMs, zoom, crop, freeze, l);
+  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze, look, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze, look, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze, look, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withLook(LookAdjust? l) => VideoPiece(startMs, endMs, zoom, crop, freeze, l, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withBlur(double? v) => VideoPiece(startMs, endMs, zoom, crop, freeze, look, v, flipHorizontal, flipVertical);
+  VideoPiece withFlip(bool h, bool v) => VideoPiece(startMs, endMs, zoom, crop, freeze, look, blurStrength, h, v);
 
   @override
   bool operator ==(Object other) =>
@@ -122,10 +130,13 @@ class VideoPiece {
       other.zoom == zoom &&
       other.crop == crop &&
       other.freeze == freeze &&
-      other.look == look;
+      other.look == look &&
+      other.blurStrength == blurStrength &&
+      other.flipHorizontal == flipHorizontal &&
+      other.flipVertical == flipVertical;
 
   @override
-  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze, look);
+  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze, look, blurStrength, flipHorizontal, flipVertical);
 
   Map<String, Object?> toJson() => {
         's': startMs,
@@ -134,6 +145,9 @@ class VideoPiece {
         if (crop != null) 'c': crop!.toJson(),
         if (freeze) 'f': 1,
         if (look != null) 'l': look!.toJson(),
+        if (blurStrength != null) 'bl': blurStrength,
+        if (flipHorizontal) 'fh': 1,
+        if (flipVertical) 'fv': 1;
       };
   static VideoPiece fromJson(Map<String, Object?> m) {
     final z = (m['z'] as int?) ?? 0;
@@ -144,6 +158,9 @@ class VideoPiece {
       CropFrame.fromJson(m['c']),
       m['f'] == 1,
       LookAdjust.fromJson(m['l']),
+      m['bl'] is num && (m['bl'] as num).isFinite && (m['bl'] as num) >= 0.5 && (m['bl'] as num) <= 50 ? (m['bl'] as num).toDouble() : null,
+      m['fh'] == 1,
+      m['fv'] == 1,
     );
   }
 }
