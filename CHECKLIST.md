@@ -494,3 +494,19 @@ Unproven: how it looks on the phone. The rule thresholds (17 characters per seco
 | TE plan saves at once on every change (no save button) | Yes (same run) | **No** |
 | Pure helper `te_preview.dart` (which effects are active at a time, crop, look matrix, badges) | Yes, 9 tests (same run) | n/a |
 Unproven: how the preview overlays line up with the render on a real video; the dragging gesture inside a scrolling page; the marker bar alignment with the slider (approximate). Smart cut is only dimmed in the preview, playback does not skip it. Split screen and Sound are shown as badges only. APK: artifact `dramaflow-apk-branch-119`. Not merged to main.
+
+## TE-28: edit effects directly on the preview
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Tap an effect (list, timeline block or overlay on the picture) to select it; its values are edited right under the preview with sliders (no dialog): zoom, brightness/contrast, freeze seconds, text, size, angle, colour; "start/end ← here" sets the time from the playhead | Yes (CI green, run 44311061814) | **No** |
+| Crop/zoom by pinch (zoom) and drag (move) on the preview itself, only while the playhead is inside that effect | Yes (same run) | **No** |
+| Unproven: pinch/drag inside a scrolling page may fight with the page scroll |  |  |
+
+## TE-29: timeline-editor layout
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Transport row: undo / redo (effect list only, 50 steps), play/pause, time `mm:ss.t / total` | Yes (CI green, run 44431045192) | **No** |
+| Bottom tool row: Text, Arrow, Zoom, Filter, Freeze, Cut add an effect at the playhead in one tap; Picture and Sound open the detail dialog | Yes (same run) | **No** |
+| Multi-track timeline on the original video's time: ruler (tap/drag to move the playhead), Video track (kept pieces), subtitle track, one coloured block per effect (overlapping effects on separate rows), zoom in/out, follows the playhead while playing | Yes (same run) | **No** |
+| `assignLanes` helper | Yes, 2 tests (same run) | n/a |
+NOT built: Border (frame around the video), gradient text box with corner resize handles, Canvas (aspect ratio / background), AI Hook, Voice track in the timeline (narration lives on the edit time, not the original time), dragging block edges to trim, full-screen preview. Border and gradient text need changes in the render engine (native/RenderEngine.kt), which cannot be tested here. APK: `dramaflow-apk-branch-122`. Not merged to main.
