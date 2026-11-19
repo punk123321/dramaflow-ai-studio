@@ -515,6 +515,19 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 overlays.add(BitmapOverlay.createStaticBitmapOverlay(bmp, cornerSettings(logo.optInt("c", 1))))
             }
         }
+        // Global decorative frame: one static transparent overlay spans every output frame.
+        val border = job.optJSONObject("border")
+        if (border != null) {
+            val frame = borderBitmap(
+                outW, outH,
+                border.optInt("template", 0),
+                border.optLong("color", 0xFFFFFFFFL).toInt(),
+                border.optDouble("width", 0.025).toFloat(),
+                border.optDouble("opacity", 1.0).toFloat(),
+                border.optDouble("inset", 0.025).toFloat()
+            )
+            overlays.add(BitmapOverlay.createStaticBitmapOverlay(frame, StaticOverlaySettings.Builder().build()))
+        }
         if (overlays.isNotEmpty()) {
             videoEffects.add(OverlayEffect(ImmutableList.copyOf(overlays)))
         }
@@ -659,6 +672,64 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val scale = if (zoomIn) 1f + 0.15f * p else 1.15f - 0.15f * p
             Matrix().apply { postScale(scale, scale) }
         }
+    }
+
+    /** Creates a transparent full-frame bitmap for the selected global border preset. */
+    private fun borderBitmap(w: Int, h: Int, preset: Int, color: Int, width: Float, opacity: Float, inset: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w.coerceAtLeast(2), h.coerceAtLeast(2), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val short = minOf(w, h).toFloat()
+        val stroke = (short * width.coerceIn(0.003f, 0.12f)).coerceAtLeast(1f)
+        val pad = (short * inset.coerceIn(0f, 0.15f)).coerceAtLeast(stroke)
+        val left = pad
+        val top = pad
+        val right = w - pad
+        val bottom = h - pad
+        val alphaColor = (color and 0x00FFFFFF) or (((color ushr 24) * opacity.coerceIn(0.05f, 1f)).toInt().coerceIn(0, 255) shl 24)
+        fun paint(sw: Float, style: Paint.Style = Paint.Style.STROKE) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = alphaColor
+            this.style = style
+            strokeWidth = sw
+            strokeJoin = Paint.Join.ROUND
+            strokeCap = Paint.Cap.ROUND
+        }
+        val p = paint(stroke)
+        val rect = android.graphics.RectF(left, top, right, bottom)
+        when (preset.coerceIn(0, 19)) {
+            0 -> canvas.drawRect(rect, p)
+            1 -> { canvas.drawRect(rect, p); canvas.drawRect(android.graphics.RectF(left + stroke * 2.2f, top + stroke * 2.2f, right - stroke * 2.2f, bottom - stroke * 2.2f), paint(stroke * 0.65f)) }
+            2 -> canvas.drawRoundRect(rect, stroke * 2.5f, stroke * 2.5f, p)
+            3 -> { p.pathEffect = android.graphics.DashPathEffect(floatArrayOf(stroke * 5, stroke * 2.5f), 0f); canvas.drawRect(rect, p) }
+            4 -> { p.pathEffect = android.graphics.DashPathEffect(floatArrayOf(1f, stroke * 2.2f), 0f); canvas.drawRect(rect, p) }
+            5 -> { canvas.drawRect(rect, paint(stroke * 1.8f)); canvas.drawRect(android.graphics.RectF(left + stroke * 3, top + stroke * 3, right - stroke * 3, bottom - stroke * 3), paint(stroke * 0.5f)) }
+            6 -> {
+                val len = short * 0.12f
+                for ((x, y, sx, sy) in listOf(Triple(left, top, 1f, 1f), Triple(right, top, -1f, 1f), Triple(left, bottom, 1f, -1f), Triple(right, bottom, -1f, -1f))) {
+                    canvas.drawLine(x, y, x + len * sx, y, p); canvas.drawLine(x, y, x, y + len * sy, p)
+                }
+            }
+            7 -> { canvas.drawRect(android.graphics.RectF(left, top, right, top + stroke * 3), paint(stroke * 3, Paint.Style.FILL)); canvas.drawRect(android.graphics.RectF(left, bottom - stroke * 3, right, bottom), paint(stroke * 3, Paint.Style.FILL)) }
+            8 -> { val glow = paint(stroke * 4f); glow.alpha = (alphaColor ushr 24) / 3; canvas.drawRoundRect(rect, stroke * 3, stroke * 3, glow); canvas.drawRoundRect(rect, stroke * 2, stroke * 2, p) }
+            9 -> canvas.drawRect(android.graphics.RectF(left + stroke, top + stroke, right - stroke, bottom - stroke), paint(stroke * 0.55f))
+            10 -> canvas.drawRect(rect, paint(stroke * 3, Paint.Style.STROKE))
+            11 -> {
+                val len = short * 0.22f
+                val q = paint(stroke * 1.4f)
+                canvas.drawLine(left, top, left + len, top, q); canvas.drawLine(left, top, left, top + len, q)
+                canvas.drawLine(right, top, right - len, top, q); canvas.drawLine(right, top, right, top + len, q)
+                canvas.drawLine(left, bottom, left + len, bottom, q); canvas.drawLine(left, bottom, left, bottom - len, q)
+                canvas.drawLine(right, bottom, right - len, bottom, q); canvas.drawLine(right, bottom, right, bottom - len, q)
+            }
+            12 -> { canvas.drawRect(rect, p); val q = paint(stroke * 0.45f); val gap = stroke * 2.5f; canvas.drawRect(android.graphics.RectF(left + gap, top + gap, right - gap, bottom - gap), q) }
+            13 -> { val q = paint(stroke * 1.4f); q.pathEffect = android.graphics.DashPathEffect(floatArrayOf(stroke * 9, stroke * 2), 0f); canvas.drawRoundRect(rect, stroke, stroke, q) }
+            14 -> { canvas.drawRect(rect, p); val q = paint(stroke * 0.7f); canvas.drawLine(left, top + stroke * 5, right, top + stroke * 5, q); canvas.drawLine(left, bottom - stroke * 5, right, bottom - stroke * 5, q) }
+            15 -> { val q = paint(stroke * 1.2f); q.pathEffect = android.graphics.DashPathEffect(floatArrayOf(stroke * 2, stroke * 1.5f, stroke * 7, stroke * 1.5f), 0f); canvas.drawRect(rect, q) }
+            16 -> { canvas.drawRoundRect(rect, short * 0.035f, short * 0.035f, p); canvas.drawRoundRect(android.graphics.RectF(left + stroke * 3, top + stroke * 3, right - stroke * 3, bottom - stroke * 3), short * 0.025f, short * 0.025f, paint(stroke * 0.5f)) }
+            17 -> { val q = paint(stroke * 2f); val len = short * 0.08f; canvas.drawLine(left, top, left + len, top, q); canvas.drawLine(right - len, bottom, right, bottom, q); canvas.drawLine(left, bottom - len, left, bottom, q); canvas.drawLine(right, top, right, top + len, q) }
+            18 -> { canvas.drawRect(rect, p); val q = paint(stroke * 0.5f); canvas.drawRect(android.graphics.RectF(left + stroke * 4, top + stroke * 4, right - stroke * 4, bottom - stroke * 4), q) }
+            19 -> { canvas.drawRoundRect(rect, short * 0.06f, short * 0.06f, paint(stroke * 2.2f)); val q = paint(stroke * 0.55f); canvas.drawRoundRect(android.graphics.RectF(left + stroke * 4, top + stroke * 4, right - stroke * 4, bottom - stroke * 4), short * 0.04f, short * 0.04f, q) }
+        }
+        return bmp
     }
 
     /** corner: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right. */
