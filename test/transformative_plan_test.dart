@@ -119,6 +119,8 @@ void main() {
     expect(TransformTool.splitScreen.status, ToolStatus.experimental);
     expect(TransformTool.colorGrade.status, ToolStatus.rendered);
     expect(TransformTool.commentaryVoiceOver.status, ToolStatus.inStudio);
+    expect(TransformTool.blur.status, ToolStatus.rendered);
+    expect(TransformTool.mirrorFlip.status, ToolStatus.rendered);
   });
 
   group('per-project storage', () {
