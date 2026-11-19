@@ -80,8 +80,11 @@ const minSplitMs = 1000;
 
 /// label / arrow / image as before. New: box and circle (an outline to point
 /// at something), spot (the whole picture is dimmed except one window) and
-/// frame (a border around the whole picture).
-enum MotionKind { label, arrow, image, box, circle, spot, frame }
+/// frame (a border around the whole picture). Whole-picture looks: fade
+/// (to/from a colour, or a flash), vignette (dark edges), tint (a colour wash),
+/// bars (black bars top and bottom) and shade (a dark gradient from the top or
+/// bottom edge, for readable text). For these, `size` is the strength.
+enum MotionKind { label, arrow, image, box, circle, spot, frame, fade, vignette, tint, bars, shade }
 
 bool _isShape(MotionKind k) => k == MotionKind.box || k == MotionKind.circle || k == MotionKind.spot;
 
@@ -105,6 +108,9 @@ class MotionItem {
     this.aspect = 0.5,
     this.gradient = false,
     this.round = true,
+    this.dir = 'dip',
+    this.top = false,
+    this.fill = false,
   });
 
   final MotionKind kind;
@@ -130,6 +136,15 @@ class MotionItem {
   /// Spot: oval window (true) or rounded rectangle (false).
   final bool round;
 
+  /// Fade: 'in' (from the colour), 'out' (to the colour) or 'dip' (out and back).
+  final String dir;
+
+  /// Shade: from the top edge (true) or the bottom edge (false).
+  final bool top;
+
+  /// Box / circle: filled with a see-through colour (like a marker).
+  final bool fill;
+
   MotionItem withTime(int s, int e) => MotionItem(
         kind: kind,
         startMs: s,
@@ -145,6 +160,9 @@ class MotionItem {
         aspect: aspect,
         gradient: gradient,
         round: round,
+        dir: dir,
+        top: top,
+        fill: fill,
       );
 
   Map<String, Object?> toJson() => {
@@ -160,6 +178,9 @@ class MotionItem {
         if (kind == MotionKind.label) 'bg': background,
         if (kind == MotionKind.arrow) 'angle': angle,
         if (_isShape(kind)) 'ar': aspect,
+        if (kind == MotionKind.box || kind == MotionKind.circle) 'fill': fill,
+        if (kind == MotionKind.fade) 'dir': dir,
+        if (kind == MotionKind.shade) 'top': top,
         if (kind == MotionKind.spot) 'round': round,
         if (kind == MotionKind.label || kind == MotionKind.frame) 'grad': gradient,
       };
@@ -180,6 +201,8 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
   final maxSize = switch (kind) {
     MotionKind.image => 0.6,
     MotionKind.box || MotionKind.circle || MotionKind.spot => 0.95,
+    MotionKind.fade || MotionKind.vignette || MotionKind.tint || MotionKind.shade => 0.95,
+    MotionKind.bars => 0.45,
     MotionKind.frame => 0.1,
     _ => 0.4,
   };
@@ -214,6 +237,9 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     aspect: ar is num ? ar.toDouble() : (kind == MotionKind.circle ? 1.0 : 0.5),
     gradient: p['grad'] == true,
     round: p['round'] != false,
+    dir: const {'in', 'out', 'dip'}.contains(p['dir']) ? p['dir'] as String : 'dip',
+    top: p['top'] == true,
+    fill: p['fill'] == true,
   );
 }
 

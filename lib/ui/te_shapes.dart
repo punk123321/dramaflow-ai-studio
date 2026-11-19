@@ -21,10 +21,11 @@ const rainbowColors = [
 
 /// Outline of a rounded rectangle or an oval.
 class ShapePainter extends CustomPainter {
-  const ShapePainter({required this.color, required this.oval});
+  const ShapePainter({required this.color, required this.oval, this.fill = false});
 
   final Color color;
   final bool oval;
+  final bool fill;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -38,6 +39,14 @@ class ShapePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..color = color;
+    if (fill) {
+      final f = Paint()..color = color.withValues(alpha: 0.3);
+      if (oval) {
+        canvas.drawOval(r, f);
+      } else {
+        canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(stroke)), f);
+      }
+    }
     if (oval) {
       canvas.drawOval(r, dark);
       canvas.drawOval(r, line);
@@ -49,7 +58,7 @@ class ShapePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(ShapePainter old) => old.color != color || old.oval != oval;
+  bool shouldRepaint(ShapePainter old) => old.color != color || old.oval != oval || old.fill != fill;
 }
 
 /// A border around the whole picture. [thick] is in logical pixels.
@@ -105,4 +114,67 @@ class SpotPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SpotPainter old) => old.cx != cx || old.cy != cy || old.hw != hw || old.hh != hh || old.oval != oval;
+}
+
+/// Dark edges, clear in the middle. [strength] 0..1.
+class VignettePainter extends CustomPainter {
+  const VignettePainter(this.strength);
+
+  final double strength;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final shader = RadialGradient(
+      radius: 0.9,
+      colors: [const Color(0x00000000), const Color(0x00000000), Colors.black.withValues(alpha: (strength * 0.9).clamp(0.0, 1.0).toDouble())],
+      stops: const [0.0, 0.45, 1.0],
+    ).createShader(rect);
+    canvas.drawRect(rect, Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(VignettePainter old) => old.strength != strength;
+}
+
+/// Black bars at the top and the bottom, each [frac] of the height.
+class BarsPainter extends CustomPainter {
+  const BarsPainter(this.frac);
+
+  final double frac;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final h = size.height * frac;
+    final p = Paint()..color = Colors.black;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, h), p);
+    canvas.drawRect(Rect.fromLTWH(0, size.height - h, size.width, h), p);
+  }
+
+  @override
+  bool shouldRepaint(BarsPainter old) => old.frac != frac;
+}
+
+/// A dark gradient from the top or bottom edge, [frac] of the height.
+class ShadePainter extends CustomPainter {
+  const ShadePainter({required this.frac, required this.top});
+
+  final double frac;
+  final bool top;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final h = size.height * frac;
+    final rect = top ? Rect.fromLTWH(0, 0, size.width, h) : Rect.fromLTWH(0, size.height - h, size.width, h);
+    final dark = Colors.black.withValues(alpha: 0.75);
+    final shader = LinearGradient(
+      begin: top ? Alignment.topCenter : Alignment.bottomCenter,
+      end: top ? Alignment.bottomCenter : Alignment.topCenter,
+      colors: [dark, const Color(0x00000000)],
+    ).createShader(rect);
+    canvas.drawRect(rect, Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(ShadePainter old) => old.frac != frac || old.top != top;
 }

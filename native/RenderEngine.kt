@@ -464,6 +464,8 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
 
         // Labels and arrows from approved Motion Graphics operations (output time).
         val motion = job.optJSONArray("overlays")
+        // One transparent full-size picture shared by every whole-picture effect when it is not shown.
+        val fullBlank by lazy { Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888) }
         if (motion != null) {
             for (i in 0 until motion.length()) {
                 val m = motion.getJSONObject(i)
@@ -486,22 +488,36 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                     // Outline to point at something. size = share of the width, ar = height / width.
                     val bw = (m.getDouble("size") * outW).toInt().coerceIn(40, outW)
                     val bh = (bw * m.optDouble("ar", 0.5)).toInt().coerceIn(20, outH)
-                    val shape = shapeBitmap(bw, bh, color, m.optString("k") == "circle")
+                    val shape = shapeBitmap(bw, bh, color, m.optString("k") == "circle", m.optBoolean("fill", false))
                     val blank = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
                     overlays.add(WindowedBitmapOverlay(shape, blank, startMs, endMs, settings))
                 } else if (m.optString("k") == "frame") {
                     // Border around the whole picture; size = thickness as a share of the short side.
                     val thick = (m.getDouble("size") * base).toFloat().coerceAtLeast(2f)
                     val frame = frameBitmap(outW, outH, thick, color, m.optBoolean("grad", false))
-                    val blank = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
-                    overlays.add(WindowedBitmapOverlay(frame, blank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                    overlays.add(WindowedBitmapOverlay(frame, fullBlank, startMs, endMs, centerSettings(0.5f, 0.5f)))
                 } else if (m.optString("k") == "spot") {
                     // Everything dimmed except one window.
                     val hw = (m.getDouble("size") * outW).toFloat().coerceIn(40f, outW.toFloat())
                     val hh = (hw * m.optDouble("ar", 0.6).toFloat()).coerceIn(20f, outH.toFloat())
                     val spot = spotBitmap(outW, outH, cx * outW, cy * outH, hw, hh, m.optBoolean("round", true))
-                    val blank = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
-                    overlays.add(WindowedBitmapOverlay(spot, blank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                    overlays.add(WindowedBitmapOverlay(spot, fullBlank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                } else if (m.optString("k") in listOf("fade", "vignette", "tint", "bars", "shade")) {
+                    // Whole-picture looks. size = strength (see te_compile.dart).
+                    val kind = m.optString("k")
+                    val sz = m.getDouble("size").toFloat()
+                    val whole = when (kind) {
+                        "fade" -> solidBitmap(outW, outH, color)
+                        "vignette" -> vignetteBitmap(outW, outH, sz)
+                        "tint" -> tintBitmap(outW, outH, color, sz)
+                        "bars" -> barsBitmap(outW, outH, sz)
+                        else -> shadeBitmap(outW, outH, sz, m.optBoolean("top", false))
+                    }
+                    if (kind == "fade") {
+                        overlays.add(FadeOverlay(whole, fullBlank, startMs, endMs, m.optString("dir", "dip")))
+                    } else {
+                        overlays.add(WindowedBitmapOverlay(whole, fullBlank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                    }
                 } else if (m.optString("k") == "arrow") {
                     val n = px.coerceIn(24, 1200)
                     val arrow = arrowBitmap(n, color, m.optDouble("angle", 0.0).toFloat())
@@ -720,7 +736,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     }
 
     /** Outline of a rounded rectangle or an oval on a transparent picture. */
-    private fun shapeBitmap(w: Int, h: Int, color: Int, oval: Boolean): Bitmap {
+    private fun shapeBitmap(w: Int, h: Int, color: Int, oval: Boolean, fill: Boolean): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val stroke = (minOf(w, h) * 0.06f).coerceIn(3f, 24f)
@@ -734,6 +750,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             style = Paint.Style.STROKE
             strokeWidth = stroke
             this.color = color
+        }
+        if (fill) {
+            val f = Paint(Paint.ANTI_ALIAS_FLAG)
+            f.color = Color.argb(77, Color.red(color), Color.green(color), Color.blue(color))
+            if (oval) c.drawOval(r, f) else c.drawRoundRect(r, stroke, stroke, f)
         }
         if (oval) {
             c.drawOval(r, dark)
@@ -773,6 +794,63 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         clear.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
         val r = android.graphics.RectF(cx - hw / 2f, cy - hh / 2f, cx + hw / 2f, cy + hh / 2f)
         if (oval) c.drawOval(r, clear) else c.drawRoundRect(r, hw * 0.08f, hw * 0.08f, clear)
+        return bmp
+    }
+
+    private fun solidBitmap(w: Int, h: Int, color: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(color)
+        return bmp
+    }
+
+    /** Dark edges, clear middle. strength 0..1. */
+    private fun vignetteBitmap(w: Int, h: Int, strength: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val radius = Math.hypot(w.toDouble(), h.toDouble()).toFloat() / 2f
+        val edge = Color.argb((strength.coerceIn(0f, 1f) * 0.9f * 255f).toInt(), 0, 0, 0)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.shader = android.graphics.RadialGradient(
+            w / 2f, h / 2f, radius,
+            intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, edge),
+            floatArrayOf(0f, 0.45f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        Canvas(bmp).drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+        return bmp
+    }
+
+    /** A see-through wash of one colour; opacity 0..1. */
+    private fun tintBitmap(w: Int, h: Int, color: Int, opacity: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.argb((opacity.coerceIn(0f, 1f) * 255f).toInt(), Color.red(color), Color.green(color), Color.blue(color)))
+        return bmp
+    }
+
+    /** Black bars at the top and bottom, each frac of the height. */
+    private fun barsBitmap(w: Int, h: Int, frac: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val bar = (h * frac.coerceIn(0f, 0.45f))
+        val p = Paint()
+        p.color = Color.BLACK
+        val c = Canvas(bmp)
+        c.drawRect(0f, 0f, w.toFloat(), bar, p)
+        c.drawRect(0f, h - bar, w.toFloat(), h.toFloat(), p)
+        return bmp
+    }
+
+    /** Dark gradient from the top or bottom edge, covering frac of the height. */
+    private fun shadeBitmap(w: Int, h: Int, frac: Float, top: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val cover = h * frac.coerceIn(0.05f, 1f)
+        val dark = Color.argb(190, 0, 0, 0)
+        val p = Paint()
+        if (top) {
+            p.shader = android.graphics.LinearGradient(0f, 0f, 0f, cover, dark, Color.TRANSPARENT, android.graphics.Shader.TileMode.CLAMP)
+            Canvas(bmp).drawRect(0f, 0f, w.toFloat(), cover, p)
+        } else {
+            p.shader = android.graphics.LinearGradient(0f, h.toFloat(), 0f, h - cover, dark, Color.TRANSPARENT, android.graphics.Shader.TileMode.CLAMP)
+            Canvas(bmp).drawRect(0f, h - cover, w.toFloat(), h.toFloat(), p)
+        }
         return bmp
     }
 
@@ -962,6 +1040,31 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         }
 
         override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings = settings
+    }
+
+    /** A full-picture colour whose strength follows the fade: in (1 to 0), out (0 to 1) or dip (0 to 1 to 0). */
+    private class FadeOverlay(
+        private val shown: Bitmap,
+        private val blank: Bitmap,
+        private val startMs: Long,
+        private val endMs: Long,
+        private val dir: String
+    ) : BitmapOverlay() {
+        override fun getBitmap(presentationTimeUs: Long): Bitmap {
+            val ms = presentationTimeUs / 1000L
+            return if (ms >= startMs && ms < endMs) shown else blank
+        }
+
+        override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+            val span = (endMs - startMs).coerceAtLeast(1L).toFloat()
+            val t = (((presentationTimeUs / 1000L) - startMs).toFloat() / span).coerceIn(0f, 1f)
+            val a = when (dir) {
+                "in" -> 1f - t
+                "out" -> t
+                else -> 1f - Math.abs(2f * t - 1f)
+            }
+            return StaticOverlaySettings.Builder().setAlphaScale(a.coerceIn(0f, 1f)).build()
+        }
     }
 
     private class WindowedBitmapOverlay(

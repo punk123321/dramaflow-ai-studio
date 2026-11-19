@@ -271,7 +271,7 @@ class _EditorPanelState extends State<EditorPanel> {
 
   /// One tap adds an effect at the playhead with sensible values and selects
   /// it, so it can be adjusted right under the preview.
-  void _quickAdd(TransformTool tool, {String kind = ''}) {
+  void _quickAdd(TransformTool tool, {String kind = '', String text = ''}) {
     final pos = _posMs < 0 ? 0 : _posMs;
     final vd = _vc?.value.duration.inMilliseconds ?? 0;
     final dur = vd > 0 ? vd : _sourceMs;
@@ -293,22 +293,51 @@ class _EditorPanelState extends State<EditorPanel> {
           'circle' => {'kind': 'circle', 'x': 0.5, 'y': 0.5, 'size': 0.3, 'ar': 1.0, 'color': 0xFFFFEB3B},
           'spot' => {'kind': 'spot', 'x': 0.5, 'y': 0.5, 'size': 0.45, 'ar': 0.6, 'round': true, 'color': 0xFF000000},
           'frame' => {'kind': 'frame', 'x': 0.5, 'y': 0.5, 'size': 0.012, 'color': 0xFFFFFFFF, 'grad': true},
+          'fadein' => {'kind': 'fade', 'x': 0.5, 'y': 0.5, 'size': 0.5, 'color': 0xFF000000, 'dir': 'in'},
+          'fadeout' => {'kind': 'fade', 'x': 0.5, 'y': 0.5, 'size': 0.5, 'color': 0xFF000000, 'dir': 'out'},
+          'flash' => {'kind': 'fade', 'x': 0.5, 'y': 0.5, 'size': 0.5, 'color': 0xFFFFFFFF, 'dir': 'dip'},
+          'tint' => {'kind': 'tint', 'x': 0.5, 'y': 0.5, 'size': 0.2, 'color': 0xFFFF9800},
+          'vignette' => {'kind': 'vignette', 'x': 0.5, 'y': 0.5, 'size': 0.6, 'color': 0xFF000000},
+          'bars' => {'kind': 'bars', 'x': 0.5, 'y': 0.5, 'size': 0.1, 'color': 0xFF000000},
+          'shade' => {'kind': 'shade', 'x': 0.5, 'y': 0.5, 'size': 0.4, 'color': 0xFF000000, 'top': false},
+          'sticker' => {'kind': 'label', 'x': 0.5, 'y': 0.5, 'size': 0.12, 'color': 0xFFFFFFFF, 'text': text, 'bg': false},
           _ => {'kind': 'label', 'x': 0.5, 'y': 0.15, 'size': 0.06, 'color': 0xFFFFEB3B, 'text': 'စာသား', 'bg': true},
         };
-        if (kind == 'frame') e = dur > 0 ? dur : pos + 5000;
+        if (_wholeVideo.contains(kind)) e = dur > 0 ? dur : pos + 5000;
+        if (kind == 'fadein' || kind == 'fadeout') e = pos + 1000;
+        if (kind == 'flash') e = pos + 400;
       default:
         params = const {};
     }
     final op = TransformOp(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       tool: tool,
-      startMs: kind == 'frame' ? 0 : pos,
+      startMs: _wholeVideo.contains(kind) ? 0 : pos,
       endMs: e < pos ? pos : e,
       params: params,
       status: OpStatus.approved,
     );
     setState(() => _selId = op.id);
     _setPlan(_plan.copyWith(ops: [..._plan.ops, op]));
+  }
+
+  static const _wholeVideo = {'frame', 'vignette', 'tint', 'bars', 'shade'};
+
+  Future<void> _stickers() async {
+    const emojis = ['👉', '👆', '👇', '🔥', '❗', '❓', '😱', '😂', '😭', '😡', '👀', '💔', '✅', '❌', '⭐', '💯', '🤔', '😲', '👍', '🙏'];
+    final pick = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: DfColors.surface,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Wrap(spacing: 14, runSpacing: 14, children: [
+            for (final e in emojis) InkWell(onTap: () => Navigator.pop(ctx, e), child: Text(e, style: const TextStyle(fontSize: 34))),
+          ]),
+        ),
+      ),
+    );
+    if (pick != null) _quickAdd(TransformTool.motionGraphics, kind: 'sticker', text: pick);
   }
 
   Widget _toolRow() {
@@ -335,10 +364,18 @@ class _EditorPanelState extends State<EditorPanel> {
           tool('Circle', Icons.circle_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'circle')),
           tool('Spot', Icons.highlight_alt, () => _quickAdd(TransformTool.motionGraphics, kind: 'spot')),
           tool('Border', Icons.border_outer, () => _quickAdd(TransformTool.motionGraphics, kind: 'frame')),
+          tool('Sticker', Icons.emoji_emotions_outlined, _stickers),
           tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
           tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
           tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
           tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
+          tool('Fade in', Icons.vertical_align_bottom, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadein')),
+          tool('Fade out', Icons.vertical_align_top, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadeout')),
+          tool('Flash', Icons.flash_on, () => _quickAdd(TransformTool.motionGraphics, kind: 'flash')),
+          tool('Tint', Icons.invert_colors, () => _quickAdd(TransformTool.motionGraphics, kind: 'tint')),
+          tool('Vignette', Icons.vignette, () => _quickAdd(TransformTool.motionGraphics, kind: 'vignette')),
+          tool('Bars', Icons.movie_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'bars')),
+          tool('Shade', Icons.gradient, () => _quickAdd(TransformTool.motionGraphics, kind: 'shade')),
           tool('Picture', Icons.image_outlined, () => _addViaDialog(TransformTool.pictureInPicture)),
           tool('Sound', Icons.audiotrack, () => _addViaDialog(TransformTool.soundDesign)),
         ]),
@@ -1055,7 +1092,7 @@ class _EditorPanelState extends State<EditorPanel> {
           width: bw,
           height: bh,
           child: Stack(clipBehavior: Clip.none, children: [
-            Positioned.fill(child: CustomPaint(painter: ShapePainter(color: Color(m.color), oval: m.kind == MotionKind.circle))),
+            Positioned.fill(child: CustomPaint(painter: ShapePainter(color: Color(m.color), oval: m.kind == MotionKind.circle, fill: m.fill))),
             if (_selId == pm.opId) _resizeHandle(pm.opId, w, h),
           ]),
         );
@@ -1065,6 +1102,17 @@ class _EditorPanelState extends State<EditorPanel> {
             child: CustomPaint(painter: FramePainter(color: Color(m.color), thick: m.size * math.min(w, h), rainbow: m.gradient)),
           ),
         );
+      case MotionKind.fade:
+        final a = fadeAlpha(m.dir, pm.startMs, pm.endMs, _posMs);
+        return Positioned.fill(child: IgnorePointer(child: ColoredBox(color: Color(m.color).withValues(alpha: a))));
+      case MotionKind.tint:
+        return Positioned.fill(child: IgnorePointer(child: ColoredBox(color: Color(m.color).withValues(alpha: m.size.clamp(0.0, 1.0).toDouble()))));
+      case MotionKind.vignette:
+        return Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: VignettePainter(m.size))));
+      case MotionKind.bars:
+        return Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: BarsPainter(m.size))));
+      case MotionKind.shade:
+        return Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: ShadePainter(frac: m.size, top: m.top))));
       case MotionKind.spot:
         final sw = m.size * w;
         final sh = sw * m.aspect;

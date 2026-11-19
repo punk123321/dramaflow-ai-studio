@@ -47,11 +47,32 @@ LookAdjust? previewLook(List<TransformOp> ops, int posMs) {
 /// A label, arrow or picture to draw, with the operation it came from (the
 /// preview uses the id to let the user drag it).
 class PreviewMotion {
-  const PreviewMotion(this.opId, this.item, {required this.proposed});
+  const PreviewMotion(this.opId, this.item, {required this.proposed, required this.startMs, required this.endMs});
 
   final String opId;
   final MotionItem item;
   final bool proposed;
+
+  /// Range of the operation on the original video (the item itself has none).
+  final int startMs;
+  final int endMs;
+}
+
+/// How strong a fade is (0 = picture clear, 1 = fully the fade colour) at
+/// [posMs] for an effect that runs [startMs]..[endMs]. 'in' goes 1 to 0, 'out'
+/// 0 to 1, 'dip' 0 to 1 and back to 0.
+double fadeAlpha(String dir, int startMs, int endMs, int posMs) {
+  final span = endMs - startMs;
+  if (span <= 0) return 0;
+  final t = ((posMs - startMs) / span).clamp(0.0, 1.0).toDouble();
+  switch (dir) {
+    case 'in':
+      return 1 - t;
+    case 'out':
+      return t;
+    default:
+      return 1 - (2 * t - 1).abs();
+  }
 }
 
 List<PreviewMotion> previewMotions(List<TransformOp> ops, int posMs) {
@@ -59,7 +80,7 @@ List<PreviewMotion> previewMotions(List<TransformOp> ops, int posMs) {
   for (final o in opsAt(ops, posMs)) {
     if (o.tool != TransformTool.motionGraphics && o.tool != TransformTool.pictureInPicture) continue;
     final m = motionFromParams(o.params);
-    if (m != null) out.add(PreviewMotion(o.id, m, proposed: o.status == OpStatus.proposed));
+    if (m != null) out.add(PreviewMotion(o.id, m, proposed: o.status == OpStatus.proposed, startMs: o.startMs, endMs: o.endMs));
   }
   return out;
 }

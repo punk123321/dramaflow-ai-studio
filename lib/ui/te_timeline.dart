@@ -95,6 +95,11 @@ class _TeTimelineState extends State<TeTimeline> {
           'circle' => 'Circle',
           'spot' => 'Spot',
           'frame' => 'Border',
+          'fade' => o.params['dir'] == 'in' ? 'Fade in' : (o.params['dir'] == 'out' ? 'Fade out' : 'Flash/Dip'),
+          'vignette' => 'Vignette',
+          'tint' => 'Tint',
+          'bars' => 'Bars',
+          'shade' => 'Shade',
           _ => (t is String && t.isNotEmpty ? t : 'စာသား'),
         };
       case TransformTool.cropReframe:

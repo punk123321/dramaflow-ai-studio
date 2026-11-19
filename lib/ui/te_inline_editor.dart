@@ -79,6 +79,25 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
     ]);
   }
 
+  /// Length of a range effect in seconds; keeps the start.
+  Widget _durationSlider() {
+    final secs = ((_op.endMs - _op.startMs) / 1000).clamp(0.2, 5.0).toDouble();
+    return Row(children: [
+      const SizedBox(width: 92, child: Text('ကြာချိန်', style: TextStyle(fontSize: 12.5, color: DfColors.muted))),
+      Expanded(
+        child: Slider(
+          value: secs,
+          min: 0.2,
+          max: 5.0,
+          label: '${secs.toStringAsFixed(1)}s',
+          onChanged: (v) => widget.onChange(_op.copyWith(endMs: _op.startMs + (v * 1000).round()), false),
+          onChangeEnd: (_) => _save(),
+        ),
+      ),
+      Text('${secs.toStringAsFixed(1)}s', style: const TextStyle(fontSize: 12.5)),
+    ]);
+  }
+
   void _setStart() {
     final pos = widget.posMs;
     if (_point) {
@@ -139,37 +158,8 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
               value: defaultOn ? _op.params[key] != false : _op.params[key] == true,
               onChanged: (v) => widget.onChange(_op.copyWith(params: {..._op.params, key: v}), true),
             );
-        return [
-          if (k == 'label')
-            TextField(
-              controller: _text,
-              maxLength: 120,
-              decoration: const InputDecoration(labelText: 'စာသား'),
-              onChanged: (v) => widget.onChange(_op.copyWith(params: {..._op.params, 'text': v}), true),
-            ),
-          if (k == 'label') flag('အရောင်ခြယ် နောက်ခံ (ခရမ်း→ပန်း)', 'grad'),
-          Text(
-            switch (k) {
-              'frame' => 'ဗီဒီယိုပတ်ပတ်လည် ဘောင် — အချိန်ကို timeline မှာ ညှိပါ',
-              'spot' => 'အလယ်က ခလုတ်နဲ့ ရွှေ့၊ ထောင့်က အစက်နဲ့ အကျယ်ညှိ — ကျန်တာ မှောင်သွားမယ်',
-              'box' || 'circle' => 'ဆွဲရွှေ့၊ ထောင့်က အစက်နဲ့ အရွယ်ညှိ',
-              _ => 'Preview ပေါ်မှာ ဆွဲရွှေ့လို့ရတယ်',
-            },
-            style: const TextStyle(fontSize: 12.5, color: DfColors.muted),
-          ),
-          if (k == 'frame')
-            _slider('အထူ', 'size', 0.012, 0.005, 0.05)
-          else if (shape)
-            _slider('အကျယ်', 'size', 0.4, 0.05, 0.95)
-          else
-            _slider('အရွယ်', 'size', 0.06, 0.03, 0.4),
-          if (shape) _slider('အမြင့်', 'ar', 0.5, 0.1, 3.0),
-          if (k == 'arrow') _slider('လှည့်', 'angle', 0, 0, 359, whole: true),
-          if (k == 'frame') flag('သက်တန့်ရောင်စုံ', 'grad'),
-          if (k == 'spot') flag('ဘဲဥပုံ (ပိတ် = လေးထောင့်)', 'round', defaultOn: true),
-          if (k != 'spot' && !(k == 'frame' && _op.params['grad'] == true))
-            Wrap(spacing: 8, children: [
-              for (final c in _colors)
+        Widget swatches(List<int> cs) => Wrap(spacing: 8, children: [
+              for (final c in cs)
                 GestureDetector(
                   onTap: () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': c}), true),
                   child: Container(
@@ -182,7 +172,67 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
                     ),
                   ),
                 ),
+            ]);
+        Widget chip(String label, VoidCallback f, {bool on = false}) => ChoiceChip(label: Text(label, style: const TextStyle(fontSize: 12)), selected: on, onSelected: (_) => f());
+        final hint = switch (k) {
+          'frame' => 'ဗီဒီယိုပတ်ပတ်လည် ဘောင် — အချိန်ကို timeline မှာ ညှိပါ',
+          'spot' => 'အလယ်ခလုတ်နဲ့ ရွှေ့၊ ထောင့်က အစက်နဲ့ အကျယ်ညှိ — ကျန်တာ မှောင်သွားမယ်',
+          'box' || 'circle' => 'ဆွဲရွှေ့၊ ထောင့်က အစက်နဲ့ အရွယ်ညှိ',
+          'fade' => 'ဗီဒီယိုစမှာ Fade in၊ အဆုံးမှာ Fade out၊ အလယ်မှာ Flash/Dip သုံးပါ',
+          'vignette' => 'ဘေးအနားတွေ မှောင်စေတယ် (ရုပ်ရှင်ပုံစံ)',
+          'tint' => 'အရောင်တစ်မျိုး ဗီဒီယိုပေါ် ဖော့ဖော့ တင်တယ် (နွေး/အေး/sepia)',
+          'bars' => 'အပေါ်အောက် အမည်းတန်း (cinema)',
+          'shade' => 'အစွန်းတစ်ဖက်ကို မှောင်စေပြီး စာတန်း ပိုဖတ်လို့ရစေတယ်',
+          _ => 'Preview ပေါ်မှာ ဆွဲရွှေ့လို့ရတယ်',
+        };
+        return [
+          if (k == 'label')
+            TextField(
+              controller: _text,
+              maxLength: 120,
+              decoration: const InputDecoration(labelText: 'စာသား / emoji'),
+              onChanged: (v) => widget.onChange(_op.copyWith(params: {..._op.params, 'text': v}), true),
+            ),
+          if (k == 'label') flag('အရောင်ခြယ် နောက်ခံ (ခရမ်း→ပန်း)', 'grad'),
+          Text(hint, style: const TextStyle(fontSize: 12.5, color: DfColors.muted)),
+          if (k == 'fade') ...[
+            Wrap(spacing: 6, children: [
+              chip('Fade in', () => widget.onChange(_op.copyWith(params: {..._op.params, 'dir': 'in'}), true), on: _op.params['dir'] == 'in'),
+              chip('Fade out', () => widget.onChange(_op.copyWith(params: {..._op.params, 'dir': 'out'}), true), on: _op.params['dir'] == 'out'),
+              chip('Flash / Dip', () => widget.onChange(_op.copyWith(params: {..._op.params, 'dir': 'dip'}), true), on: _op.params['dir'] != 'in' && _op.params['dir'] != 'out'),
             ]),
+            _durationSlider(),
+            swatches(const [0xFF000000, 0xFFFFFFFF, 0xFFFF1744]),
+          ],
+          if (k == 'vignette') _slider('အား', 'size', 0.6, 0.1, 0.95),
+          if (k == 'tint') ...[
+            Wrap(spacing: 6, runSpacing: 2, children: [
+              chip('နွေး', () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': 0xFFFF9800, 'size': 0.2}), true)),
+              chip('အေး', () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': 0xFF2196F3, 'size': 0.2}), true)),
+              chip('Sepia', () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': 0xFF8D6E63, 'size': 0.35}), true)),
+              chip('အနီ', () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': 0xFFFF1744, 'size': 0.2}), true)),
+              chip('အစိမ်း', () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': 0xFF00C853, 'size': 0.2}), true)),
+            ]),
+            _slider('အားပြင်း', 'size', 0.2, 0.03, 0.6),
+            swatches(const [0xFFFF9800, 0xFF2196F3, 0xFF8D6E63, 0xFFFF1744, 0xFF00C853, 0xFF9C27B0, 0xFFFFFFFF]),
+          ],
+          if (k == 'bars') _slider('တန်းအမြင့်', 'size', 0.1, 0.03, 0.3),
+          if (k == 'shade') ...[
+            _slider('ပါတဲ့အကျယ်', 'size', 0.4, 0.1, 0.9),
+            flag('အပေါ်ကနေ (ပိတ် = အောက်ကနေ)', 'top'),
+          ],
+          if (k == 'frame')
+            _slider('အထူ', 'size', 0.012, 0.005, 0.05)
+          else if (shape)
+            _slider('အကျယ်', 'size', 0.4, 0.05, 0.95)
+          else if (k == 'label' || k == 'arrow')
+            _slider('အရွယ်', 'size', 0.06, 0.03, 0.4),
+          if (shape) _slider('အမြင့်', 'ar', 0.5, 0.1, 3.0),
+          if (k == 'arrow') _slider('လှည့်', 'angle', 0, 0, 359, whole: true),
+          if (k == 'box' || k == 'circle') flag('အတွင်း ဖြည့် (marker)', 'fill'),
+          if (k == 'frame') flag('သက်တန့်ရောင်စုံ', 'grad'),
+          if (k == 'spot') flag('ဘဲဥပုံ (ပိတ် = လေးထောင့်)', 'round', defaultOn: true),
+          if (k == 'label' || k == 'arrow' || k == 'box' || k == 'circle' || (k == 'frame' && _op.params['grad'] != true)) swatches(_colors),
         ];
       case TransformTool.pictureInPicture:
         return [
