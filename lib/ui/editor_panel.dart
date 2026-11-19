@@ -26,6 +26,77 @@ import 'transformative_editor_screen.dart';
 /// Stage 4: arrange the video pieces, narration, music and subtitles.
 /// This only writes an edit description. The original video is never changed;
 /// the next stage (Phase 7) renders the description into a new file.
+class _BorderSamplePainter extends CustomPainter {
+  const _BorderSamplePainter({required this.index, required this.color, required this.selected});
+  final int index;
+  final Color color;
+  final bool selected;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bg = Paint()..color = DfColors.bg;
+    canvas.drawRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(4)), bg);
+    final p = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2;
+    final fill = Paint()..color = color.withValues(alpha: 0.22)..style = PaintingStyle.fill;
+    final r = Rect.fromLTWH(5, 4, size.width - 10, size.height - 8);
+    if (index < 20) {
+      final rr = RRect.fromRectAndRadius(r, Radius.circular(index == 2 || index == 16 || index == 19 ? 7 : 1));
+      switch (index) {
+        case 1: case 5: case 12: case 18:
+          canvas.drawRect(r, p); canvas.drawRect(r.deflate(5), p..strokeWidth = 1); break;
+        case 3: case 4: case 13: case 15:
+          p.pathEffect = null; canvas.drawRect(r, p); break;
+        case 6: case 11: case 17:
+          final d = 13.0;
+          for (final x in [r.left, r.right]) for (final y in [r.top, r.bottom]) {
+            canvas.drawLine(Offset(x, y), Offset(x + (x == r.left ? d : -d), y), p);
+            canvas.drawLine(Offset(x, y), Offset(x, y + (y == r.top ? d : -d), p));
+          } break;
+        case 7:
+          canvas.drawRect(Rect.fromLTWH(r.left, r.top, r.width, 5), fill);
+          canvas.drawRect(Rect.fromLTWH(r.left, r.bottom - 5, r.width, 5), fill); break;
+        default: canvas.drawRRect(rr, p);
+      }
+      return;
+    }
+    final inner = r.deflate(7);
+    // A small picture window makes each device/book frame immediately recognizable.
+    canvas.drawRRect(RRect.fromRectAndRadius(inner, const Radius.circular(2)), Paint()..color = const Color(0xFF263344));
+    switch (index) {
+      case 20: case 21: case 22: case 23: case 24: // television family
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(8)), fill);
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(8)), p);
+        canvas.drawLine(Offset(size.width * .42, r.bottom), Offset(size.width * .38, size.height - 1), p);
+        canvas.drawLine(Offset(size.width * .58, r.bottom), Offset(size.width * .62, size.height - 1), p);
+        if (index == 23) {
+          for (var x = inner.left + 2; x < inner.right; x += 4) canvas.drawLine(Offset(x, inner.top), Offset(x, inner.bottom), Paint()..color = color.withValues(alpha: .18)..strokeWidth = 1);
+        }
+        break;
+      case 25: case 26: case 27: case 28: case 29: // book family
+        final book = Path()..moveTo(r.left, r.top + 2)..quadraticBezierTo(r.center.dx, r.top - 3, r.center.dx, r.top + 3)..quadraticBezierTo(r.center.dx, r.top - 3, r.right, r.top + 2)..lineTo(r.right, r.bottom)..quadraticBezierTo(r.center.dx, r.bottom - 4, r.center.dx, r.bottom)..quadraticBezierTo(r.center.dx, r.bottom - 4, r.left, r.bottom)..close();
+        canvas.drawPath(book, fill); canvas.drawPath(book, p);
+        canvas.drawLine(Offset(r.center.dx, r.top + 3), Offset(r.center.dx, r.bottom - 1), p);
+        for (var y = r.top + 9; y < r.bottom - 3; y += 5) canvas.drawLine(Offset(r.left + 5, y), Offset(r.center.dx - 3, y), p..strokeWidth = .6);
+        break;
+      default: // monitor, laptop, tablet, phone, projector, cinema, broadcast
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(index == 36 ? 9 : 3)), fill);
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(index == 36 ? 9 : 3)), p);
+        if (index == 32) {
+          canvas.drawLine(Offset(r.center.dx, r.bottom), Offset(r.center.dx, size.height - 2), p);
+          canvas.drawLine(Offset(r.center.dx - 10, size.height - 2), Offset(r.center.dx + 10, size.height - 2), p);
+        } else if (index == 34) {
+          canvas.drawCircle(Offset(r.right - 4, r.top + 4), 1.4, fill);
+          canvas.drawCircle(Offset(r.right - 4, r.top + 4), 1.4, p);
+        } else {
+          canvas.drawLine(Offset(r.left + 3, r.bottom - 3), Offset(r.right - 3, r.bottom - 3), p..strokeWidth = 1);
+        }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BorderSamplePainter old) => old.index != index || old.color != color || old.selected != selected;
+}
+
 class EditorPanel extends StatefulWidget {
   const EditorPanel({super.key, required this.project});
 
@@ -639,61 +710,73 @@ class _EditorPanelState extends State<EditorPanel> {
 
   Widget _borderControls() {
     final border = _tl.border;
-    const names = [
+    const classicNames = [
       'Classic', 'Double', 'Rounded', 'Dashed', 'Dotted',
       'Elegant', 'Corner', 'Cinema', 'Neon', 'Minimal',
       'Bold', 'Bracket', 'Layered', 'Soft Dash', 'Film',
       'Pattern', 'Modern', 'Accent', 'Outline', 'Luxury',
     ];
+    const sceneNames = [
+      'Retro TV', 'Modern TV', 'Wood TV', 'CRT TV', 'Smart TV',
+      'Open Book', 'Hardcover', 'Vintage Book', 'Page Frame', 'Story Book',
+      'Desktop Monitor', 'Gaming Monitor', 'Laptop', 'Studio Display', 'CCTV',
+      'Tablet', 'Phone Screen', 'Projector', 'Cinema Screen', 'Broadcast',
+    ];
+    String nameOf(int i) => i < 20 ? classicNames[i] : sceneNames[i - 20];
+    Widget tile(int i) {
+      final selected = border?.template == i;
+      final device = i >= 20;
+      final radius = switch (i) {
+        22 || 23 || 24 || 30 || 31 || 32 || 33 || 35 || 36 => 7.0,
+        25 || 26 || 27 || 28 || 29 => 2.0,
+        _ => 3.0,
+      };
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _set(_tl.copyWith(border: (border ?? const VideoBorder()).copyWith(template: i)), msg: 'Border: ${nameOf(i)}'),
+        child: Container(
+          width: 88,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: DfColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: selected ? DfColors.accent : DfColors.line, width: selected ? 2 : 1),
+          ),
+          child: Column(children: [
+            SizedBox(
+              height: 48,
+              width: 74,
+              child: CustomPaint(
+                painter: _BorderSamplePainter(
+                  index: i,
+                  color: Color(border?.color ?? 0xFFFFFFFF).withValues(alpha: border?.opacity ?? 1),
+                  selected: selected,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text('${i + 1}. ${nameOf(i)}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 9, color: selected ? DfColors.accent : DfColors.muted, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+          ]),
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          Expanded(child: _title('Global Border · ${border == null ? 'Off' : names[border.template]}')),
+          Expanded(child: _title('Border Gallery · ${border == null ? 'Off' : nameOf(border.template)}')),
           TextButton.icon(
             onPressed: () => _set(_tl.copyWith(clearBorder: true), msg: 'Border ပိတ်ထားသည်'),
             icon: const Icon(Icons.close, size: 16),
             label: const Text('Off'),
           ),
         ]),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (var i = 0; i < names.length; i++)
-              InkWell(
-                borderRadius: BorderRadius.circular(9),
-                onTap: () => _set(_tl.copyWith(border: (border ?? const VideoBorder()).copyWith(template: i)), msg: 'Border: ${names[i]}'),
-                child: Container(
-                  width: 62,
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: DfColors.surface,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: border?.template == i ? DfColors.accent : DfColors.line, width: border?.template == i ? 2 : 1),
-                  ),
-                  child: Column(children: [
-                    Container(
-                      height: 32,
-                      width: 50,
-                      decoration: BoxDecoration(
-                        color: DfColors.bg,
-                        borderRadius: BorderRadius.circular(i == 2 || i == 16 || i == 19 ? 7 : 2),
-                        border: Border.all(
-                          color: Color(border?.color ?? 0xFFFFFFFF).withValues(alpha: border?.opacity ?? 1),
-                          width: (i == 1 || i == 5 || i == 12 || i == 18 ? 2.5 : 1.5),
-                          style: i == 3 || i == 4 || i == 13 || i == 15 ? BorderStyle.dashed : BorderStyle.solid,
-                        ),
-                      ),
-                      child: Icon(Icons.play_arrow_rounded, size: 18, color: DfColors.muted),
-                    ),
-                    const SizedBox(height: 3),
-                    Text('${i + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-          ],
-        ),
+        _title('Classic & Decorative · 20'),
+        Wrap(spacing: 7, runSpacing: 7, children: [for (var i = 0; i < 20; i++) tile(i)]),
+        const SizedBox(height: 10),
+        _title('TV · Book · Monitor Frames · 20'),
+        Wrap(spacing: 7, runSpacing: 7, children: [for (var i = 20; i < 40; i++) tile(i)]),
         if (border != null) ...[
           const SizedBox(height: 8),
           _ColorRow(selected: border.color, onPick: (color) => _set(_tl.copyWith(border: border.copyWith(color: color)))),
