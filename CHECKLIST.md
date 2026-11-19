@@ -440,3 +440,16 @@ Limits: the app does NOT send the video; the user attaches it in the Gemini app.
 | Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | pending CI | **No** |
 | Feed manager: add/switch off/delete, suggestions restore | pending CI | **No** |
 Rules: only headline, link, time and a ~220 character snippet are kept; no article copy, no pictures, no video from news sites. Feed links in the suggested list were NOT checked (the build session could not reach them): the user must try them on the phone. Parser is tested on sample RSS/Atom text only, not on live feeds. News data is app-wide and not part of Backup.
+
+
+## TE: Blur + Mirror/Flip (feature/te-blur-mirror)
+
+| Feature | Code added | CI | Phone-tested |
+|---|---|---|---|
+| Approved Blur operation, strength 0.5–50, per-range compilation | yes | pending | no |
+| Horizontal and vertical Mirror/Flip operations, per-range compilation | yes | pending | no |
+| Native Media3 GaussianBlur and ScaleAndRotateTransformation | yes | pending | no |
+| Effects carried through freeze-frame render items | yes | pending | no |
+| Proposed/rejected/invalid operations remain unapplied; tests added | yes | pending | no |
+
+Both effects are intended for ordinary creative framing and visual styling only, not to hide reused content or evade copyright/platform checks. The controls are in the TE operation dialog. They are applied at export time; the TE screen does not yet provide a live effect preview. CI success will prove compilation/tests only, not that Media3 renders correctly on a physical phone.
