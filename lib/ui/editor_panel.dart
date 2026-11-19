@@ -677,7 +677,7 @@ class _EditorPanelState extends State<EditorPanel> {
                       height: 32,
                       width: 50,
                       decoration: BoxDecoration(
-                        color: DfColors.background,
+                        color: DfColors.bg,
                         borderRadius: BorderRadius.circular(i == 2 || i == 16 || i == 19 ? 7 : 2),
                         border: Border.all(
                           color: Color(border?.color ?? 0xFFFFFFFF).withValues(alpha: border?.opacity ?? 1),
