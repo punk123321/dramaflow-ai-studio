@@ -91,6 +91,34 @@ void main() {
     expect(r.notes.first.contains('Commentary'), isTrue);
   });
 
+  test('approved blur is scoped to its range and serialized to the render job', () {
+    final r = compileOps(base, [TransformOp(id: 'blur', tool: TransformTool.blur, startMs: 2000, endMs: 6000, status: OpStatus.approved, params: const {'strength': 18.0})]);
+    expect(r.applied.single.tool, TransformTool.blur);
+    expect(r.pieces.first.blurStrength, isNull);
+    expect(r.pieces.firstWhere((p) => p.startMs == 2000).blurStrength, 18.0);
+    final job = buildRenderJob(name: 'n', videoUri: 'content://v', timeline: Timeline(pieces: r.pieces), sourceSubtitles: const [], settings: const RenderSettings());
+    expect(((job['pieces'] as List)[1] as Map)['bl'], 18.0);
+  });
+
+  test('approved mirror flip applies only to selected interval and survives JSON', () {
+    final r = compileOps(base, [TransformOp(id: 'flip', tool: TransformTool.mirrorFlip, startMs: 2000, endMs: 6000, status: OpStatus.approved, params: const {'horizontal': true, 'vertical': false})]);
+    final flipped = r.pieces.firstWhere((p) => p.startMs == 2000);
+    expect(flipped.flipHorizontal, isTrue);
+    expect(flipped.flipVertical, isFalse);
+    expect(VideoPiece.fromJson(flipped.toJson()), flipped);
+  });
+
+  test('invalid blur/flip and unapproved effects are not rendered', () {
+    final r = compileOps(base, [
+      TransformOp(id: 'bad-blur', tool: TransformTool.blur, startMs: 0, endMs: 2000, status: OpStatus.approved, params: const {'strength': 90}),
+      TransformOp(id: 'bad-flip', tool: TransformTool.mirrorFlip, startMs: 0, endMs: 2000, status: OpStatus.approved, params: const {'horizontal': false, 'vertical': false}),
+      TransformOp(id: 'pending', tool: TransformTool.blur, startMs: 0, endMs: 2000, status: OpStatus.proposed, params: const {'strength': 12}),
+    ]);
+    expect(r.applied, isEmpty);
+    expect(r.pieces, base);
+    expect(r.notes.length, 2);
+  });
+
   test('render job carries the crop and the timeline is untouched', () {
     final r = compileOps(base, [crop('a', 3000, 6000)]);
     final job = buildRenderJob(
