@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,8 @@ import 'package:video_player/video_player.dart';
 
 import '../core/srt.dart';
 import '../core/stage.dart';
+import '../core/te_compile.dart';
+import '../core/transformative_plan.dart';
 import '../core/subtitle_ops.dart';
 import '../core/theme.dart';
 import '../core/sub_presets.dart';
@@ -39,6 +42,7 @@ class _EditorPanelState extends State<EditorPanel> {
 
   bool _loading = true;
   Timeline _tl = const Timeline();
+  TransformativePlan _tePlan = const TransformativePlan();
   List<SrtEntry> _subs = [];
   String? _msg;
   String? _error;
@@ -69,6 +73,7 @@ class _EditorPanelState extends State<EditorPanel> {
   Future<void> _load() async {
     try {
       _tl = Timeline.decode(await _repo.getDoc(_pid, DocKind.timeline));
+      _tePlan = TransformativePlan.decode(await _repo.getDoc(_pid, DocKind.transformativePlan));
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
@@ -465,6 +470,22 @@ class _EditorPanelState extends State<EditorPanel> {
         ),
         const SizedBox(height: 8),
         _preview(),
+        if (_tePlan.ops.any((o) => o.status == OpStatus.approved && (o.tool == TransformTool.blur || o.tool == TransformTool.mirrorFlip)))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, size: 15, color: DfColors.accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'TE Preview ဖွင့်ထားသည် · Blur / Mirror အကျိုးသက်ရောက်မှုကို မူရင်းဗီဒီယိုအချိန်အလိုက် ပြမည်',
+                    style: TextStyle(color: DfColors.accent, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
         _title('၁။ ဗီဒီယို အပိုင်းများ · ${_t(_tl.videoMs)}'),
         Wrap(spacing: 8, children: [
           OutlinedButton(onPressed: _fromIndex, child: const Text('Video Index က ယူ')),
@@ -611,6 +632,17 @@ class _EditorPanelState extends State<EditorPanel> {
   Widget _slider(String label, double v, ValueChanged<double> onEnd, {double min = 0, double max = 1}) =>
       _Vol(label: label, value: v, onEnd: onEnd, min: min, max: max);
 
+  /// TE effects are compiled against the same source-time ranges as export.
+  /// This preview intentionally covers the supported visual effects only.
+  VideoPiece? get _activeTePiece {
+    final sourceTime = _posMs;
+    final pieces = compileOps(_tl.pieces, _tePlan.ops).pieces;
+    for (final p in pieces) {
+      if (!p.freeze && sourceTime >= p.startMs && sourceTime < p.endMs) return p;
+    }
+    return null;
+  }
+
   Widget _preview() {
     final c = _vc;
     if (_previewError != null) {
@@ -623,7 +655,28 @@ class _EditorPanelState extends State<EditorPanel> {
       child: Stack(alignment: Alignment.bottomCenter, children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: AspectRatio(aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio, child: VideoPlayer(c)),
+          child: AspectRatio(
+            aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+            child: Builder(builder: (context) {
+              final effect = _activeTePiece;
+              Widget video = VideoPlayer(c);
+              if (effect?.blurStrength != null) {
+                final sigma = (effect!.blurStrength! * 0.35).clamp(0.5, 18.0);
+                video = ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: video,
+                );
+              }
+              if (effect?.flipHorizontal == true || effect?.flipVertical == true) {
+                video = Transform.scale(
+                  scaleX: effect!.flipHorizontal ? -1 : 1,
+                  scaleY: effect.flipVertical ? -1 : 1,
+                  child: video,
+                );
+              }
+              return video;
+            }),
+          ),
         ),
         if (sub != null && _tl.burnSubtitles)
           Padding(
