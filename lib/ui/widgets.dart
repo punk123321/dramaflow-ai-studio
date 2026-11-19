@@ -97,11 +97,12 @@ class ErrorBanner extends StatelessWidget {
 /// Scaffold with the app's indigo page gradient behind it. The gradient is
 /// opaque, so a page pushed over another page does not show it through.
 class DfScaffold extends StatelessWidget {
-  const DfScaffold({super.key, this.appBar, required this.body, this.floatingActionButton});
+  const DfScaffold({super.key, this.appBar, required this.body, this.floatingActionButton, this.bottomNavigationBar});
 
   final PreferredSizeWidget? appBar;
   final Widget body;
   final Widget? floatingActionButton;
+  final Widget? bottomNavigationBar;
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +112,7 @@ class DfScaffold extends StatelessWidget {
         backgroundColor: Colors.transparent,
         appBar: appBar,
         floatingActionButton: floatingActionButton,
+        bottomNavigationBar: bottomNavigationBar,
         body: body,
       ),
     );
