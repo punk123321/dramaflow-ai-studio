@@ -533,3 +533,11 @@ Unproven: the render drawing (native/RenderEngine.kt) of all of these, how close
 | Tool row is longer (scrolls sideways): Text, Arrow, Box, Circle, Spot, Border, Sticker, Zoom, Filter, Freeze, Cut, Fade in/out, Flash, Tint, Vignette, Bars, Shade, Picture, Sound | Yes (same run) | **No** |
 | Parameter checks + `fadeAlpha` | Yes, 2 more tests (same run) | n/a |
 Unproven: the render drawing of all these (native/RenderEngine.kt: fade uses a changing alpha per frame, the others are full-size pictures, sharing one empty picture when hidden), memory use with many of them on a long 1080p video, emoji drawing in the render text, and the preview showing subtitles above a fade (the render covers them). Whole-video effects (Border, Vignette, Tint, Bars, Shade) are added for the whole video; trim with the start/end buttons. NOT built: black-and-white / saturation (the render has no saturation control), speed change, transitions between pieces, blur / mosaic (not built on purpose: it can hide someone else's watermark), mirror/flip, pitch change. Not merged to main. APK artifact: `dramaflow-apk-branch-126`.
+
+## TE-32: Speed change
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Speed effect (0.25x to 4x, pitch kept) on a time range: tool row "Speed", presets 0.25 / 0.5 / 0.75 / 1.5 / 2 / 3 / 4, slider; detail dialog too | Yes (CI green, run 44476310269; Kotlin compiled after one fix: Media3 1.8 has no `setSpeed`, so `SpeedChangeEffect` + `SpeedChangingAudioProcessor` are used) | **No** |
+| Compile: the range splits the pieces, the middle gets the speed; output length, overlay/sound/split times and subtitles follow the speed (`VideoPiece.speed`, never saved in the saved timeline) | Yes, 6 tests (same run) | n/a |
+| Preview plays at that speed while the playhead is inside the range, badge shows the speed | Yes (same run) | **No** |
+Unproven (all of it on a phone): the render result (picture and sound staying in sync at other speeds, the blurred background copy matching the length, very slow 0.25x on long ranges), the preview speed switching. Narration is placed on the OUTPUT time: after adding a Speed effect, re-check where the voices sit ("fit video to voices" is not redone automatically). Not merged to main. APK artifact `dramaflow-apk-branch-130`.
