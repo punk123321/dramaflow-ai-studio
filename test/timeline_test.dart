@@ -140,6 +140,19 @@ void main() {
       expect(back.originalVolume, 0.1);
     });
 
+    test('global border settings survive save and load', () {
+      const t = Timeline(
+        pieces: [VideoPiece(0, 10000)],
+        border: VideoBorder(template: 8, color: 0xFF33AAFF, width: 0.04, opacity: 0.75, inset: 0.03),
+      );
+      final back = Timeline.decode(t.encode());
+      expect(back.border?.template, 8);
+      expect(back.border?.color, 0xFF33AAFF);
+      expect(back.border?.width, 0.04);
+      expect(back.border?.opacity, 0.75);
+      expect(back.border?.inset, 0.03);
+    });
+
     test('empty or damaged text gives an empty timeline', () {
       expect(Timeline.decode(null).pieces, isEmpty);
       expect(Timeline.decode('').pieces, isEmpty);
