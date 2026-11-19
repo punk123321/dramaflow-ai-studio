@@ -147,7 +147,7 @@ class VideoPiece {
         if (look != null) 'l': look!.toJson(),
         if (blurStrength != null) 'bl': blurStrength,
         if (flipHorizontal) 'fh': 1,
-        if (flipVertical) 'fv': 1;
+        if (flipVertical) 'fv': 1,
       };
   static VideoPiece fromJson(Map<String, Object?> m) {
     final z = (m['z'] as int?) ?? 0;
