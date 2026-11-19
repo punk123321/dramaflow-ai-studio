@@ -241,12 +241,16 @@ Map<String, Object?> buildRenderJob({
           if (p.crop != null) 'c': p.crop!.toJson(),
           if (p.freeze) 'f': 1,
           if (p.look != null) 'l': p.look!.toJson(),
+          if (p.blurStrength != null) 'bl': p.blurStrength,
+          if (p.flipHorizontal) 'fh': 1,
+          if (p.flipVertical) 'fv': 1,
         }
     ],
     'aspect': aspect,
     'subStyle': timeline.style.toJson(),
     'corners': [for (final c in timeline.corners) if (c.text.trim().isNotEmpty) c.toJson()],
     'logo': timeline.logo?.toJson(),
+    if (timeline.border != null) 'border': timeline.border!.toJson(),
     'voiceLanes': [
       for (final lane in lanes)
         [
