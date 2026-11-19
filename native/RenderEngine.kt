@@ -298,6 +298,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 if (c != null && c.length() == 3) {
                     stillFx.add(cropEffect(c.getDouble(0).toFloat(), c.getDouble(1).toFloat(), c.getDouble(2).toFloat()))
                 }
+                val stillBlur = p.optDouble("bl", 0.0).toFloat()
+                if (stillBlur in 0.5f..50f) stillFx.add(GaussianBlur(stillBlur))
+                val stillFlipH = p.optInt("fh", 0) == 1
+                val stillFlipV = p.optInt("fv", 0) == 1
+                if (stillFlipH || stillFlipV) stillFx.add(ScaleAndRotateTransformation.Builder()
+                    .setScale(if (stillFlipH) -1f else 1f, if (stillFlipV) -1f else 1f)
+                    .build())
                 if (stillFx.isNotEmpty()) still.setEffects(Effects(emptyList<AudioProcessor>(), stillFx))
                 vSeq.addItem(still.build())
                 continue
