@@ -29,6 +29,8 @@ enum TransformTool {
   splitScreen,
   criticalCommentary,
   colorGrade,
+  blur,
+  mirrorFlip,
 }
 
 /// How far a tool really goes today. Used so the screen never suggests more
@@ -61,6 +63,8 @@ extension TransformToolLabel on TransformTool {
         TransformTool.splitScreen => 'Split Screen',
         TransformTool.criticalCommentary => 'Critical Commentary / Recap',
         TransformTool.colorGrade => 'Brightness & Contrast',
+        TransformTool.blur => 'Blur',
+        TransformTool.mirrorFlip => 'Mirror / Flip',
       };
 
   String get description => switch (this) {
@@ -75,11 +79,14 @@ extension TransformToolLabel on TransformTool {
         TransformTool.splitScreen => 'မျက်နှာပြင်ကို နှစ်ပိုင်းခွဲပြီး မူရင်းဗီဒီယိုရဲ့ အချိန်နှစ်ခု တစ်ပြိုင်နက်ပြရန် (စမ်းသပ်ဆဲ)',
         TransformTool.criticalCommentary => 'ဇာတ်လမ်းကို ကိုယ်ပိုင်ဝေဖန်ချက်နဲ့ အသစ်ပြန်တင်ပြရန်',
         TransformTool.colorGrade => 'အလင်း/အမှောင်၊ ကွဲလွဲမှု (contrast) ကို အချိန်ပိုင်းအလိုက် ညှိရန် (ပုံသဏ္ဍာန်/mood အတွက်)',
+        TransformTool.blur => 'ရွေးထားတဲ့ အချိန်ပိုင်းကို Gaussian Blur နဲ့ မှုန်ဝါးစေရန်',
+        TransformTool.mirrorFlip => 'ရွေးထားတဲ့ အချိန်ပိုင်းကို ဘယ်-ညာ သို့မဟုတ် အပေါ်-အောက် ပြောင်းရန် (ဖန်တီးမှု/ဖွဲ့စည်းပုံအတွက်သာ)',
       };
 
   /// What the app really does for each tool today (see CHECKLIST.md).
   ToolStatus get status => switch (this) {
         TransformTool.splitScreen => ToolStatus.experimental,
+        TransformTool.blur || TransformTool.mirrorFlip => ToolStatus.rendered,
         TransformTool.colorGrade ||
         TransformTool.smartCut ||
         TransformTool.pictureInPicture ||
