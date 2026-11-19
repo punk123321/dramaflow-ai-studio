@@ -792,9 +792,9 @@ class _EditorPanelState extends State<EditorPanel> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: LayoutBuilder(builder: (context, box) {
-                        final left = (op.startMs / total).clamp(0.0, 1.0) * box.maxWidth;
-                        final right = (op.endMs / total).clamp(0.0, 1.0) * box.maxWidth;
-                        final width = (right - left).clamp(5.0, box.maxWidth);
+                        final left = ((op.startMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
+                        final right = ((op.endMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
+                        final width = (right - left).clamp(0.0, box.maxWidth).toDouble();
                         return SizedBox(
                           height: 20,
                           child: Stack(children: [
@@ -807,7 +807,7 @@ class _EditorPanelState extends State<EditorPanel> {
                               ),
                             ),
                             Positioned(
-                              left: left.clamp(0.0, (box.maxWidth - 4).clamp(0.0, double.infinity)),
+                              left: left.clamp(0.0, box.maxWidth).toDouble(),
                               top: 2,
                               bottom: 2,
                               width: width,
