@@ -157,6 +157,31 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
           Wrap(spacing: 6, runSpacing: 2, children: [sp('0.25×', 0.25), sp('0.5×', 0.5), sp('0.75×', 0.75), sp('1.5×', 1.5), sp('2×', 2.0), sp('3×', 3.0), sp('4×', 4.0)]),
           _slider('Speed ×', 'speed', 2.0, 0.25, 4.0),
         ];
+      case TransformTool.blur:
+        Widget bl(String label, double v) => ChoiceChip(
+              label: Text(label, style: const TextStyle(fontSize: 12)),
+              selected: _num('strength', 10.0) == v,
+              onSelected: (_) => widget.onChange(_op.copyWith(params: {..._op.params, 'strength': v}), true),
+            );
+        return [
+          const Text('ဒီအချိန်ပိုင်းတစ်ခုလုံး မှုန်ဝါးမယ်။ Preview က ခန့်မှန်းပြတာ၊ တကယ့်ပမာဏက Render မှာ ကြည့်ပါ', style: TextStyle(fontSize: 12.5, color: DfColors.muted)),
+          Wrap(spacing: 6, runSpacing: 2, children: [bl('နည်း', 4), bl('အလယ်', 10), bl('များ', 25), bl('အရမ်း', 45)]),
+          _slider('Blur', 'strength', 10.0, 0.5, 50.0),
+        ];
+      case TransformTool.mirrorFlip:
+        Widget fl(String label, IconData icon, String key) => SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(icon, size: 20),
+              title: Text(label, style: const TextStyle(fontSize: 13.5)),
+              value: _op.params[key] == true,
+              onChanged: (v) => widget.onChange(_op.copyWith(params: {..._op.params, key: v}), true),
+            );
+        return [
+          const Text('ဒီအချိန်ပိုင်းကို လှန်ပြမယ်။ စာသား/စာတန်းတွေ မလှန်ပါ (ဗီဒီယိုပုံပဲ လှန်တယ်)', style: TextStyle(fontSize: 12.5, color: DfColors.muted)),
+          fl('ဘယ်-ညာ', Icons.flip, 'horizontal'),
+          fl('အပေါ်-အောက်', Icons.swap_vert, 'vertical'),
+        ];
       case TransformTool.freezeFrame:
         return [_slider('ရပ်မယ့်စက္ကန့်', 'hold', 3.0, 0.5, 15.0)];
       case TransformTool.motionGraphics:

@@ -80,6 +80,8 @@ class _TeTimelineState extends State<TeTimeline> {
         TransformTool.freezeFrame => const Color(0xFF5B8CFF),
         TransformTool.smartCut => const Color(0xFFE5484D),
         TransformTool.speedChange => const Color(0xFFB36BFF),
+        TransformTool.blur => const Color(0xFF7C8DB5),
+        TransformTool.mirrorFlip => const Color(0xFF9B7EDE),
         TransformTool.pictureInPicture => const Color(0xFFFF6B9D),
         TransformTool.soundDesign => const Color(0xFF3DDC84),
         TransformTool.splitScreen => const Color(0xFF22B8CF),
@@ -111,6 +113,13 @@ class _TeTimelineState extends State<TeTimeline> {
       case TransformTool.speedChange:
         final sp = o.params['speed'];
         return sp is num ? 'Speed ×${sp.toStringAsFixed(sp == sp.roundToDouble() ? 0 : 2)}' : 'Speed';
+      case TransformTool.blur:
+        final bs = o.params['strength'];
+        return bs is num ? 'Blur ${bs.toStringAsFixed(0)}' : 'Blur';
+      case TransformTool.mirrorFlip:
+        final h = o.params['horizontal'] == true;
+        final v = o.params['vertical'] == true;
+        return h && v ? 'Flip ↔↕' : (v ? 'Flip ↕' : 'Flip ↔');
       case TransformTool.freezeFrame:
         return 'Freeze';
       case TransformTool.smartCut:

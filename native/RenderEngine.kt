@@ -45,6 +45,7 @@ import androidx.media3.effect.Contrast
 import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.GaussianBlur
 import androidx.media3.effect.MatrixTransformation
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.VideoCompositorSettings
@@ -297,6 +298,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 if (c != null && c.length() == 3) {
                     stillFx.add(cropEffect(c.getDouble(0).toFloat(), c.getDouble(1).toFloat(), c.getDouble(2).toFloat()))
                 }
+                val stillBlur = p.optDouble("bl", 0.0).toFloat()
+                if (stillBlur in 0.5f..50f) stillFx.add(GaussianBlur(stillBlur))
+                val stillFlipH = p.optInt("fh", 0) == 1
+                val stillFlipV = p.optInt("fv", 0) == 1
+                if (stillFlipH || stillFlipV) stillFx.add(flipEffect(stillFlipH, stillFlipV))
                 if (stillFx.isNotEmpty()) still.setEffects(Effects(emptyList<AudioProcessor>(), stillFx))
                 vSeq.addItem(still.build())
                 continue
@@ -332,6 +338,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             if (crop != null && crop.length() == 3) {
                 videoFx.add(cropEffect(crop.getDouble(0).toFloat(), crop.getDouble(1).toFloat(), crop.getDouble(2).toFloat()))
             }
+            val blur = p.optDouble("bl", 0.0).toFloat()
+            if (blur in 0.5f..50f) videoFx.add(GaussianBlur(blur))
+            val flipH = p.optInt("fh", 0) == 1
+            val flipV = p.optInt("fv", 0) == 1
+            if (flipH || flipV) videoFx.add(flipEffect(flipH, flipV))
             if (zoom == 1 || zoom == 2) videoFx.add(zoomEffect(zoom == 1, pieceUs))
             if (blurMode) videoFx.add(Presentation.createForWidthAndHeight(fitW, fitH, Presentation.LAYOUT_STRETCH_TO_FIT))
             if (audioFx.isNotEmpty() || videoFx.isNotEmpty()) b.setEffects(Effects(audioFx, videoFx))
@@ -681,6 +692,12 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
      * Still crop: keeps the area of size 1/zoom centred on (cx, cy), both 0..1
      * from the top-left. Screen coordinates here run -1..1 with y up.
      */
+    /** Mirrors the picture left-right and/or top-bottom (scale -1 on that axis). */
+    private fun flipEffect(h: Boolean, v: Boolean): Effect =
+        ScaleAndRotateTransformation.Builder()
+            .setScale(if (h) -1f else 1f, if (v) -1f else 1f)
+            .build()
+
     private fun cropEffect(zoom: Float, cx: Float, cy: Float): Effect {
         val z = zoom.coerceIn(1f, 4f)
         val tx = 2f * cx.coerceIn(0f, 1f) - 1f

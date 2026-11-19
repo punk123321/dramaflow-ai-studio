@@ -44,6 +44,28 @@ LookAdjust? previewLook(List<TransformOp> ops, int posMs) {
   return out;
 }
 
+/// The blur strength that applies at [posMs] (the latest operation wins).
+double? previewBlur(List<TransformOp> ops, int posMs) {
+  double? out;
+  for (final o in opsAt(ops, posMs)) {
+    if (o.tool != TransformTool.blur) continue;
+    final b = blurFromParams(o.params);
+    if (b != null) out = b;
+  }
+  return out;
+}
+
+/// The flip that applies at [posMs] (the latest operation wins).
+({bool h, bool v})? previewFlip(List<TransformOp> ops, int posMs) {
+  ({bool h, bool v})? out;
+  for (final o in opsAt(ops, posMs)) {
+    if (o.tool != TransformTool.mirrorFlip) continue;
+    final f = flipFromParams(o.params);
+    if (f != null) out = f;
+  }
+  return out;
+}
+
 /// A label, arrow or picture to draw, with the operation it came from (the
 /// preview uses the id to let the user drag it).
 class PreviewMotion {

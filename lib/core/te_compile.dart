@@ -314,6 +314,20 @@ LookAdjust? lookFromParams(Map<String, Object?> p) {
   return l.isNeutral ? null : l;
 }
 
+/// Blur strength from operation parameters (0.5 to 50). Null when not usable.
+double? blurFromParams(Map<String, Object?> p) {
+  final v = p['strength'];
+  if (v is! num || !v.isFinite || v < minBlur || v > maxBlur) return null;
+  return double.parse(v.toStringAsFixed(1));
+}
+
+/// Flip directions from operation parameters. Null when neither is on.
+({bool h, bool v})? flipFromParams(Map<String, Object?> p) {
+  final h = p['horizontal'] == true;
+  final v = p['vertical'] == true;
+  return h || v ? (h: h, v: v) : null;
+}
+
 /// Slowest and fastest playback a Speed operation may ask for.
 const minSpeed = 0.25;
 const maxSpeed = 4.0;
@@ -362,7 +376,10 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     final name = op.tool.title;
     if (!op.valid) {
       notes.add('$name — အချိန် မမှန်လို့ ချန်ထားတယ်');
-    } else if (op.tool == TransformTool.cropReframe || op.tool == TransformTool.colorGrade) {
+    } else if (op.tool == TransformTool.cropReframe ||
+        op.tool == TransformTool.colorGrade ||
+        op.tool == TransformTool.blur ||
+        op.tool == TransformTool.mirrorFlip) {
       crops.add(op);
     } else if (op.tool == TransformTool.speedChange) {
       speeds.add(op);
@@ -414,15 +431,30 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   for (final op in crops) {
     final name = op.tool.title;
     final isLook = op.tool == TransformTool.colorGrade;
-    final crop = isLook ? null : cropFromParams(op.params);
+    final isBlur = op.tool == TransformTool.blur;
+    final isFlip = op.tool == TransformTool.mirrorFlip;
+    final isCrop = !isLook && !isBlur && !isFlip;
+    final crop = isCrop ? cropFromParams(op.params) : null;
     final look = isLook ? lookFromParams(op.params) : null;
-    if (isLook ? look == null : crop == null) {
+    final blur = isBlur ? blurFromParams(op.params) : null;
+    final flip = isFlip ? flipFromParams(op.params) : null;
+    if (isCrop ? crop == null : isLook ? look == null : isBlur ? blur == null : flip == null) {
       notes.add(isLook
           ? '$name — အလင်း/contrast တန်ဖိုး မမှန်ပါ (သို့) ၀ ဖြစ်နေလို့ ချန်ထားတယ်'
-          : '$name — zoom/နေရာ တန်ဖိုး မမှန်လို့ ချန်ထားတယ်');
+          : isBlur
+              ? '$name — Blur strength ($minBlur–$maxBlur) မမှန်လို့ ချန်ထားတယ်'
+              : isFlip
+                  ? '$name — ဘယ်-ညာ ဒါမှမဟုတ် အပေါ်-အောက် တစ်ခုခု ရွေးပါ၊ ချန်ထားတယ်'
+                  : '$name — zoom/နေရာ တန်ဖိုး မမှန်လို့ ချန်ထားတယ်');
       continue;
     }
-    VideoPiece mark(VideoPiece p) => isLook ? p.withLook(look) : p.withCrop(crop);
+    VideoPiece mark(VideoPiece p) => isLook
+        ? p.withLook(look)
+        : isBlur
+            ? p.withBlur(blur)
+            : isFlip
+                ? p.withFlip(flip!.h, flip.v)
+                : p.withCrop(crop);
     final next = <VideoPiece>[];
     var touched = false;
     for (final p in cur) {
@@ -499,7 +531,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       continue;
     }
     final p = cur[i];
-    final still = VideoPiece.freezeAt(t, hold, p.crop, p.look);
+    final still = VideoPiece.freezeAt(t, hold, p.crop, p.look, p.blur, p.flipH, p.flipV);
     final next = [...cur];
     if (t - p.startMs < minCompiledPieceMs) {
       next.insert(i, still);

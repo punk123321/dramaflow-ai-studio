@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -292,6 +293,10 @@ class _EditorPanelState extends State<EditorPanel> {
         params = {'brightness': 0.15, 'contrast': 0.0};
       case TransformTool.speedChange:
         params = {'speed': 2.0};
+      case TransformTool.blur:
+        params = {'strength': 10.0};
+      case TransformTool.mirrorFlip:
+        params = {'horizontal': true, 'vertical': false};
       case TransformTool.freezeFrame:
         params = {'hold': 3.0};
         e = pos;
@@ -377,6 +382,8 @@ class _EditorPanelState extends State<EditorPanel> {
           tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
           tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
           tool('Speed', Icons.speed, () => _quickAdd(TransformTool.speedChange)),
+          tool('Blur', Icons.blur_on, () => _quickAdd(TransformTool.blur)),
+          tool('Flip', Icons.flip, () => _quickAdd(TransformTool.mirrorFlip)),
           tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
           tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
           tool('Fade in', Icons.vertical_align_bottom, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadein')),
@@ -959,6 +966,8 @@ class _EditorPanelState extends State<EditorPanel> {
     final ops = _plan.ops;
     final crop = previewCrop(ops, _posMs);
     final look = previewLook(ops, _posMs);
+    final blur = previewBlur(ops, _posMs);
+    final flip = previewFlip(ops, _posMs);
     final motions = previewMotions(ops, _posMs);
     final badges = previewBadges(ops, _posMs);
     final cutting = opsAt(ops, _posMs).any((o) => o.tool == TransformTool.smartCut);
@@ -978,6 +987,9 @@ class _EditorPanelState extends State<EditorPanel> {
         child: Transform.scale(scale: crop.zoom, child: video),
       );
     }
+    // The preview is smaller than the output, so the blur strength is scaled down (an estimate; the render is the real result).
+    if (blur != null) video = ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: blur * 0.4, sigmaY: blur * 0.4), child: video);
+    if (flip != null) video = Transform.scale(scaleX: flip.h ? -1.0 : 1.0, scaleY: flip.v ? -1.0 : 1.0, child: video);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),

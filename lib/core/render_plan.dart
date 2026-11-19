@@ -242,6 +242,9 @@ Map<String, Object?> buildRenderJob({
           if (p.freeze) 'f': 1,
           if (p.look != null) 'l': p.look!.toJson(),
           if (p.speed != 1.0) 'sp': p.speed,
+          if (p.blur != null) 'bl': p.blur,
+          if (p.flipH) 'fh': 1,
+          if (p.flipV) 'fv': 1,
         }
     ],
     'aspect': aspect,
