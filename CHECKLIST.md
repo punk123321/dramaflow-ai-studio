@@ -510,3 +510,15 @@ Unproven: how the preview overlays line up with the render on a real video; the 
 | Multi-track timeline on the original video's time: ruler (tap/drag to move the playhead), Video track (kept pieces), subtitle track, one coloured block per effect (overlapping effects on separate rows), zoom in/out, follows the playhead while playing | Yes (same run) | **No** |
 | `assignLanes` helper | Yes, 2 tests (same run) | n/a |
 NOT built: Border (frame around the video), gradient text box with corner resize handles, Canvas (aspect ratio / background), AI Hook, Voice track in the timeline (narration lives on the edit time, not the original time), dragging block edges to trim, full-screen preview. Border and gradient text need changes in the render engine (native/RenderEngine.kt), which cannot be tested here. APK: `dramaflow-apk-branch-122`. Not merged to main.
+
+## TE-30: more effects (all under Motion Graphics)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Box and Circle: an outline to point at something; drag to move, corner dot to resize (width and height) | Yes (CI green, run 44433026494; Kotlin compiled) | **No** |
+| Spot: the whole picture is dimmed except one window (oval or rounded rectangle); centre button moves it, corner dot resizes | Yes (same run) | **No** |
+| Border: a frame around the whole video, rainbow or one colour, thickness slider; added for the whole video by default | Yes (same run) | **No** |
+| Label with a colourful (violet to pink, gold edge) background, as an option on the text effect | Yes (same run) | **No** |
+| Filter presets (dark mood, bright, high contrast, soft) set brightness/contrast only | Yes (same run) | **No** |
+| Tool row: Box, Circle, Spot, Border added; the detail dialog keeps the values of these effects (they are edited with the sliders under the preview) | Yes (same run) | **No** |
+| Parameter checks (`motionFromParams`) for the new kinds | Yes, 5 tests (same run) | n/a |
+Unproven: the render drawing (native/RenderEngine.kt) of all of these, how closely the preview matches it, and Burmese text on the colourful label background (drawn with StaticLayout). The AI (Gemini) prompt still only suggests label and arrow. NOT built: fade in/out, speed change (slow/fast), transitions between pieces, saturation / black-and-white / warm-cool filters (the render only has brightness and contrast), Canvas (aspect/background), blur or mosaic boxes (deliberately not built: they could be used to hide someone else's watermark). Not merged to main.
