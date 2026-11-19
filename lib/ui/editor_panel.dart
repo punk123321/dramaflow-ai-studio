@@ -389,6 +389,21 @@ class _EditorPanelState extends State<EditorPanel> {
     await _set(_tl.copyWith(subtitleOffsetMs: (v * 1000).round()));
   }
 
+  Future<void> _openTe() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TransformativeEditorScreen(project: widget.project),
+      ),
+    );
+    if (!mounted) return;
+    try {
+      final raw = await _repo.getDoc(_pid, DocKind.transformativePlan);
+      setState(() => _tePlan = TransformativePlan.decode(raw));
+    } catch (e) {
+      setState(() => _error = 'TE Plan ပြန်ဖတ်မရပါ: $e');
+    }
+  }
+
   Future<void> _markDone() async {
     final errors = checkTimeline(_tl, sourceMs: _sourceMs).where((i) => i.severity == Severity.error);
     if (errors.isNotEmpty) {
@@ -456,11 +471,7 @@ class _EditorPanelState extends State<EditorPanel> {
                   ),
                 ),
                 FilledButton.tonalIcon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => TransformativeEditorScreen(project: widget.project),
-                    ),
-                  ),
+                  onPressed: _openTe,
                   icon: const Icon(Icons.tune, size: 18),
                   label: const Text('ဖွင့်မယ်'),
                 ),
