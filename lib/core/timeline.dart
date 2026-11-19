@@ -83,18 +83,21 @@ class LookAdjust {
 }
 
 class VideoPiece {
-  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false, this.look]);
+  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false, this.look, this.blurStrength, this.flipHorizontal = false, this.flipVertical = false]);
 
   /// A still frame of the original at [atMs], held for [holdMs]. Only the
   /// render step creates these (from approved Freeze Frame operations); they
   /// are never saved in the timeline.
-  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c, LookAdjust? l])
+  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c, LookAdjust? l, double? blur, bool flipH = false, bool flipV = false])
       : startMs = atMs,
         endMs = atMs + holdMs,
         zoom = ZoomMode.none,
         crop = c,
         freeze = true,
-        look = l;
+        look = l,
+        blurStrength = blur,
+        flipHorizontal = flipH,
+        flipVertical = flipV;
 
   /// Range inside the ORIGINAL video.
   final int startMs;
@@ -106,13 +109,18 @@ class VideoPiece {
   /// [lengthMs] how long it is held.
   final bool freeze;
   final LookAdjust? look;
+  final double? blurStrength;
+  final bool flipHorizontal;
+  final bool flipVertical;
 
   int get lengthMs => endMs - startMs;
 
-  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze, look);
-  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze, look);
-  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze, look);
-  VideoPiece withLook(LookAdjust? l) => VideoPiece(startMs, endMs, zoom, crop, freeze, l);
+  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze, look, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze, look, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze, look, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withLook(LookAdjust? l) => VideoPiece(startMs, endMs, zoom, crop, freeze, l, blurStrength, flipHorizontal, flipVertical);
+  VideoPiece withBlur(double? v) => VideoPiece(startMs, endMs, zoom, crop, freeze, look, v, flipHorizontal, flipVertical);
+  VideoPiece withFlip(bool h, bool v) => VideoPiece(startMs, endMs, zoom, crop, freeze, look, blurStrength, h, v);
 
   @override
   bool operator ==(Object other) =>
@@ -122,10 +130,13 @@ class VideoPiece {
       other.zoom == zoom &&
       other.crop == crop &&
       other.freeze == freeze &&
-      other.look == look;
+      other.look == look &&
+      other.blurStrength == blurStrength &&
+      other.flipHorizontal == flipHorizontal &&
+      other.flipVertical == flipVertical;
 
   @override
-  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze, look);
+  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze, look, blurStrength, flipHorizontal, flipVertical);
 
   Map<String, Object?> toJson() => {
         's': startMs,
@@ -134,6 +145,9 @@ class VideoPiece {
         if (crop != null) 'c': crop!.toJson(),
         if (freeze) 'f': 1,
         if (look != null) 'l': look!.toJson(),
+        if (blurStrength != null) 'bl': blurStrength,
+        if (flipHorizontal) 'fh': 1,
+        if (flipVertical) 'fv': 1,
       };
   static VideoPiece fromJson(Map<String, Object?> m) {
     final z = (m['z'] as int?) ?? 0;
@@ -144,6 +158,9 @@ class VideoPiece {
       CropFrame.fromJson(m['c']),
       m['f'] == 1,
       LookAdjust.fromJson(m['l']),
+      m['bl'] is num && (m['bl'] as num).isFinite && (m['bl'] as num) >= 0.5 && (m['bl'] as num) <= 50 ? (m['bl'] as num).toDouble() : null,
+      m['fh'] == 1,
+      m['fv'] == 1,
     );
   }
 }
@@ -314,6 +331,48 @@ class LogoItem {
       );
 }
 
+/// One global frame applied over the complete rendered video.
+class VideoBorder {
+  const VideoBorder({
+    this.template = 0,
+    this.color = 0xFFFFFFFF,
+    this.width = 0.025,
+    this.opacity = 1.0,
+    this.inset = 0.025,
+  });
+
+  final int template; // 0..39
+  final int color;
+  final double width; // fraction of the shorter output dimension
+  final double opacity;
+  final double inset;
+
+  VideoBorder copyWith({int? template, int? color, double? width, double? opacity, double? inset}) =>
+      VideoBorder(
+        template: template ?? this.template,
+        color: color ?? this.color,
+        width: width ?? this.width,
+        opacity: opacity ?? this.opacity,
+        inset: inset ?? this.inset,
+      );
+
+  Map<String, Object?> toJson() => {
+    'template': template.clamp(0, 39),
+    'color': color,
+    'width': width.clamp(0.003, 0.12),
+    'opacity': opacity.clamp(0.05, 1.0),
+    'inset': inset.clamp(0.0, 0.15),
+  };
+
+  static VideoBorder fromJson(Map<String, Object?> m) => VideoBorder(
+    template: ((m['template'] as num?)?.toInt() ?? 0).clamp(0, 39),
+    color: (m['color'] as num?)?.toInt() ?? 0xFFFFFFFF,
+    width: ((m['width'] as num?)?.toDouble() ?? 0.025).clamp(0.003, 0.12),
+    opacity: ((m['opacity'] as num?)?.toDouble() ?? 1.0).clamp(0.05, 1.0),
+    inset: ((m['inset'] as num?)?.toDouble() ?? 0.025).clamp(0.0, 0.15),
+  );
+}
+
 class Timeline {
   const Timeline({
     this.pieces = const [],
@@ -325,6 +384,7 @@ class Timeline {
     this.style = const SubStyle(),
     this.corners = const [],
     this.logo,
+    this.border,
   });
 
   final List<VideoPiece> pieces;
@@ -342,6 +402,7 @@ class Timeline {
   final SubStyle style;
   final List<CornerText> corners;
   final LogoItem? logo;
+  final VideoBorder? border;
 
   int get videoMs => pieces.fold(0, (a, p) => a + p.lengthMs);
 
@@ -359,6 +420,8 @@ class Timeline {
     List<CornerText>? corners,
     LogoItem? logo,
     bool clearLogo = false,
+    VideoBorder? border,
+    bool clearBorder = false,
   }) =>
       Timeline(
         pieces: pieces ?? this.pieces,
@@ -370,6 +433,7 @@ class Timeline {
         style: style ?? this.style,
         corners: corners ?? this.corners,
         logo: clearLogo ? null : (logo ?? this.logo),
+        border: clearBorder ? null : (border ?? this.border),
       );
 
   String encode() => jsonEncode({
@@ -383,6 +447,7 @@ class Timeline {
         'style': style.toJson(),
         'corners': [for (final c in corners) c.toJson()],
         'logo': logo?.toJson(),
+        'border': border?.toJson(),
       });
 
   /// Returns an empty timeline when [raw] is empty or damaged, so a broken
@@ -401,6 +466,7 @@ class Timeline {
         style: m['style'] == null ? const SubStyle() : SubStyle.fromJson((m['style'] as Map).cast()),
         corners: [for (final c in (m['corners'] as List? ?? const [])) CornerText.fromJson((c as Map).cast())],
         logo: m['logo'] == null ? null : LogoItem.fromJson((m['logo'] as Map).cast()),
+        border: m['border'] == null ? null : VideoBorder.fromJson((m['border'] as Map).cast()),
       );
     } catch (_) {
       return const Timeline();
