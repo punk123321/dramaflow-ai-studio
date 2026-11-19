@@ -461,6 +461,8 @@ Both effects are intended for ordinary creative framing and visual styling only,
 |---|---|---|---|
 | Editing workspace opens TE from its own screen | yes | pending | no |
 | Returning from TE reloads the latest saved plan into Editing | yes | pending | no |
+| Approved TE operations appear as separate icon-labelled effect tracks below the video pieces | yes | pending | no |
+| Effect track bars are positioned using original-source time ranges | yes | pending | no |
 | Approved Blur and Mirror/Flip are previewed in the Editing video preview using source-video time ranges | yes | pending | no |
 
-Preview scope: Blur and Mirror/Flip only. TE operations remain stored in the per-project plan and are compiled for preview; the Editor's saved base timeline is not overwritten. Smart Cut, Freeze Frame, overlays, crop and color-grade preview are not included in this step. Export rendering remains a separate verification item.
+Preview scope: Blur and Mirror/Flip only. The new TE Effect Layers display approved operations as icon-labelled, time-positioned tracks; tapping a track opens TE for editing. TE operations remain stored in the per-project plan and the Editor's saved base timeline is not overwritten. Smart Cut, Freeze Frame, overlays, crop and color-grade live preview are not included in this step. Export rendering and Android device behavior still require verification.
