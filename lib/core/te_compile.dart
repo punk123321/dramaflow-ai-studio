@@ -78,7 +78,12 @@ class SplitItem {
 /// Shortest split-screen window.
 const minSplitMs = 1000;
 
-enum MotionKind { label, arrow, image }
+/// label / arrow / image as before. New: box and circle (an outline to point
+/// at something), spot (the whole picture is dimmed except one window) and
+/// frame (a border around the whole picture).
+enum MotionKind { label, arrow, image, box, circle, spot, frame }
+
+bool _isShape(MotionKind k) => k == MotionKind.box || k == MotionKind.circle || k == MotionKind.spot;
 
 /// A text label, arrow or picture (picture-in-picture, image only) shown on the finished video between [startMs] and
 /// [endMs] of the OUTPUT time. [x], [y]: centre, 0 to 1 from the top-left.
@@ -97,6 +102,9 @@ class MotionItem {
     this.path = '',
     this.angle = 0,
     this.background = true,
+    this.aspect = 0.5,
+    this.gradient = false,
+    this.round = true,
   });
 
   final MotionKind kind;
@@ -113,6 +121,15 @@ class MotionItem {
   final double angle;
   final bool background;
 
+  /// Height divided by width (box, circle, spot).
+  final double aspect;
+
+  /// Label: colourful background. Frame: rainbow border.
+  final bool gradient;
+
+  /// Spot: oval window (true) or rounded rectangle (false).
+  final bool round;
+
   MotionItem withTime(int s, int e) => MotionItem(
         kind: kind,
         startMs: s,
@@ -125,6 +142,9 @@ class MotionItem {
         path: path,
         angle: angle,
         background: background,
+        aspect: aspect,
+        gradient: gradient,
+        round: round,
       );
 
   Map<String, Object?> toJson() => {
@@ -139,6 +159,9 @@ class MotionItem {
         if (kind == MotionKind.image) 'path': path,
         if (kind == MotionKind.label) 'bg': background,
         if (kind == MotionKind.arrow) 'angle': angle,
+        if (_isShape(kind)) 'ar': aspect,
+        if (kind == MotionKind.spot) 'round': round,
+        if (kind == MotionKind.label || kind == MotionKind.frame) 'grad': gradient,
       };
 }
 
@@ -153,7 +176,16 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
   final color = p['color'];
   if (kind == null || x is! num || y is! num || size is! num || color is! int) return null;
   if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-  if (size < 0.03 || size > (kind == MotionKind.image ? 0.6 : 0.4)) return null;
+  final minSize = kind == MotionKind.frame ? 0.005 : 0.03;
+  final maxSize = switch (kind) {
+    MotionKind.image => 0.6,
+    MotionKind.box || MotionKind.circle || MotionKind.spot => 0.95,
+    MotionKind.frame => 0.1,
+    _ => 0.4,
+  };
+  if (size < minSize || size > maxSize) return null;
+  final ar = p['ar'];
+  if (ar != null && (ar is! num || ar < 0.1 || ar > 4)) return null;
   var text = '';
   var path = '';
   if (kind == MotionKind.image) {
@@ -179,6 +211,9 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     path: path,
     angle: a is num ? a.toDouble() % 360 : 0,
     background: p['bg'] != false,
+    aspect: ar is num ? ar.toDouble() : (kind == MotionKind.circle ? 1.0 : 0.5),
+    gradient: p['grad'] == true,
+    round: p['round'] != false,
   );
 }
 

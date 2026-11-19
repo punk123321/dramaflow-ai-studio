@@ -113,40 +113,76 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
           ),
         ];
       case TransformTool.colorGrade:
+        Widget preset(String label, double b, double c) => ActionChip(
+              label: Text(label, style: const TextStyle(fontSize: 12)),
+              onPressed: () => widget.onChange(_op.copyWith(params: {..._op.params, 'brightness': b, 'contrast': c}), true),
+            );
         return [
+          Wrap(spacing: 6, runSpacing: 2, children: [
+            preset('မှောင် mood', -0.2, 0.25),
+            preset('လင်း', 0.2, 0.0),
+            preset('Contrast မြင့်', 0.0, 0.35),
+            preset('ပျော့', 0.05, -0.25),
+          ]),
           _slider('အလင်း', 'brightness', 0.15, -0.6, 0.6),
           _slider('Contrast', 'contrast', 0.0, -0.6, 0.6),
         ];
       case TransformTool.freezeFrame:
         return [_slider('ရပ်မယ့်စက္ကန့်', 'hold', 3.0, 0.5, 15.0)];
       case TransformTool.motionGraphics:
-        final label = _op.params['kind'] != 'arrow';
+        final k = _op.params['kind'] is String ? _op.params['kind'] as String : 'label';
+        final shape = k == 'box' || k == 'circle' || k == 'spot';
+        Widget flag(String label, String key, {bool defaultOn = false}) => SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(label, style: const TextStyle(fontSize: 13.5)),
+              value: defaultOn ? _op.params[key] != false : _op.params[key] == true,
+              onChanged: (v) => widget.onChange(_op.copyWith(params: {..._op.params, key: v}), true),
+            );
         return [
-          if (label)
+          if (k == 'label')
             TextField(
               controller: _text,
               maxLength: 120,
               decoration: const InputDecoration(labelText: 'စာသား'),
               onChanged: (v) => widget.onChange(_op.copyWith(params: {..._op.params, 'text': v}), true),
             ),
-          const Text('Preview ပေါ်မှာ ဆွဲရွှေ့လို့ရတယ်', style: TextStyle(fontSize: 12.5, color: DfColors.muted)),
-          _slider('အရွယ်', 'size', 0.06, 0.03, 0.4),
-          if (!label) _slider('လှည့်', 'angle', 0, 0, 359, whole: true),
-          Wrap(spacing: 8, children: [
-            for (final c in _colors)
-              GestureDetector(
-                onTap: () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': c}), true),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Color(c),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _op.params['color'] == c ? DfColors.accent : DfColors.line, width: _op.params['color'] == c ? 3 : 1),
+          if (k == 'label') flag('အရောင်ခြယ် နောက်ခံ (ခရမ်း→ပန်း)', 'grad'),
+          Text(
+            switch (k) {
+              'frame' => 'ဗီဒီယိုပတ်ပတ်လည် ဘောင် — အချိန်ကို timeline မှာ ညှိပါ',
+              'spot' => 'အလယ်က ခလုတ်နဲ့ ရွှေ့၊ ထောင့်က အစက်နဲ့ အကျယ်ညှိ — ကျန်တာ မှောင်သွားမယ်',
+              'box' || 'circle' => 'ဆွဲရွှေ့၊ ထောင့်က အစက်နဲ့ အရွယ်ညှိ',
+              _ => 'Preview ပေါ်မှာ ဆွဲရွှေ့လို့ရတယ်',
+            },
+            style: const TextStyle(fontSize: 12.5, color: DfColors.muted),
+          ),
+          if (k == 'frame')
+            _slider('အထူ', 'size', 0.012, 0.005, 0.05)
+          else if (shape)
+            _slider('အကျယ်', 'size', 0.4, 0.05, 0.95)
+          else
+            _slider('အရွယ်', 'size', 0.06, 0.03, 0.4),
+          if (shape) _slider('အမြင့်', 'ar', 0.5, 0.1, 3.0),
+          if (k == 'arrow') _slider('လှည့်', 'angle', 0, 0, 359, whole: true),
+          if (k == 'frame') flag('သက်တန့်ရောင်စုံ', 'grad'),
+          if (k == 'spot') flag('ဘဲဥပုံ (ပိတ် = လေးထောင့်)', 'round', defaultOn: true),
+          if (k != 'spot' && !(k == 'frame' && _op.params['grad'] == true))
+            Wrap(spacing: 8, children: [
+              for (final c in _colors)
+                GestureDetector(
+                  onTap: () => widget.onChange(_op.copyWith(params: {..._op.params, 'color': c}), true),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Color(c),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _op.params['color'] == c ? DfColors.accent : DfColors.line, width: _op.params['color'] == c ? 3 : 1),
+                    ),
                   ),
                 ),
-              ),
-          ]),
+            ]),
         ];
       case TransformTool.pictureInPicture:
         return [

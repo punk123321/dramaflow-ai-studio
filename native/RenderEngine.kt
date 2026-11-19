@@ -482,11 +482,36 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                         val blank = Bitmap.createBitmap(pic.width, pic.height, Bitmap.Config.ARGB_8888)
                         overlays.add(WindowedBitmapOverlay(pic, blank, startMs, endMs, settings))
                     }
+                } else if (m.optString("k") == "box" || m.optString("k") == "circle") {
+                    // Outline to point at something. size = share of the width, ar = height / width.
+                    val bw = (m.getDouble("size") * outW).toInt().coerceIn(40, outW)
+                    val bh = (bw * m.optDouble("ar", 0.5)).toInt().coerceIn(20, outH)
+                    val shape = shapeBitmap(bw, bh, color, m.optString("k") == "circle")
+                    val blank = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+                    overlays.add(WindowedBitmapOverlay(shape, blank, startMs, endMs, settings))
+                } else if (m.optString("k") == "frame") {
+                    // Border around the whole picture; size = thickness as a share of the short side.
+                    val thick = (m.getDouble("size") * base).toFloat().coerceAtLeast(2f)
+                    val frame = frameBitmap(outW, outH, thick, color, m.optBoolean("grad", false))
+                    val blank = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+                    overlays.add(WindowedBitmapOverlay(frame, blank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                } else if (m.optString("k") == "spot") {
+                    // Everything dimmed except one window.
+                    val hw = (m.getDouble("size") * outW).toFloat().coerceIn(40f, outW.toFloat())
+                    val hh = (hw * m.optDouble("ar", 0.6).toFloat()).coerceIn(20f, outH.toFloat())
+                    val spot = spotBitmap(outW, outH, cx * outW, cy * outH, hw, hh, m.optBoolean("round", true))
+                    val blank = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+                    overlays.add(WindowedBitmapOverlay(spot, blank, startMs, endMs, centerSettings(0.5f, 0.5f)))
                 } else if (m.optString("k") == "arrow") {
                     val n = px.coerceIn(24, 1200)
                     val arrow = arrowBitmap(n, color, m.optDouble("angle", 0.0).toFloat())
                     val blank = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
                     overlays.add(WindowedBitmapOverlay(arrow, blank, startMs, endMs, settings))
+                } else if (m.optBoolean("grad", false) && m.optString("t", "").isNotBlank()) {
+                    // Label on a colourful rounded background, drawn as a picture.
+                    val lbl = gradientLabelBitmap(m.optString("t", ""), color, px, (outW * 0.9f).toInt())
+                    val blank = Bitmap.createBitmap(lbl.width, lbl.height, Bitmap.Config.ARGB_8888)
+                    overlays.add(WindowedBitmapOverlay(lbl, blank, startMs, endMs, settings))
                 } else {
                     overlays.add(WindowedTextOverlay(wrapText(m.optString("t", ""), px, (outW * 0.9f).toInt()), color, px, m.optBoolean("bg", true), startMs, endMs, settings))
                 }
@@ -691,6 +716,96 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         }
         c.drawPath(path, fill)
         c.drawPath(path, outline)
+        return bmp
+    }
+
+    /** Outline of a rounded rectangle or an oval on a transparent picture. */
+    private fun shapeBitmap(w: Int, h: Int, color: Int, oval: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val stroke = (minOf(w, h) * 0.06f).coerceIn(3f, 24f)
+        val r = android.graphics.RectF(stroke, stroke, w - stroke, h - stroke)
+        val dark = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke * 1.6f
+            this.color = Color.argb(150, 0, 0, 0)
+        }
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+            this.color = color
+        }
+        if (oval) {
+            c.drawOval(r, dark)
+            c.drawOval(r, line)
+        } else {
+            c.drawRoundRect(r, stroke, stroke, dark)
+            c.drawRoundRect(r, stroke, stroke, line)
+        }
+        return bmp
+    }
+
+    /** A border around the whole picture (rainbow or one colour). */
+    private fun frameBitmap(w: Int, h: Int, thick: Float, color: Int, rainbow: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = thick
+        if (rainbow) {
+            p.shader = android.graphics.LinearGradient(
+                0f, 0f, w.toFloat(), h.toFloat(),
+                intArrayOf(0xFF2979FF.toInt(), 0xFF00E5FF.toInt(), 0xFF76FF03.toInt(), 0xFFFFEA00.toInt(), 0xFFFF1744.toInt(), 0xFFD500F9.toInt()),
+                null, android.graphics.Shader.TileMode.CLAMP
+            )
+        } else {
+            p.color = color
+        }
+        Canvas(bmp).drawRect(thick / 2f, thick / 2f, w - thick / 2f, h - thick / 2f, p)
+        return bmp
+    }
+
+    /** The whole picture dimmed except one window (centre cx, cy). */
+    private fun spotBitmap(w: Int, h: Int, cx: Float, cy: Float, hw: Float, hh: Float, oval: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(Color.argb(150, 0, 0, 0))
+        val clear = Paint(Paint.ANTI_ALIAS_FLAG)
+        clear.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+        val r = android.graphics.RectF(cx - hw / 2f, cy - hh / 2f, cx + hw / 2f, cy + hh / 2f)
+        if (oval) c.drawOval(r, clear) else c.drawRoundRect(r, hw * 0.08f, hw * 0.08f, clear)
+        return bmp
+    }
+
+    /** Text on a violet to pink rounded background with a thin gold edge. */
+    private fun gradientLabelBitmap(text: String, color: Int, px: Int, maxW: Int): Bitmap {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = color
+        paint.textSize = px.toFloat()
+        paint.typeface = Typeface.DEFAULT_BOLD
+        val padX = px * 0.7f
+        val padY = px * 0.4f
+        val lw = (maxW - 2 * padX).toInt().coerceAtLeast(60)
+        val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, lw)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
+        var tw = 0f
+        for (i in 0 until layout.lineCount) tw = maxOf(tw, layout.getLineWidth(i))
+        val w = (tw + 2 * padX).toInt().coerceAtLeast(2)
+        val h = (layout.height + 2 * padY).toInt().coerceAtLeast(2)
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG)
+        bg.shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), 0xFFA44CFF.toInt(), 0xFFFF3D9A.toInt(), android.graphics.Shader.TileMode.CLAMP)
+        val r = android.graphics.RectF(2f, 2f, w - 2f, h - 2f)
+        val rad = px * 0.45f
+        c.drawRoundRect(r, rad, rad, bg)
+        val edge = Paint(Paint.ANTI_ALIAS_FLAG)
+        edge.style = Paint.Style.STROKE
+        edge.strokeWidth = maxOf(2f, px * 0.06f)
+        edge.color = 0xFFFFD54F.toInt()
+        c.drawRoundRect(r, rad, rad, edge)
+        c.translate(padX, padY)
+        layout.draw(c)
         return bmp
     }
 

@@ -89,7 +89,14 @@ class _TeTimelineState extends State<TeTimeline> {
     switch (o.tool) {
       case TransformTool.motionGraphics:
         final t = o.params['text'];
-        return o.params['kind'] == 'arrow' ? '➜' : (t is String && t.isNotEmpty ? t : 'စာသား');
+        return switch (o.params['kind']) {
+          'arrow' => '➜',
+          'box' => 'Box',
+          'circle' => 'Circle',
+          'spot' => 'Spot',
+          'frame' => 'Border',
+          _ => (t is String && t.isNotEmpty ? t : 'စာသား'),
+        };
       case TransformTool.cropReframe:
         final z = o.params['zoom'];
         return z is num ? 'Zoom ×${z.toStringAsFixed(1)}' : 'Zoom';

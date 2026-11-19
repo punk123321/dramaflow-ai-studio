@@ -50,6 +50,10 @@ class _TeOpDialogState extends State<TeOpDialog> {
   double _cy = 0.5;
   String? _err;
 
+  /// Parameters of a box / circle / spot / frame effect. This dialog cannot
+  /// edit those (use the sliders under the preview), so they are kept as they are.
+  Map<String, Object?>? _keep;
+
   static String _num(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
   @override
@@ -77,6 +81,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
           _second.text = _num(d('second') ?? 0);
           _layout = p['layout'] == 'topBottom' ? 'topBottom' : 'leftRight';
         case TransformTool.motionGraphics:
+          if (const {'box', 'circle', 'spot', 'frame'}.contains(p['kind'])) _keep = {...p};
           _kind = p['kind'] == 'arrow' ? 'arrow' : 'label';
           _text.text = p['text'] is String ? p['text'] as String : '';
           _mx = (d('x') ?? _mx).clamp(0.0, 1.0).toDouble();
@@ -159,7 +164,11 @@ class _TeOpDialogState extends State<TeOpDialog> {
       case TransformTool.cropReframe:
         return {'zoom': r(_zoom), 'cx': r(_cx), 'cy': r(_cy)};
       case TransformTool.motionGraphics:
+        final keep = _keep;
+        if (keep != null) return keep;
         return {
+          // Keeps extra values such as the colourful background.
+          ...?widget.initial?.params,
           'kind': _kind,
           'x': r(_mx),
           'y': r(_my),
@@ -185,7 +194,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
       setState(() => _err = 'အသံဖိုင် အရင်ရွေးပါ');
       return;
     }
-    if (_tool == TransformTool.motionGraphics && _kind == 'label' && _text.text.trim().isEmpty) {
+    if (_tool == TransformTool.motionGraphics && _keep == null && _kind == 'label' && _text.text.trim().isEmpty) {
       setState(() => _err = 'Label စာသား ရေးပါ');
       return;
     }
@@ -315,7 +324,15 @@ class _TeOpDialogState extends State<TeOpDialog> {
                 style: TextStyle(color: DfColors.muted, fontSize: 12),
               ),
             ],
-            if (_tool == TransformTool.motionGraphics) ...[
+            if (_tool == TransformTool.motionGraphics && _keep != null)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'ဒီ effect ရဲ့ အရွယ်/အရောင်ကို preview အောက်က slider နဲ့ ညှိပါ။ ဒီမှာ အချိန်နဲ့ မှတ်ချက်ပဲ ပြင်လို့ရတယ်။',
+                  style: TextStyle(color: DfColors.muted, fontSize: 12),
+                ),
+              ),
+            if (_tool == TransformTool.motionGraphics && _keep == null) ...[
               const SizedBox(height: 4),
               SegmentedButton<String>(
                 showSelectedIcon: false,

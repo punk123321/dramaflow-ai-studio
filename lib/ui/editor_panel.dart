@@ -26,6 +26,7 @@ import 'subtitle_studio_screen.dart';
 import 'te_dialogs.dart';
 import 'te_inline_editor.dart';
 import 'te_ops_section.dart';
+import 'te_shapes.dart';
 import 'te_timeline.dart';
 import 'widgets.dart';
 
@@ -286,16 +287,22 @@ class _EditorPanelState extends State<EditorPanel> {
         params = {'hold': 3.0};
         e = pos;
       case TransformTool.motionGraphics:
-        params = kind == 'arrow'
-            ? {'kind': 'arrow', 'x': 0.5, 'y': 0.5, 'size': 0.08, 'color': 0xFFFF5252, 'angle': 90.0}
-            : {'kind': 'label', 'x': 0.5, 'y': 0.15, 'size': 0.06, 'color': 0xFFFFEB3B, 'text': 'စာသား', 'bg': true};
+        params = switch (kind) {
+          'arrow' => {'kind': 'arrow', 'x': 0.5, 'y': 0.5, 'size': 0.08, 'color': 0xFFFF5252, 'angle': 90.0},
+          'box' => {'kind': 'box', 'x': 0.5, 'y': 0.5, 'size': 0.4, 'ar': 0.5, 'color': 0xFFFF5252},
+          'circle' => {'kind': 'circle', 'x': 0.5, 'y': 0.5, 'size': 0.3, 'ar': 1.0, 'color': 0xFFFFEB3B},
+          'spot' => {'kind': 'spot', 'x': 0.5, 'y': 0.5, 'size': 0.45, 'ar': 0.6, 'round': true, 'color': 0xFF000000},
+          'frame' => {'kind': 'frame', 'x': 0.5, 'y': 0.5, 'size': 0.012, 'color': 0xFFFFFFFF, 'grad': true},
+          _ => {'kind': 'label', 'x': 0.5, 'y': 0.15, 'size': 0.06, 'color': 0xFFFFEB3B, 'text': 'စာသား', 'bg': true},
+        };
+        if (kind == 'frame') e = dur > 0 ? dur : pos + 5000;
       default:
         params = const {};
     }
     final op = TransformOp(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       tool: tool,
-      startMs: pos,
+      startMs: kind == 'frame' ? 0 : pos,
       endMs: e < pos ? pos : e,
       params: params,
       status: OpStatus.approved,
@@ -324,6 +331,10 @@ class _EditorPanelState extends State<EditorPanel> {
         child: ListView(scrollDirection: Axis.horizontal, children: [
           tool('Text', Icons.title, () => _quickAdd(TransformTool.motionGraphics, kind: 'label')),
           tool('Arrow', Icons.arrow_forward, () => _quickAdd(TransformTool.motionGraphics, kind: 'arrow')),
+          tool('Box', Icons.crop_square, () => _quickAdd(TransformTool.motionGraphics, kind: 'box')),
+          tool('Circle', Icons.circle_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'circle')),
+          tool('Spot', Icons.highlight_alt, () => _quickAdd(TransformTool.motionGraphics, kind: 'spot')),
+          tool('Border', Icons.border_outer, () => _quickAdd(TransformTool.motionGraphics, kind: 'frame')),
           tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
           tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
           tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
@@ -373,11 +384,47 @@ class _EditorPanelState extends State<EditorPanel> {
     setState(() => _plan = _plan.replaceOp(o.copyWith(params: {...o.params, 'x': nx, 'y': ny})));
   }
 
+  Widget _resizeHandle(String opId, double w, double h) {
+    return Positioned(
+      right: -4,
+      bottom: -4,
+      child: GestureDetector(
+        onPanStart: (_) => setState(() => _selId = opId),
+        onPanUpdate: (d) => _resizeMotion(opId, d.delta.dx, d.delta.dy, w),
+        onPanEnd: (_) => _dragEnd(opId),
+        child: Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(color: DfColors.accent, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+        ),
+      ),
+    );
+  }
+
+  /// Dragging the corner handle of a box / circle / spot. The shape is centred
+  /// on its point, so one pixel of drag changes the width by two.
+  void _resizeMotion(String opId, double dx, double dy, double w) {
+    final o = _plan.ops.where((e) => e.id == opId).firstOrNull;
+    if (o == null || w <= 0) return;
+    final size = o.params['size'];
+    final ar = o.params['ar'];
+    if (size is! num) return;
+    final curW = size * w;
+    final curH = curW * (ar is num ? ar.toDouble() : 0.5);
+    final nw = (curW + 2 * dx).clamp(w * 0.05, w * 0.95).toDouble();
+    final nh = (curH + 2 * dy).clamp(nw * 0.1, nw * 4).toDouble();
+    setState(() => _plan = _plan.replaceOp(o.copyWith(params: {...o.params, 'size': nw / w, 'ar': nh / nw})));
+  }
+
   void _dragEnd(String opId) {
     final o = _plan.ops.where((e) => e.id == opId).firstOrNull;
     if (o == null) return;
-    double r(Object? v) => double.parse(((v as num).toDouble()).toStringAsFixed(2));
-    _setPlan(_plan.replaceOp(o.copyWith(params: {...o.params, 'x': r(o.params['x']), 'y': r(o.params['y'])})));
+    double r(Object? v) => double.parse(((v as num).toDouble()).toStringAsFixed(3));
+    final fixed = {...o.params};
+    for (final k in const ['x', 'y', 'size', 'ar']) {
+      if (fixed[k] is num) fixed[k] = r(fixed[k]);
+    }
+    _setPlan(_plan.replaceOp(o.copyWith(params: fixed)));
   }
 
   String? get _currentSubtitle {
@@ -973,9 +1020,12 @@ class _EditorPanelState extends State<EditorPanel> {
     final Widget child;
     switch (m.kind) {
       case MotionKind.label:
+        final fs = (m.size * h).clamp(9.0, 90.0).toDouble();
         child = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: m.background ? BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(4)) : null,
+          padding: m.gradient ? EdgeInsets.symmetric(horizontal: fs * 0.7, vertical: fs * 0.4) : const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: m.gradient
+              ? BoxDecoration(gradient: labelGradient, borderRadius: BorderRadius.circular(fs * 0.45), border: Border.all(color: const Color(0xFFFFD54F), width: 1.2))
+              : (m.background ? BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(4)) : null),
           child: Text(
             m.text,
             style: TextStyle(
@@ -997,6 +1047,54 @@ class _EditorPanelState extends State<EditorPanel> {
           width: m.size * w,
           errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70),
         );
+      case MotionKind.box:
+      case MotionKind.circle:
+        final bw = m.size * w;
+        final bh = bw * m.aspect;
+        child = SizedBox(
+          width: bw,
+          height: bh,
+          child: Stack(clipBehavior: Clip.none, children: [
+            Positioned.fill(child: CustomPaint(painter: ShapePainter(color: Color(m.color), oval: m.kind == MotionKind.circle))),
+            if (_selId == pm.opId) _resizeHandle(pm.opId, w, h),
+          ]),
+        );
+      case MotionKind.frame:
+        return Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(painter: FramePainter(color: Color(m.color), thick: m.size * math.min(w, h), rainbow: m.gradient)),
+          ),
+        );
+      case MotionKind.spot:
+        final sw = m.size * w;
+        final sh = sw * m.aspect;
+        return Positioned.fill(
+          child: Stack(clipBehavior: Clip.none, children: [
+            IgnorePointer(child: CustomPaint(size: Size.infinite, painter: SpotPainter(cx: m.x * w, cy: m.y * h, hw: sw, hh: sh, oval: m.round))),
+            Positioned(
+              left: m.x * w - 14,
+              top: m.y * h - 14,
+              child: GestureDetector(
+                onTap: () => setState(() => _selId = pm.opId),
+                onPanStart: (_) => setState(() => _selId = pm.opId),
+                onPanUpdate: (d) => _dragMotion(pm.opId, d.delta.dx / w, d.delta.dy / h),
+                onPanEnd: (_) => _dragEnd(pm.opId),
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.85), shape: BoxShape.circle, border: Border.all(color: DfColors.accent, width: 2)),
+                  child: const Icon(Icons.open_with, size: 15, color: DfColors.accentDeep),
+                ),
+              ),
+            ),
+            if (_selId == pm.opId)
+              Positioned(
+                left: m.x * w + sw / 2 - 11,
+                top: m.y * h + sh / 2 - 11,
+                child: _resizeHandle(pm.opId, w, h),
+              ),
+          ]),
+        );
     }
     return Positioned(
       left: m.x * w,
@@ -1012,7 +1110,7 @@ class _EditorPanelState extends State<EditorPanel> {
             opacity: pm.proposed ? 0.7 : 1,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                border: _selId == pm.opId ? Border.all(color: DfColors.accent, width: 1.5) : null,
+                border: _selId == pm.opId && m.kind != MotionKind.box && m.kind != MotionKind.circle ? Border.all(color: DfColors.accent, width: 1.5) : null,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: child,

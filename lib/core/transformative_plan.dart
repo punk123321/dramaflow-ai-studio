@@ -70,7 +70,7 @@ extension TransformToolLabel on TransformTool {
         TransformTool.commentaryVoiceOver => 'ကိုယ်ပိုင်ရှင်းပြချက်နဲ့ Voice-over ထည့်ရန်',
         TransformTool.freezeFrame => 'အရေးကြီးတဲ့ Scene ကို ရပ်ပြပြီး ရှင်းပြရန်',
         TransformTool.sceneReordering => 'Scene အစီအစဉ်ကို ပြန်စီရန်',
-        TransformTool.motionGraphics => 'စာသား၊ မြား၊ Label နဲ့ Infographic ထည့်ရန်',
+        TransformTool.motionGraphics => 'စာသား၊ မြား၊ Label၊ အကွက်/ဝိုင်း၊ အလင်းထိုး (spot)၊ ဘောင် (frame) ထည့်ရန်',
         TransformTool.soundDesign => 'အသံအကျိုးသက်ရောက်မှုနဲ့ Background Audio ချိန်ရန်',
         TransformTool.splitScreen => 'မျက်နှာပြင်ကို နှစ်ပိုင်းခွဲပြီး မူရင်းဗီဒီယိုရဲ့ အချိန်နှစ်ခု တစ်ပြိုင်နက်ပြရန် (စမ်းသပ်ဆဲ)',
         TransformTool.criticalCommentary => 'ဇာတ်လမ်းကို ကိုယ်ပိုင်ဝေဖန်ချက်နဲ့ အသစ်ပြန်တင်ပြရန်',
