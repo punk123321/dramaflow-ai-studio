@@ -45,6 +45,7 @@ import androidx.media3.effect.Contrast
 import androidx.media3.effect.FrameDropEffect
 import androidx.media3.effect.GaussianBlur
 import androidx.media3.effect.MatrixTransformation
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.VideoCompositorSettings
@@ -297,6 +298,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 if (c != null && c.length() == 3) {
                     stillFx.add(cropEffect(c.getDouble(0).toFloat(), c.getDouble(1).toFloat(), c.getDouble(2).toFloat()))
                 }
+                val stillBlur = p.optDouble("bl", 0.0).toFloat()
+                if (stillBlur in 0.5f..50f) stillFx.add(GaussianBlur(stillBlur))
+                val stillFlipH = p.optInt("fh", 0) == 1
+                val stillFlipV = p.optInt("fv", 0) == 1
+                if (stillFlipH || stillFlipV) stillFx.add(ScaleAndRotateTransformation.Builder()
+                    .setScale(if (stillFlipH) -1f else 1f, if (stillFlipV) -1f else 1f)
+                    .build())
                 if (stillFx.isNotEmpty()) still.setEffects(Effects(emptyList<AudioProcessor>(), stillFx))
                 vSeq.addItem(still.build())
                 continue
@@ -325,6 +333,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             if (crop != null && crop.length() == 3) {
                 videoFx.add(cropEffect(crop.getDouble(0).toFloat(), crop.getDouble(1).toFloat(), crop.getDouble(2).toFloat()))
             }
+            val blur = p.optDouble("bl", 0.0).toFloat()
+            if (blur in 0.5f..50f) videoFx.add(GaussianBlur(blur))
+            val flipH = p.optInt("fh", 0) == 1
+            val flipV = p.optInt("fv", 0) == 1
+            if (flipH || flipV) videoFx.add(ScaleAndRotateTransformation.Builder()
+                .setScale(if (flipH) -1f else 1f, if (flipV) -1f else 1f)
+                .build())
             if (zoom == 1 || zoom == 2) videoFx.add(zoomEffect(zoom == 1, pieceUs))
             if (blurMode) videoFx.add(Presentation.createForWidthAndHeight(fitW, fitH, Presentation.LAYOUT_STRETCH_TO_FIT))
             if (audioFx.isNotEmpty() || videoFx.isNotEmpty()) b.setEffects(Effects(audioFx, videoFx))
@@ -500,6 +515,19 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 overlays.add(BitmapOverlay.createStaticBitmapOverlay(bmp, cornerSettings(logo.optInt("c", 1))))
             }
         }
+        // Global decorative frame: one static transparent overlay spans every output frame.
+        val border = job.optJSONObject("border")
+        if (border != null) {
+            val frame = borderBitmap(
+                outW, outH,
+                border.optInt("template", 0),
+                border.optLong("color", 0xFFFFFFFFL).toInt(),
+                border.optDouble("width", 0.025).toFloat(),
+                border.optDouble("opacity", 1.0).toFloat(),
+                border.optDouble("inset", 0.025).toFloat()
+            )
+            overlays.add(BitmapOverlay.createStaticBitmapOverlay(frame, StaticOverlaySettings.Builder().build()))
+        }
         if (overlays.isNotEmpty()) {
             videoEffects.add(OverlayEffect(ImmutableList.copyOf(overlays)))
         }
@@ -644,6 +672,142 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val scale = if (zoomIn) 1f + 0.15f * p else 1.15f - 0.15f * p
             Matrix().apply { postScale(scale, scale) }
         }
+    }
+
+    /** Creates a transparent full-frame bitmap for the selected global border preset. */
+    private fun borderBitmap(w: Int, h: Int, preset: Int, color: Int, width: Float, opacity: Float, inset: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w.coerceAtLeast(2), h.coerceAtLeast(2), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val short = minOf(w, h).toFloat()
+        val stroke = (short * width.coerceIn(0.003f, 0.12f)).coerceAtLeast(1f)
+        val pad = (short * inset.coerceIn(0f, 0.15f)).coerceAtLeast(stroke)
+        val left = pad
+        val top = pad
+        val right = w - pad
+        val bottom = h - pad
+        val alphaColor = (color and 0x00FFFFFF) or (((color ushr 24) * opacity.coerceIn(0.05f, 1f)).toInt().coerceIn(0, 255) shl 24)
+        fun paint(sw: Float, style: Paint.Style = Paint.Style.STROKE) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = alphaColor
+            this.style = style
+            strokeWidth = sw
+            strokeJoin = Paint.Join.ROUND
+            strokeCap = Paint.Cap.ROUND
+        }
+        val p = paint(stroke)
+        val rect = android.graphics.RectF(left, top, right, bottom)
+        when (preset.coerceIn(0, 39)) {
+            0 -> canvas.drawRect(rect, p)
+            1 -> { canvas.drawRect(rect, p); canvas.drawRect(android.graphics.RectF(left + stroke * 2.2f, top + stroke * 2.2f, right - stroke * 2.2f, bottom - stroke * 2.2f), paint(stroke * 0.65f)) }
+            2 -> canvas.drawRoundRect(rect, stroke * 2.5f, stroke * 2.5f, p)
+            3 -> { p.pathEffect = android.graphics.DashPathEffect(floatArrayOf(stroke * 5, stroke * 2.5f), 0f); canvas.drawRect(rect, p) }
+            4 -> { p.pathEffect = android.graphics.DashPathEffect(floatArrayOf(1f, stroke * 2.2f), 0f); canvas.drawRect(rect, p) }
+            5 -> { canvas.drawRect(rect, paint(stroke * 1.8f)); canvas.drawRect(android.graphics.RectF(left + stroke * 3, top + stroke * 3, right - stroke * 3, bottom - stroke * 3), paint(stroke * 0.5f)) }
+            6 -> {
+                val len = short * 0.12f
+                for ((x, y, sx, sy) in listOf(Triple(left, top, 1f, 1f), Triple(right, top, -1f, 1f), Triple(left, bottom, 1f, -1f), Triple(right, bottom, -1f, -1f))) {
+                    canvas.drawLine(x, y, x + len * sx, y, p); canvas.drawLine(x, y, x, y + len * sy, p)
+                }
+            }
+            7 -> { canvas.drawRect(android.graphics.RectF(left, top, right, top + stroke * 3), paint(stroke * 3, Paint.Style.FILL)); canvas.drawRect(android.graphics.RectF(left, bottom - stroke * 3, right, bottom), paint(stroke * 3, Paint.Style.FILL)) }
+            8 -> { val glow = paint(stroke * 4f); glow.alpha = (alphaColor ushr 24) / 3; canvas.drawRoundRect(rect, stroke * 3, stroke * 3, glow); canvas.drawRoundRect(rect, stroke * 2, stroke * 2, p) }
+            9 -> canvas.drawRect(android.graphics.RectF(left + stroke, top + stroke, right - stroke, bottom - stroke), paint(stroke * 0.55f))
+            10 -> canvas.drawRect(rect, paint(stroke * 3, Paint.Style.STROKE))
+            11 -> {
+                val len = short * 0.22f
+                val q = paint(stroke * 1.4f)
+                canvas.drawLine(left, top, left + len, top, q); canvas.drawLine(left, top, left, top + len, q)
+                canvas.drawLine(right, top, right - len, top, q); canvas.drawLine(right, top, right, top + len, q)
+                canvas.drawLine(left, bottom, left + len, bottom, q); canvas.drawLine(left, bottom, left, bottom - len, q)
+                canvas.drawLine(right, bottom, right - len, bottom, q); canvas.drawLine(right, bottom, right, bottom - len, q)
+            }
+            12 -> { canvas.drawRect(rect, p); val q = paint(stroke * 0.45f); val gap = stroke * 2.5f; canvas.drawRect(android.graphics.RectF(left + gap, top + gap, right - gap, bottom - gap), q) }
+            13 -> { val q = paint(stroke * 1.4f); q.pathEffect = android.graphics.DashPathEffect(floatArrayOf(stroke * 9, stroke * 2), 0f); canvas.drawRoundRect(rect, stroke, stroke, q) }
+            14 -> { canvas.drawRect(rect, p); val q = paint(stroke * 0.7f); canvas.drawLine(left, top + stroke * 5, right, top + stroke * 5, q); canvas.drawLine(left, bottom - stroke * 5, right, bottom - stroke * 5, q) }
+            15 -> { val q = paint(stroke * 1.2f); q.pathEffect = android.graphics.DashPathEffect(floatArrayOf(stroke * 2, stroke * 1.5f, stroke * 7, stroke * 1.5f), 0f); canvas.drawRect(rect, q) }
+            16 -> { canvas.drawRoundRect(rect, short * 0.035f, short * 0.035f, p); canvas.drawRoundRect(android.graphics.RectF(left + stroke * 3, top + stroke * 3, right - stroke * 3, bottom - stroke * 3), short * 0.025f, short * 0.025f, paint(stroke * 0.5f)) }
+            17 -> { val q = paint(stroke * 2f); val len = short * 0.08f; canvas.drawLine(left, top, left + len, top, q); canvas.drawLine(right - len, bottom, right, bottom, q); canvas.drawLine(left, bottom - len, left, bottom, q); canvas.drawLine(right, top, right, top + len, q) }
+            18 -> { canvas.drawRect(rect, p); val q = paint(stroke * 0.5f); canvas.drawRect(android.graphics.RectF(left + stroke * 4, top + stroke * 4, right - stroke * 4, bottom - stroke * 4), q) }
+            19 -> { canvas.drawRoundRect(rect, short * 0.06f, short * 0.06f, paint(stroke * 2.2f)); val q = paint(stroke * 0.55f); canvas.drawRoundRect(android.graphics.RectF(left + stroke * 4, top + stroke * 4, right - stroke * 4, bottom - stroke * 4), short * 0.04f, short * 0.04f, q) }
+            // Device and scene frames (20..39). The source video remains visible
+            // inside the inset window; the frame is rendered as a full-frame overlay.
+            20, 21, 22, 23, 24 -> {
+                val device = when (preset) { 20 -> Color.rgb(35, 35, 38); 21 -> Color.rgb(28, 32, 38); 22 -> Color.rgb(105, 70, 42); 23 -> Color.rgb(30, 30, 30); else -> alphaColor }
+                val shell = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = device; style = Paint.Style.STROKE; strokeWidth = short * 0.045f }
+                val outer = android.graphics.RectF(left, top, right, bottom)
+                canvas.drawRoundRect(outer, short * 0.055f, short * 0.055f, shell)
+                val screen = android.graphics.RectF(left + stroke * 2.2f, top + stroke * 2.2f, right - stroke * 2.2f, bottom - stroke * 2.2f)
+                canvas.drawRoundRect(screen, short * 0.018f, short * 0.018f, paint(stroke * 0.7f))
+                if (preset == 20 || preset == 22) {
+                    canvas.drawCircle(w * 0.5f, bottom + stroke * 0.65f, stroke * 0.22f, paint(stroke * 0.3f, Paint.Style.FILL))
+                    canvas.drawLine(w * .42f, bottom, w * .38f, h - pad * .25f, shell)
+                    canvas.drawLine(w * .58f, bottom, w * .62f, h - pad * .25f, shell)
+                } else if (preset == 23) {
+                    val scan = paint(stroke * .12f); scan.alpha = 45
+                    var y = screen.top
+                    while (y < screen.bottom) { canvas.drawLine(screen.left, y, screen.right, y, scan); y += stroke * .8f }
+                }
+            }
+            25, 26, 27, 28, 29 -> {
+                val cover = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = when (preset) { 25 -> Color.rgb(117, 71, 43); 26 -> Color.rgb(49, 66, 83); 27 -> Color.rgb(92, 49, 42); 28 -> Color.rgb(184, 153, 104); else -> alphaColor }
+                    style = Paint.Style.STROKE; strokeWidth = short * 0.04f
+                }
+                val book = android.graphics.RectF(left, top, right, bottom)
+                canvas.drawRoundRect(book, stroke * 0.8f, stroke * 0.8f, cover)
+                val gutter = w * .5f
+                canvas.drawLine(gutter, top + stroke, gutter, bottom - stroke, paint(stroke * .65f))
+                val page = paint(stroke * .45f)
+                canvas.drawLine(left + stroke, top + stroke * 2, gutter - stroke, top + stroke * 2, page)
+                canvas.drawLine(gutter + stroke, top + stroke * 2, right - stroke, top + stroke * 2, page)
+                canvas.drawLine(left + stroke, bottom - stroke * 2, gutter - stroke, bottom - stroke * 2, page)
+                canvas.drawLine(gutter + stroke, bottom - stroke * 2, right - stroke, bottom - stroke * 2, page)
+            }
+            30, 31, 32, 33, 34 -> {
+                val shell = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = if (preset == 31) Color.rgb(25, 28, 34) else alphaColor
+                    style = Paint.Style.STROKE; strokeWidth = short * 0.04f
+                }
+                canvas.drawRoundRect(rect, stroke * 1.2f, stroke * 1.2f, shell)
+                val screen = android.graphics.RectF(left + stroke * 1.8f, top + stroke * 1.8f, right - stroke * 1.8f, bottom - stroke * 1.8f)
+                canvas.drawRoundRect(screen, stroke * .45f, stroke * .45f, paint(stroke * .55f))
+                if (preset == 32) {
+                    canvas.drawLine(w * .5f, bottom, w * .5f, h - pad * .15f, shell)
+                    canvas.drawLine(w * .38f, h - pad * .15f, w * .62f, h - pad * .15f, shell)
+                } else if (preset == 34) {
+                    canvas.drawCircle(right - stroke, top + stroke, stroke * .18f, paint(stroke * .25f, Paint.Style.FILL))
+                }
+            }
+            35, 36 -> {
+                val shell = paint(stroke * 2.2f)
+                canvas.drawRoundRect(rect, if (preset == 36) short * .08f else stroke, if (preset == 36) short * .08f else stroke, shell)
+                canvas.drawRoundRect(android.graphics.RectF(left + stroke * 2, top + stroke * 2, right - stroke * 2, bottom - stroke * 2), stroke, stroke, paint(stroke * .45f))
+                if (preset == 36) canvas.drawCircle(w * .5f, bottom - stroke, stroke * .2f, paint(stroke * .25f, Paint.Style.FILL))
+            }
+            37 -> {
+                val q = paint(stroke * 2f)
+                canvas.drawRect(rect, q)
+                canvas.drawCircle(w * .5f, h * .5f, short * .08f, paint(stroke, Paint.Style.STROKE))
+                canvas.drawLine(w * .5f, top, w * .5f, top + stroke * 2, q)
+            }
+            38 -> {
+                val q = paint(stroke * 2.5f)
+                canvas.drawRect(android.graphics.RectF(left, top, right, top + stroke * 3), q)
+                canvas.drawRect(android.graphics.RectF(left, bottom - stroke * 3, right, bottom), q)
+                canvas.drawRect(android.graphics.RectF(left, top, left + stroke * 2, bottom), q)
+                canvas.drawRect(android.graphics.RectF(right - stroke * 2, top, right, bottom), q)
+            }
+            39 -> {
+                val q = paint(stroke * 1.7f)
+                canvas.drawRect(rect, q)
+                val inner = android.graphics.RectF(left + stroke * 3, top + stroke * 3, right - stroke * 3, bottom - stroke * 3)
+                canvas.drawRect(inner, paint(stroke * .55f))
+                for (x in listOf(left + stroke * 1.5f, right - stroke * 1.5f)) {
+                    canvas.drawCircle(x, top + stroke, stroke * .35f, paint(stroke * .3f, Paint.Style.FILL))
+                    canvas.drawCircle(x, bottom - stroke, stroke * .35f, paint(stroke * .3f, Paint.Style.FILL))
+                }
+            }
+        }
+        return bmp
     }
 
     /** corner: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right. */
