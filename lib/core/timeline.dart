@@ -341,7 +341,7 @@ class VideoBorder {
     this.inset = 0.025,
   });
 
-  final int template; // 0..19
+  final int template; // 0..39
   final int color;
   final double width; // fraction of the shorter output dimension
   final double opacity;
@@ -357,7 +357,7 @@ class VideoBorder {
       );
 
   Map<String, Object?> toJson() => {
-    'template': template.clamp(0, 19),
+    'template': template.clamp(0, 39),
     'color': color,
     'width': width.clamp(0.003, 0.12),
     'opacity': opacity.clamp(0.05, 1.0),
@@ -365,7 +365,7 @@ class VideoBorder {
   };
 
   static VideoBorder fromJson(Map<String, Object?> m) => VideoBorder(
-    template: ((m['template'] as num?)?.toInt() ?? 0).clamp(0, 19),
+    template: ((m['template'] as num?)?.toInt() ?? 0).clamp(0, 39),
     color: (m['color'] as num?)?.toInt() ?? 0xFFFFFFFF,
     width: ((m['width'] as num?)?.toDouble() ?? 0.025).clamp(0.003, 0.12),
     opacity: ((m['opacity'] as num?)?.toDouble() ?? 1.0).clamp(0.05, 1.0),
