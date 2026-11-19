@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,8 @@ import 'package:video_player/video_player.dart';
 
 import '../core/srt.dart';
 import '../core/stage.dart';
+import '../core/te_compile.dart';
+import '../core/transformative_plan.dart';
 import '../core/subtitle_ops.dart';
 import '../core/theme.dart';
 import '../core/sub_presets.dart';
@@ -18,10 +21,82 @@ import '../data/segment_repo.dart';
 import '../platform/audio_channel.dart';
 import '../state/project_store.dart';
 import 'subtitle_studio_screen.dart';
+import 'transformative_editor_screen.dart';
 
 /// Stage 4: arrange the video pieces, narration, music and subtitles.
 /// This only writes an edit description. The original video is never changed;
 /// the next stage (Phase 7) renders the description into a new file.
+class _BorderSamplePainter extends CustomPainter {
+  const _BorderSamplePainter({required this.index, required this.color, required this.selected});
+  final int index;
+  final Color color;
+  final bool selected;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bg = Paint()..color = DfColors.bg;
+    canvas.drawRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(4)), bg);
+    final p = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2;
+    final fill = Paint()..color = color.withValues(alpha: 0.22)..style = PaintingStyle.fill;
+    final r = Rect.fromLTWH(5, 4, size.width - 10, size.height - 8);
+    if (index < 20) {
+      final rr = RRect.fromRectAndRadius(r, Radius.circular(index == 2 || index == 16 || index == 19 ? 7 : 1));
+      switch (index) {
+        case 1: case 5: case 12: case 18:
+          canvas.drawRect(r, p); canvas.drawRect(r.deflate(5), p..strokeWidth = 1); break;
+        case 3: case 4: case 13: case 15:
+          p.pathEffect = null; canvas.drawRect(r, p); break;
+        case 6: case 11: case 17:
+          final d = 13.0;
+          for (final x in [r.left, r.right]) for (final y in [r.top, r.bottom]) {
+            canvas.drawLine(Offset(x, y), Offset(x + (x == r.left ? d : -d), y), p);
+            canvas.drawLine(Offset(x, y), Offset(x, y + (y == r.top ? d : -d), p));
+          } break;
+        case 7:
+          canvas.drawRect(Rect.fromLTWH(r.left, r.top, r.width, 5), fill);
+          canvas.drawRect(Rect.fromLTWH(r.left, r.bottom - 5, r.width, 5), fill); break;
+        default: canvas.drawRRect(rr, p);
+      }
+      return;
+    }
+    final inner = r.deflate(7);
+    // A small picture window makes each device/book frame immediately recognizable.
+    canvas.drawRRect(RRect.fromRectAndRadius(inner, const Radius.circular(2)), Paint()..color = const Color(0xFF263344));
+    switch (index) {
+      case 20: case 21: case 22: case 23: case 24: // television family
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(8)), fill);
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(8)), p);
+        canvas.drawLine(Offset(size.width * .42, r.bottom), Offset(size.width * .38, size.height - 1), p);
+        canvas.drawLine(Offset(size.width * .58, r.bottom), Offset(size.width * .62, size.height - 1), p);
+        if (index == 23) {
+          for (var x = inner.left + 2; x < inner.right; x += 4) canvas.drawLine(Offset(x, inner.top), Offset(x, inner.bottom), Paint()..color = color.withValues(alpha: .18)..strokeWidth = 1);
+        }
+        break;
+      case 25: case 26: case 27: case 28: case 29: // book family
+        final book = Path()..moveTo(r.left, r.top + 2)..quadraticBezierTo(r.center.dx, r.top - 3, r.center.dx, r.top + 3)..quadraticBezierTo(r.center.dx, r.top - 3, r.right, r.top + 2)..lineTo(r.right, r.bottom)..quadraticBezierTo(r.center.dx, r.bottom - 4, r.center.dx, r.bottom)..quadraticBezierTo(r.center.dx, r.bottom - 4, r.left, r.bottom)..close();
+        canvas.drawPath(book, fill); canvas.drawPath(book, p);
+        canvas.drawLine(Offset(r.center.dx, r.top + 3), Offset(r.center.dx, r.bottom - 1), p);
+        for (var y = r.top + 9; y < r.bottom - 3; y += 5) canvas.drawLine(Offset(r.left + 5, y), Offset(r.center.dx - 3, y), p..strokeWidth = .6);
+        break;
+      default: // monitor, laptop, tablet, phone, projector, cinema, broadcast
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(index == 36 ? 9 : 3)), fill);
+        canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(index == 36 ? 9 : 3)), p);
+        if (index == 32) {
+          canvas.drawLine(Offset(r.center.dx, r.bottom), Offset(r.center.dx, size.height - 2), p);
+          canvas.drawLine(Offset(r.center.dx - 10, size.height - 2), Offset(r.center.dx + 10, size.height - 2), p);
+        } else if (index == 34) {
+          canvas.drawCircle(Offset(r.right - 4, r.top + 4), 1.4, fill);
+          canvas.drawCircle(Offset(r.right - 4, r.top + 4), 1.4, p);
+        } else {
+          canvas.drawLine(Offset(r.left + 3, r.bottom - 3), Offset(r.right - 3, r.bottom - 3), p..strokeWidth = 1);
+        }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BorderSamplePainter old) => old.index != index || old.color != color || old.selected != selected;
+}
+
 class EditorPanel extends StatefulWidget {
   const EditorPanel({super.key, required this.project});
 
@@ -38,6 +113,7 @@ class _EditorPanelState extends State<EditorPanel> {
 
   bool _loading = true;
   Timeline _tl = const Timeline();
+  TransformativePlan _tePlan = const TransformativePlan();
   List<SrtEntry> _subs = [];
   String? _msg;
   String? _error;
@@ -68,6 +144,7 @@ class _EditorPanelState extends State<EditorPanel> {
   Future<void> _load() async {
     try {
       _tl = Timeline.decode(await _repo.getDoc(_pid, DocKind.timeline));
+      _tePlan = TransformativePlan.decode(await _repo.getDoc(_pid, DocKind.transformativePlan));
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
@@ -383,6 +460,21 @@ class _EditorPanelState extends State<EditorPanel> {
     await _set(_tl.copyWith(subtitleOffsetMs: (v * 1000).round()));
   }
 
+  Future<void> _openTe() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TransformativeEditorScreen(project: widget.project),
+      ),
+    );
+    if (!mounted) return;
+    try {
+      final raw = await _repo.getDoc(_pid, DocKind.transformativePlan);
+      setState(() => _tePlan = TransformativePlan.decode(raw));
+    } catch (e) {
+      setState(() => _error = 'TE Plan ပြန်ဖတ်မရပါ: $e');
+    }
+  }
+
   Future<void> _markDone() async {
     final errors = checkTimeline(_tl, sourceMs: _sourceMs).where((i) => i.severity == Severity.error);
     if (errors.isNotEmpty) {
@@ -428,7 +520,54 @@ class _EditorPanelState extends State<EditorPanel> {
             ),
             child: Text(_error ?? _msg!, style: const TextStyle(fontSize: 13)),
           ),
+        Card(
+          color: DfColors.accent.withValues(alpha: 0.08),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: DfColors.accent.withValues(alpha: 0.35)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, color: DfColors.accent),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Transformative Editing', style: TextStyle(fontWeight: FontWeight.w700)),
+                      Text('AI / Manual / Hybrid · Effects · Smart Cut', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: _openTe,
+                  icon: const Icon(Icons.tune, size: 18),
+                  label: const Text('ဖွင့်မယ်'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         _preview(),
+        if (_tePlan.ops.any((o) => o.status == OpStatus.approved && (o.tool == TransformTool.blur || o.tool == TransformTool.mirrorFlip)))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, size: 15, color: DfColors.accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'TE Preview ဖွင့်ထားသည် · Blur / Mirror အကျိုးသက်ရောက်မှုကို မူရင်းဗီဒီယိုအချိန်အလိုက် ပြမည်',
+                    style: TextStyle(color: DfColors.accent, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
         _title('၁။ ဗီဒီယို အပိုင်းများ · ${_t(_tl.videoMs)}'),
         Wrap(spacing: 8, children: [
           OutlinedButton(onPressed: _fromIndex, child: const Text('Video Index က ယူ')),
@@ -437,6 +576,7 @@ class _EditorPanelState extends State<EditorPanel> {
             FilledButton.tonal(onPressed: () => _playPiece(0, all: true), child: const Text('အကုန် ▶')),
         ]),
         for (var i = 0; i < _tl.pieces.length; i++) _pieceRow(i),
+        _teEffectTracks(),
         const SizedBox(height: 12),
         _title('၂။ အသံ (narration) · ${_tl.voices.length} ခု'),
         OutlinedButton(onPressed: _voicesFromStage3, child: const Text('အဆင့် ၃ က အသံတွေ အစဉ်လိုက်ထည့်')),
@@ -512,6 +652,7 @@ class _EditorPanelState extends State<EditorPanel> {
           value: _tl.style.fade,
           onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(fade: v))),
         ),
+        _borderControls(),
         const SizedBox(height: 12),
         _title('Logo (ကိုယ်ပိုင်ပုံ)'),
         if (_tl.logo == null)
@@ -567,6 +708,86 @@ class _EditorPanelState extends State<EditorPanel> {
     );
   }
 
+  Widget _borderControls() {
+    final border = _tl.border;
+    const classicNames = [
+      'Classic', 'Double', 'Rounded', 'Dashed', 'Dotted',
+      'Elegant', 'Corner', 'Cinema', 'Neon', 'Minimal',
+      'Bold', 'Bracket', 'Layered', 'Soft Dash', 'Film',
+      'Pattern', 'Modern', 'Accent', 'Outline', 'Luxury',
+    ];
+    const sceneNames = [
+      'Retro TV', 'Modern TV', 'Wood TV', 'CRT TV', 'Smart TV',
+      'Open Book', 'Hardcover', 'Vintage Book', 'Page Frame', 'Story Book',
+      'Desktop Monitor', 'Gaming Monitor', 'Laptop', 'Studio Display', 'CCTV',
+      'Tablet', 'Phone Screen', 'Projector', 'Cinema Screen', 'Broadcast',
+    ];
+    String nameOf(int i) => i < 20 ? classicNames[i] : sceneNames[i - 20];
+    Widget tile(int i) {
+      final selected = border?.template == i;
+      final device = i >= 20;
+      final radius = switch (i) {
+        22 || 23 || 24 || 30 || 31 || 32 || 33 || 35 || 36 => 7.0,
+        25 || 26 || 27 || 28 || 29 => 2.0,
+        _ => 3.0,
+      };
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _set(_tl.copyWith(border: (border ?? const VideoBorder()).copyWith(template: i)), msg: 'Border: ${nameOf(i)}'),
+        child: Container(
+          width: 88,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: DfColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: selected ? DfColors.accent : DfColors.line, width: selected ? 2 : 1),
+          ),
+          child: Column(children: [
+            SizedBox(
+              height: 48,
+              width: 74,
+              child: CustomPaint(
+                painter: _BorderSamplePainter(
+                  index: i,
+                  color: Color(border?.color ?? 0xFFFFFFFF).withValues(alpha: border?.opacity ?? 1),
+                  selected: selected,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text('${i + 1}. ${nameOf(i)}', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 9, color: selected ? DfColors.accent : DfColors.muted, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+          ]),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(child: _title('Border Gallery · ${border == null ? 'Off' : nameOf(border.template)}')),
+          TextButton.icon(
+            onPressed: () => _set(_tl.copyWith(clearBorder: true), msg: 'Border ပိတ်ထားသည်'),
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('Off'),
+          ),
+        ]),
+        _title('Classic & Decorative · 20'),
+        Wrap(spacing: 7, runSpacing: 7, children: [for (var i = 0; i < 20; i++) tile(i)]),
+        const SizedBox(height: 10),
+        _title('TV · Book · Monitor Frames · 20'),
+        Wrap(spacing: 7, runSpacing: 7, children: [for (var i = 20; i < 40; i++) tile(i)]),
+        if (border != null) ...[
+          const SizedBox(height: 8),
+          _ColorRow(selected: border.color, onPick: (color) => _set(_tl.copyWith(border: border.copyWith(color: color)))),
+          _slider('အထူ', border.width, (v) => _set(_tl.copyWith(border: border.copyWith(width: v))), min: 0.003, max: 0.12),
+          _slider('အတွင်းအကွာအဝေး', border.inset, (v) => _set(_tl.copyWith(border: border.copyWith(inset: v))), min: 0, max: 0.15),
+          _slider('ထင်ရှားမှု', border.opacity, (v) => _set(_tl.copyWith(border: border.copyWith(opacity: v))), min: 0.05, max: 1),
+        ],
+      ],
+    );
+  }
+
   Widget _title(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Text(t, style: const TextStyle(fontWeight: FontWeight.w600, color: DfColors.accent)),
@@ -574,6 +795,17 @@ class _EditorPanelState extends State<EditorPanel> {
 
   Widget _slider(String label, double v, ValueChanged<double> onEnd, {double min = 0, double max = 1}) =>
       _Vol(label: label, value: v, onEnd: onEnd, min: min, max: max);
+
+  /// TE effects are compiled against the same source-time ranges as export.
+  /// This preview intentionally covers the supported visual effects only.
+  VideoPiece? get _activeTePiece {
+    final sourceTime = _posMs;
+    final pieces = compileOps(_tl.pieces, _tePlan.ops).pieces;
+    for (final p in pieces) {
+      if (!p.freeze && sourceTime >= p.startMs && sourceTime < p.endMs) return p;
+    }
+    return null;
+  }
 
   Widget _preview() {
     final c = _vc;
@@ -587,7 +819,28 @@ class _EditorPanelState extends State<EditorPanel> {
       child: Stack(alignment: Alignment.bottomCenter, children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: AspectRatio(aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio, child: VideoPlayer(c)),
+          child: AspectRatio(
+            aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+            child: Builder(builder: (context) {
+              final effect = _activeTePiece;
+              Widget video = VideoPlayer(c);
+              if (effect?.blurStrength != null) {
+                final sigma = (effect!.blurStrength! * 0.35).clamp(0.5, 18.0);
+                video = ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: video,
+                );
+              }
+              if (effect?.flipHorizontal == true || effect?.flipVertical == true) {
+                video = Transform.scale(
+                  scaleX: effect!.flipHorizontal ? -1 : 1,
+                  scaleY: effect.flipVertical ? -1 : 1,
+                  child: video,
+                );
+              }
+              return video;
+            }),
+          ),
         ),
         if (sub != null && _tl.burnSubtitles)
           Padding(
@@ -604,6 +857,129 @@ class _EditorPanelState extends State<EditorPanel> {
           child: IconButton.filledTonal(onPressed: _stopPlayback, icon: const Icon(Icons.pause), tooltip: 'ရပ်'),
         ),
       ]),
+    );
+  }
+
+  // Compact icon-first TE effect tracks keep the Editing timeline uncluttered.
+  Widget _teEffectTracks() {
+    final ops = _tePlan.approvedOps
+        .where((o) => o.endMs > o.startMs)
+        .toList()
+      ..sort((a, b) => a.startMs.compareTo(b.startMs));
+    if (ops.isEmpty) return const SizedBox.shrink();
+
+    final total = _sourceMs > 0
+        ? _sourceMs
+        : ops.fold<int>(0, (m, o) => o.endMs > m ? o.endMs : m);
+    if (total <= 0) return const SizedBox.shrink();
+
+    IconData iconFor(TransformTool tool) => switch (tool) {
+          TransformTool.blur => Icons.blur_on,
+          TransformTool.mirrorFlip => Icons.flip,
+          TransformTool.cropReframe => Icons.crop,
+          TransformTool.colorGrade => Icons.color_lens_outlined,
+          TransformTool.freezeFrame => Icons.pause_circle_outline,
+          TransformTool.smartCut => Icons.content_cut,
+          TransformTool.pictureInPicture => Icons.picture_in_picture_alt,
+          TransformTool.motionGraphics => Icons.auto_awesome,
+          TransformTool.soundDesign => Icons.graphic_eq,
+          TransformTool.splitScreen => Icons.splitscreen,
+          TransformTool.sceneReordering => Icons.swap_vert,
+          TransformTool.commentaryVoiceOver => Icons.mic,
+          TransformTool.criticalCommentary => Icons.rate_review,
+        };
+
+    Color colorFor(TransformTool tool) => switch (tool) {
+          TransformTool.blur => const Color(0xFF55B8FF),
+          TransformTool.mirrorFlip => const Color(0xFFB48CFF),
+          TransformTool.cropReframe => const Color(0xFF54D6B0),
+          TransformTool.colorGrade => const Color(0xFFFFB454),
+          TransformTool.freezeFrame => const Color(0xFFFF7E9D),
+          TransformTool.smartCut => const Color(0xFFFFD166),
+          _ => DfColors.accent,
+        };
+
+    return Card(
+      margin: const EdgeInsets.only(top: 8),
+      color: DfColors.surface,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+        child: Column(
+          children: [
+            Row(children: [
+              const Icon(Icons.layers_outlined, size: 16, color: DfColors.muted),
+              const SizedBox(width: 5),
+              const Expanded(
+                child: Text('TE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: DfColors.muted)),
+              ),
+              Text('${ops.length}', style: const TextStyle(fontSize: 11, color: DfColors.muted)),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+                padding: EdgeInsets.zero,
+                tooltip: 'TE ဖွင့်ရန်',
+                onPressed: _openTe,
+                icon: const Icon(Icons.tune, size: 16),
+              ),
+            ]),
+            for (final op in ops)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Tooltip(
+                  message: op.tool.title,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(7),
+                    onTap: _openTe,
+                    child: SizedBox(
+                      height: 25,
+                      child: Row(children: [
+                        SizedBox(
+                          width: 30,
+                          child: Center(
+                            child: Icon(iconFor(op.tool), size: 17, color: colorFor(op.tool)),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: LayoutBuilder(builder: (context, box) {
+                            final left = ((op.startMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
+                            final right = ((op.endMs / total).clamp(0.0, 1.0) * box.maxWidth).toDouble();
+                            final width = (right - left).clamp(3.0, box.maxWidth).toDouble();
+                            return SizedBox(
+                              height: 17,
+                              child: Stack(children: [
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: DfColors.line.withValues(alpha: 0.35),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: left.clamp(0.0, box.maxWidth).toDouble(),
+                                  top: 1,
+                                  bottom: 1,
+                                  width: width,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: colorFor(op.tool).withValues(alpha: 0.82),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                ),
+                              ]),
+                            );
+                          }),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
