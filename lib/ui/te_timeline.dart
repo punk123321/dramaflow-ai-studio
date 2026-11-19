@@ -79,6 +79,7 @@ class _TeTimelineState extends State<TeTimeline> {
         TransformTool.colorGrade => const Color(0xFFE0B400),
         TransformTool.freezeFrame => const Color(0xFF5B8CFF),
         TransformTool.smartCut => const Color(0xFFE5484D),
+        TransformTool.speedChange => const Color(0xFFB36BFF),
         TransformTool.pictureInPicture => const Color(0xFFFF6B9D),
         TransformTool.soundDesign => const Color(0xFF3DDC84),
         TransformTool.splitScreen => const Color(0xFF22B8CF),
@@ -107,6 +108,9 @@ class _TeTimelineState extends State<TeTimeline> {
         return z is num ? 'Zoom ×${z.toStringAsFixed(1)}' : 'Zoom';
       case TransformTool.colorGrade:
         return 'Filter';
+      case TransformTool.speedChange:
+        final sp = o.params['speed'];
+        return sp is num ? 'Speed ×${sp.toStringAsFixed(sp == sp.roundToDouble() ? 0 : 2)}' : 'Speed';
       case TransformTool.freezeFrame:
         return 'Freeze';
       case TransformTool.smartCut:

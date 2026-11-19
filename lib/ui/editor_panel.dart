@@ -66,6 +66,7 @@ class _EditorPanelState extends State<EditorPanel> {
   final List<TransformativePlan> _undo = [];
   final List<TransformativePlan> _redo = [];
   CropFrame? _cropStart;
+  double _curSpeed = 1.0;
   Offset _cropFocal0 = Offset.zero;
 
   int get _pid => widget.project.id!;
@@ -181,6 +182,12 @@ class _EditorPanelState extends State<EditorPanel> {
         _playingPiece = null;
       }
     }
+    // Speed operations: play the preview at that speed while the playhead is inside one.
+    final sp = previewSpeed(_plan.ops, pos);
+    if (sp != _curSpeed) {
+      _curSpeed = sp;
+      c.setPlaybackSpeed(sp).catchError((Object _) {});
+    }
     setState(() => _posMs = pos);
   }
 
@@ -283,6 +290,8 @@ class _EditorPanelState extends State<EditorPanel> {
         params = {'zoom': 1.5, 'cx': 0.5, 'cy': 0.5};
       case TransformTool.colorGrade:
         params = {'brightness': 0.15, 'contrast': 0.0};
+      case TransformTool.speedChange:
+        params = {'speed': 2.0};
       case TransformTool.freezeFrame:
         params = {'hold': 3.0};
         e = pos;
@@ -367,6 +376,7 @@ class _EditorPanelState extends State<EditorPanel> {
           tool('Sticker', Icons.emoji_emotions_outlined, _stickers),
           tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
           tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
+          tool('Speed', Icons.speed, () => _quickAdd(TransformTool.speedChange)),
           tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
           tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
           tool('Fade in', Icons.vertical_align_bottom, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadein')),

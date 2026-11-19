@@ -260,8 +260,8 @@ List<(int, int)> outputRanges(List<VideoPiece> pieces, int s, int e) {
       final lo = s > p.startMs ? s : p.startMs;
       final hi = e < p.endMs ? e : p.endMs;
       if (hi > lo) {
-        a = at + (lo - p.startMs);
-        b = at + (hi - p.startMs);
+        a = at + ((lo - p.startMs) / p.speed).round();
+        b = at + ((hi - p.startMs) / p.speed).round();
       }
     }
     if (a != null && b != null) {
@@ -314,6 +314,18 @@ LookAdjust? lookFromParams(Map<String, Object?> p) {
   return l.isNeutral ? null : l;
 }
 
+/// Slowest and fastest playback a Speed operation may ask for.
+const minSpeed = 0.25;
+const maxSpeed = 4.0;
+
+/// Speed from operation parameters. Null when not usable or when it is 1 (nothing to do).
+double? speedFromParams(Map<String, Object?> p) {
+  final v = p['speed'];
+  if (v is! num || !v.isFinite || v < minSpeed || v > maxSpeed) return null;
+  final d = double.parse(v.toStringAsFixed(2));
+  return d == 1.0 ? null : d;
+}
+
 const minFreezeMs = 500;
 const maxFreezeMs = 30000;
 
@@ -340,6 +352,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   final approved = [for (final o in ops) if (o.status == OpStatus.approved) o];
   var cutMs = 0;
   final crops = <TransformOp>[];
+  final speeds = <TransformOp>[];
   final freezes = <TransformOp>[];
   final motions = <TransformOp>[];
   final cuts = <TransformOp>[];
@@ -351,6 +364,8 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       notes.add('$name — အချိန် မမှန်လို့ ချန်ထားတယ်');
     } else if (op.tool == TransformTool.cropReframe || op.tool == TransformTool.colorGrade) {
       crops.add(op);
+    } else if (op.tool == TransformTool.speedChange) {
+      speeds.add(op);
     } else if (op.tool == TransformTool.freezeFrame) {
       freezes.add(op);
     } else if (op.tool == TransformTool.motionGraphics || op.tool == TransformTool.pictureInPicture) {
@@ -425,6 +440,41 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       if (p.endMs - to < minCompiledPieceMs) to = p.endMs;
       if (from > p.startMs) next.add(p.withRange(p.startMs, from));
       next.add(mark(p.withRange(from, to)));
+      if (to < p.endMs) next.add(p.withRange(to, p.endMs));
+    }
+    if (touched) {
+      cur = next;
+      applied.add(op);
+    } else {
+      notes.add('$name — ဗီဒီယိုအပိုင်းနဲ့ မထိတဲ့ အချိန်မို့ ချန်ထားတယ်');
+    }
+  }
+
+  // Speed: the piece is split at the edges of the range and the middle part
+  // gets the speed. A later operation wins where two overlap.
+  for (final op in speeds) {
+    final name = op.tool.title;
+    final sp = speedFromParams(op.params);
+    if (sp == null) {
+      notes.add('$name — speed တန်ဖိုး မမှန်ပါ ($minSpeed–$maxSpeed၊ ၁ မဟုတ်ရ) လို့ ချန်ထားတယ်');
+      continue;
+    }
+    final next = <VideoPiece>[];
+    var touched = false;
+    for (final p in cur) {
+      final s = op.startMs > p.startMs ? op.startMs : p.startMs;
+      final e = op.endMs < p.endMs ? op.endMs : p.endMs;
+      if (p.freeze || e - s < minCompiledPieceMs) {
+        next.add(p);
+        continue;
+      }
+      touched = true;
+      var from = s;
+      var to = e;
+      if (from - p.startMs < minCompiledPieceMs) from = p.startMs;
+      if (p.endMs - to < minCompiledPieceMs) to = p.endMs;
+      if (from > p.startMs) next.add(p.withRange(p.startMs, from));
+      next.add(p.withRange(from, to).withSpeed(sp));
       if (to < p.endMs) next.add(p.withRange(to, p.endMs));
     }
     if (touched) {

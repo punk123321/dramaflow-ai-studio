@@ -146,6 +146,17 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
           _slider('အလင်း', 'brightness', 0.15, -0.6, 0.6),
           _slider('Contrast', 'contrast', 0.0, -0.6, 0.6),
         ];
+      case TransformTool.speedChange:
+        Widget sp(String label, double v) => ChoiceChip(
+              label: Text(label, style: const TextStyle(fontSize: 12)),
+              selected: _num('speed', 2.0) == v,
+              onSelected: (_) => widget.onChange(_op.copyWith(params: {..._op.params, 'speed': v}), true),
+            );
+        return [
+          const Text('Preview မှာ ဒီအပိုင်းရောက်ရင် အမြန်နှုန်း တကယ်ပြောင်းပြီး ပြမယ်။ ၁× မဟုတ်ရ၊ အသံ pitch မပြောင်းပါ', style: TextStyle(fontSize: 12.5, color: DfColors.muted)),
+          Wrap(spacing: 6, runSpacing: 2, children: [sp('0.25×', 0.25), sp('0.5×', 0.5), sp('0.75×', 0.75), sp('1.5×', 1.5), sp('2×', 2.0), sp('3×', 3.0), sp('4×', 4.0)]),
+          _slider('Speed ×', 'speed', 2.0, 0.25, 4.0),
+        ];
       case TransformTool.freezeFrame:
         return [_slider('ရပ်မယ့်စက္ကန့်', 'hold', 3.0, 0.5, 15.0)];
       case TransformTool.motionGraphics:

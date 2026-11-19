@@ -29,6 +29,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
   final _note = TextEditingController();
   double _zoom = 1.5;
   double _hold = 3.0;
+  double _speed = 2.0;
   final _second = TextEditingController(text: '0');
   String _layout = 'leftRight';
   double _bright = 0.15;
@@ -68,6 +69,8 @@ class _TeOpDialogState extends State<TeOpDialog> {
       final p = o.params;
       double? d(String k) => p[k] is num ? (p[k] as num).toDouble() : null;
       switch (o.tool) {
+        case TransformTool.speedChange:
+          _speed = (d('speed') ?? _speed).clamp(0.25, 4.0).toDouble();
         case TransformTool.freezeFrame:
           _hold = (d('hold') ?? _hold).clamp(0.5, 15.0).toDouble();
         case TransformTool.colorGrade:
@@ -149,6 +152,8 @@ class _TeOpDialogState extends State<TeOpDialog> {
   Map<String, Object?> _params() {
     double r(double v) => double.parse(v.toStringAsFixed(2));
     switch (_tool) {
+      case TransformTool.speedChange:
+        return {'speed': double.parse(_speed.toStringAsFixed(2))};
       case TransformTool.freezeFrame:
         return {'hold': double.parse(_hold.toStringAsFixed(1))};
       case TransformTool.pictureInPicture:
@@ -380,6 +385,13 @@ class _TeOpDialogState extends State<TeOpDialog> {
               ),
               const Text(
                 'အချိန်ကို မူရင်းဗီဒီယိုအပေါ် တိုင်းထားတယ် — အပိုင်းဖြတ်၊ ရှေ့နောက်ရွှေ့ထားရင်လည်း အလိုက်သင့် လိုက်မယ်။',
+                style: TextStyle(color: DfColors.muted, fontSize: 12),
+              ),
+            ],
+            if (_tool == TransformTool.speedChange) ...[
+              _slider('Speed ×${_speed.toStringAsFixed(2)}', _speed, 0.25, 4.0, (v) => _speed = v),
+              const Text(
+                '၁ ထက်ကြီးရင် အမြန်၊ ၁ ထက်ငယ်ရင် နှေး။ အသံ pitch မပြောင်းပါ။ ဒီအပိုင်းတိုတာ/ရှည်တာကြောင့် နောက်ပိုင်း အချိန်တွေ ရွှေ့သွားမယ် — စမ်းသပ်ဆဲ (ဖုန်းမှာ မစမ်းရသေးပါ)။',
                 style: TextStyle(color: DfColors.muted, fontSize: 12),
               ),
             ],

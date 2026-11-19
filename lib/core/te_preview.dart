@@ -85,6 +85,18 @@ List<PreviewMotion> previewMotions(List<TransformOp> ops, int posMs) {
   return out;
 }
 
+/// Playback speed to show at [posMs] (1 when no Speed operation is active). The
+/// latest matching operation wins.
+double previewSpeed(List<TransformOp> ops, int posMs) {
+  var out = 1.0;
+  for (final o in opsAt(ops, posMs)) {
+    if (o.tool != TransformTool.speedChange) continue;
+    final s = speedFromParams(o.params);
+    if (s != null) out = s;
+  }
+  return out;
+}
+
 /// Short badges for things that cannot be drawn on one frame (cut, freeze,
 /// split, sound).
 List<String> previewBadges(List<TransformOp> ops, int posMs) {
@@ -98,6 +110,9 @@ List<String> previewBadges(List<TransformOp> ops, int posMs) {
         out.add(ms == null ? '⏸ ရပ်မယ်' : '⏸ ရပ်မယ် ${(ms / 1000).toStringAsFixed(1)}s');
       case TransformTool.splitScreen:
         out.add('◫ Split screen (အတိအကျ Render မှာ ကြည့်ပါ)');
+      case TransformTool.speedChange:
+        final sp = speedFromParams(o.params);
+        if (sp != null) out.add(sp > 1 ? '⏩ ×${_fmt(sp)}' : '🐢 ×${_fmt(sp)}');
       case TransformTool.soundDesign:
         final n = o.params['name'];
         out.add('♪ ${n is String && n.isNotEmpty ? n : 'Sound effect'}');
@@ -107,6 +122,8 @@ List<String> previewBadges(List<TransformOp> ops, int posMs) {
   }
   return out;
 }
+
+String _fmt(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
 
 /// 4x5 colour matrix (Flutter ColorFilter.matrix order) for brightness and
 /// contrast. Contrast scales around mid-grey; brightness adds.

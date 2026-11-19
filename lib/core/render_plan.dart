@@ -241,6 +241,7 @@ Map<String, Object?> buildRenderJob({
           if (p.crop != null) 'c': p.crop!.toJson(),
           if (p.freeze) 'f': 1,
           if (p.look != null) 'l': p.look!.toJson(),
+          if (p.speed != 1.0) 'sp': p.speed,
         }
     ],
     'aspect': aspect,
@@ -278,7 +279,7 @@ Timeline sampleTimeline(Timeline t, {int limitMs = sampleMs}) {
       out.add(p);
       used += p.lengthMs;
     } else {
-      if (room >= 200) out.add(p.withRange(p.startMs, p.startMs + room));
+      if (room >= 200) out.add(p.withRange(p.startMs, p.startMs + (room * p.speed).round()));
       used += room;
     }
   }

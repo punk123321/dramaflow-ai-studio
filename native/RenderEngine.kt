@@ -311,6 +311,9 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 )
                 .build()
             val b = EditedMediaItem.Builder(item)
+            // Speed (from approved Speed operations): picture and sound play faster or slower, pitch is kept.
+            val pieceSpeed = p.optDouble("sp", 1.0).toFloat()
+            if (pieceSpeed != 1f) b.setSpeed(constantSpeed(pieceSpeed))
             if (origVol <= 0f) b.setRemoveAudio(true)
             val audioFx = if (origVol <= 0f) emptyList<AudioProcessor>() else listOf(volume(origVol))
             val zoom = p.optInt("z", 0)
@@ -351,7 +354,10 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                     Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP),
                     GaussianBlur(25f)
                 )
-                bg.addItem(EditedMediaItem.Builder(item).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
+                val bgItem = EditedMediaItem.Builder(item).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx))
+                val bgSpeed = p.optDouble("sp", 1.0).toFloat()
+                if (bgSpeed != 1f) bgItem.setSpeed(constantSpeed(bgSpeed))
+                bg.addItem(bgItem.build())
             }
             sequences.add(bg.build())
             compositor = BlurFillCompositor(outW, outH)
@@ -651,6 +657,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         for (f in tempFrames) f.delete()
         tempFrames.clear()
     }
+
+    /** The same playback speed for the whole item. */
+    private fun constantSpeed(speed: Float): androidx.media3.common.audio.SpeedProvider =
+        object : androidx.media3.common.audio.SpeedProvider {
+            override fun getSpeed(timeUs: Long): Float = speed
+            override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = androidx.media3.common.C.TIME_UNSET
+        }
 
     private fun volume(v: Float): AudioProcessor {
         val p = ChannelMixingAudioProcessor()
