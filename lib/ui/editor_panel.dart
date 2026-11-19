@@ -581,6 +581,7 @@ class _EditorPanelState extends State<EditorPanel> {
           value: _tl.style.fade,
           onChanged: (v) => _set(_tl.copyWith(style: _tl.style.copyWith(fade: v))),
         ),
+        _borderControls(),
         const SizedBox(height: 12),
         _title('Logo (ကိုယ်ပိုင်ပုံ)'),
         if (_tl.logo == null)
@@ -632,6 +633,74 @@ class _EditorPanelState extends State<EditorPanel> {
             ),
         const SizedBox(height: 10),
         FilledButton(onPressed: _markDone, child: const Text('Editor ပြီးပြီ')),
+      ],
+    );
+  }
+
+  Widget _borderControls() {
+    final border = _tl.border;
+    const names = [
+      'Classic', 'Double', 'Rounded', 'Dashed', 'Dotted',
+      'Elegant', 'Corner', 'Cinema', 'Neon', 'Minimal',
+      'Bold', 'Bracket', 'Layered', 'Soft Dash', 'Film',
+      'Pattern', 'Modern', 'Accent', 'Outline', 'Luxury',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(child: _title('Global Border · ${border == null ? 'Off' : names[border.template]}')),
+          TextButton.icon(
+            onPressed: () => _set(_tl.copyWith(clearBorder: true), msg: 'Border ပိတ်ထားသည်'),
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('Off'),
+          ),
+        ]),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (var i = 0; i < names.length; i++)
+              InkWell(
+                borderRadius: BorderRadius.circular(9),
+                onTap: () => _set(_tl.copyWith(border: (border ?? const VideoBorder()).copyWith(template: i)), msg: 'Border: ${names[i]}'),
+                child: Container(
+                  width: 62,
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: DfColors.surface,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: border?.template == i ? DfColors.accent : DfColors.line, width: border?.template == i ? 2 : 1),
+                  ),
+                  child: Column(children: [
+                    Container(
+                      height: 32,
+                      width: 50,
+                      decoration: BoxDecoration(
+                        color: DfColors.background,
+                        borderRadius: BorderRadius.circular(i == 2 || i == 16 || i == 19 ? 7 : 2),
+                        border: Border.all(
+                          color: Color(border?.color ?? 0xFFFFFFFF).withValues(alpha: border?.opacity ?? 1),
+                          width: (i == 1 || i == 5 || i == 12 || i == 18 ? 2.5 : 1.5),
+                          style: i == 3 || i == 4 || i == 13 || i == 15 ? BorderStyle.dashed : BorderStyle.solid,
+                        ),
+                      ),
+                      child: Icon(Icons.play_arrow_rounded, size: 18, color: DfColors.muted),
+                    ),
+                    const SizedBox(height: 3),
+                    Text('${i + 1}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+          ],
+        ),
+        if (border != null) ...[
+          const SizedBox(height: 8),
+          _ColorRow(selected: border.color, onPick: (color) => _set(_tl.copyWith(border: border.copyWith(color: color)))),
+          _slider('အထူ', border.width, (v) => _set(_tl.copyWith(border: border.copyWith(width: v))), min: 0.003, max: 0.12),
+          _slider('အတွင်းအကွာအဝေး', border.inset, (v) => _set(_tl.copyWith(border: border.copyWith(inset: v))), min: 0, max: 0.15),
+          _slider('ထင်ရှားမှု', border.opacity, (v) => _set(_tl.copyWith(border: border.copyWith(opacity: v))), min: 0.05, max: 1),
+        ],
       ],
     );
   }
