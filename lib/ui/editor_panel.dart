@@ -18,6 +18,7 @@ import '../data/segment_repo.dart';
 import '../platform/audio_channel.dart';
 import '../state/project_store.dart';
 import 'subtitle_studio_screen.dart';
+import 'transformative_editor_screen.dart';
 
 /// Stage 4: arrange the video pieces, narration, music and subtitles.
 /// This only writes an edit description. The original video is never changed;
@@ -428,6 +429,41 @@ class _EditorPanelState extends State<EditorPanel> {
             ),
             child: Text(_error ?? _msg!, style: const TextStyle(fontSize: 13)),
           ),
+        Card(
+          color: DfColors.accent.withValues(alpha: 0.08),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: DfColors.accent.withValues(alpha: 0.35)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, color: DfColors.accent),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Transformative Editing', style: TextStyle(fontWeight: FontWeight.w700)),
+                      Text('AI / Manual / Hybrid · Effects · Smart Cut', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => TransformativeEditorScreen(project: widget.project),
+                    ),
+                  ),
+                  icon: const Icon(Icons.tune, size: 18),
+                  label: const Text('ဖွင့်မယ်'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         _preview(),
         _title('၁။ ဗီဒီယို အပိုင်းများ · ${_t(_tl.videoMs)}'),
         Wrap(spacing: 8, children: [
