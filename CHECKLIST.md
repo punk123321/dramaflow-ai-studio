@@ -453,3 +453,14 @@ Rules: only headline, link, time and a ~220 character snippet are kept; no artic
 | Proposed/rejected/invalid operations remain unapplied; tests added | yes | pending | no |
 
 Both effects are intended for ordinary creative framing and visual styling only, not to hide reused content or evade copyright/platform checks. The controls are in the TE operation dialog. They are applied at export time; the TE screen does not yet provide a live effect preview. CI success will prove compilation/tests only, not that Media3 renders correctly on a physical phone.
+
+
+## TE Workspace integration — Editing preview
+
+| Feature | Code added | CI | Phone-tested |
+|---|---|---|---|
+| Editing workspace opens TE from its own screen | yes | pending | no |
+| Returning from TE reloads the latest saved plan into Editing | yes | pending | no |
+| Approved Blur and Mirror/Flip are previewed in the Editing video preview using source-video time ranges | yes | pending | no |
+
+Preview scope: Blur and Mirror/Flip only. TE operations remain stored in the per-project plan and are compiled for preview; the Editor's saved base timeline is not overwritten. Smart Cut, Freeze Frame, overlays, crop and color-grade preview are not included in this step. Export rendering remains a separate verification item.
