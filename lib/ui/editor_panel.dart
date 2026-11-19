@@ -725,12 +725,6 @@ class _EditorPanelState extends State<EditorPanel> {
     String nameOf(int i) => i < 20 ? classicNames[i] : sceneNames[i - 20];
     Widget tile(int i) {
       final selected = border?.template == i;
-      final device = i >= 20;
-      final radius = switch (i) {
-        22 || 23 || 24 || 30 || 31 || 32 || 33 || 35 || 36 => 7.0,
-        25 || 26 || 27 || 28 || 29 => 2.0,
-        _ => 3.0,
-      };
       return InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: () => _set(_tl.copyWith(border: (border ?? const VideoBorder()).copyWith(template: i)), msg: 'Border: ${nameOf(i)}'),
