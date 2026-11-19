@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -25,6 +26,7 @@ import 'subtitle_studio_screen.dart';
 import 'te_dialogs.dart';
 import 'te_inline_editor.dart';
 import 'te_ops_section.dart';
+import 'te_timeline.dart';
 import 'widgets.dart';
 
 /// Stage 4: arrange the video pieces, narration, music and subtitles.
@@ -59,6 +61,9 @@ class _EditorPanelState extends State<EditorPanel> {
   TransformativePlan _plan = const TransformativePlan();
   Future<bool>? _initFuture;
   String? _selId;
+  TransformativePlan _basePlan = const TransformativePlan();
+  final List<TransformativePlan> _undo = [];
+  final List<TransformativePlan> _redo = [];
   CropFrame? _cropStart;
   Offset _cropFocal0 = Offset.zero;
 
@@ -85,6 +90,7 @@ class _EditorPanelState extends State<EditorPanel> {
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       _subs = src == null ? [] : parseSrt(src).entries;
       _plan = TransformativePlan.decode(await _repo.getDoc(_pid, DocKind.transformativePlan));
+      _basePlan = _plan;
     } catch (e) {
       _error = 'ဖတ်လို့မရပါ: $e';
     }
@@ -94,7 +100,16 @@ class _EditorPanelState extends State<EditorPanel> {
   }
 
   /// Every change to the TE plan is saved at once (no separate save button).
-  Future<void> _setPlan(TransformativePlan p) async {
+  Future<void> _setPlan(TransformativePlan p, {bool record = true}) async {
+    // Undo history: one step per saved change of the effect list (typing in the
+    // instructions box does not count).
+    String key(TransformativePlan x) => jsonEncode([for (final o in x.ops) o.toJson()]);
+    if (record && key(p) != key(_basePlan)) {
+      _undo.add(_basePlan);
+      if (_undo.length > 50) _undo.removeAt(0);
+      _redo.clear();
+    }
+    _basePlan = p;
     setState(() {
       _plan = p;
       _error = null;
@@ -210,6 +225,28 @@ class _EditorPanelState extends State<EditorPanel> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _undoOp() async {
+    if (_undo.isEmpty) return;
+    final prev = _undo.removeLast();
+    _redo.add(_basePlan);
+    await _setPlan(prev.copyWith(instructions: _plan.instructions), record: false);
+  }
+
+  Future<void> _redoOp() async {
+    if (_redo.isEmpty) return;
+    final next = _redo.removeLast();
+    _undo.add(_basePlan);
+    await _setPlan(next.copyWith(instructions: _plan.instructions), record: false);
+  }
+
+  Future<void> _addViaDialog(TransformTool tool) async {
+    final s = _posMs / 1000;
+    final op = await showDialog<TransformOp>(context: context, builder: (_) => TeOpDialog(tool: tool, startSec: s, endSec: s + 5));
+    if (op == null) return;
+    setState(() => _selId = op.id);
+    await _setPlan(_plan.copyWith(ops: [..._plan.ops, op]));
+  }
+
   TransformOp? get _selected {
     final id = _selId;
     if (id == null) return null;
@@ -267,23 +304,60 @@ class _EditorPanelState extends State<EditorPanel> {
     _setPlan(_plan.copyWith(ops: [..._plan.ops, op]));
   }
 
-  Widget _quickBar() {
-    Widget chip(String label, IconData icon, VoidCallback f) => ActionChip(
-          avatar: Icon(icon, size: 16),
-          label: Text(label, style: const TextStyle(fontSize: 12.5)),
-          onPressed: f,
+  Widget _toolRow() {
+    Widget tool(String label, IconData icon, VoidCallback f) => InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: f,
+          child: SizedBox(
+            width: 68,
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(icon, size: 24),
+              const SizedBox(height: 4),
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5)),
+            ]),
+          ),
         );
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(spacing: 6, runSpacing: 2, children: [
-        chip('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
-        chip('စာသား', Icons.title, () => _quickAdd(TransformTool.motionGraphics, kind: 'label')),
-        chip('မြား', Icons.arrow_forward, () => _quickAdd(TransformTool.motionGraphics, kind: 'arrow')),
-        chip('အလင်း', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
-        chip('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
-        chip('ဖြတ်', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
-      ]),
+      child: SizedBox(
+        height: 62,
+        child: ListView(scrollDirection: Axis.horizontal, children: [
+          tool('Text', Icons.title, () => _quickAdd(TransformTool.motionGraphics, kind: 'label')),
+          tool('Arrow', Icons.arrow_forward, () => _quickAdd(TransformTool.motionGraphics, kind: 'arrow')),
+          tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
+          tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
+          tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
+          tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
+          tool('Picture', Icons.image_outlined, () => _addViaDialog(TransformTool.pictureInPicture)),
+          tool('Sound', Icons.audiotrack, () => _addViaDialog(TransformTool.soundDesign)),
+        ]),
+      ),
     );
+  }
+
+  Widget _transport(int pos, int dur) {
+    final c = _vc;
+    String clock(int ms) {
+      final s = ms / 1000;
+      final m = s ~/ 60;
+      return '${m.toString().padLeft(2, '0')}:${(s - m * 60).toStringAsFixed(1).padLeft(4, '0')}';
+    }
+
+    return Row(children: [
+      IconButton(tooltip: 'နောက်ပြန်', onPressed: _undo.isEmpty ? null : _undoOp, icon: const Icon(Icons.undo)),
+      IconButton(tooltip: 'ရှေ့ပြန်', onPressed: _redo.isEmpty ? null : _redoOp, icon: const Icon(Icons.redo)),
+      Expanded(
+        child: Center(
+          child: IconButton.filled(
+            iconSize: 28,
+            onPressed: _togglePlay,
+            icon: Icon(c != null && c.value.isPlaying ? Icons.pause : Icons.play_arrow),
+          ),
+        ),
+      ),
+      Text('${clock(pos)} / ${clock(dur)}', style: const TextStyle(fontSize: 12.5, color: DfColors.muted)),
+      const SizedBox(width: 4),
+    ]);
   }
 
   /// Moving a label/arrow/picture on the preview: updates the plan in memory
@@ -587,7 +661,18 @@ class _EditorPanelState extends State<EditorPanel> {
             child: Text(_error ?? _msg!, style: const TextStyle(fontSize: 13)),
           ),
         _preview(),
-        _quickBar(),
+        _toolRow(),
+        TeTimeline(
+          durMs: (_vc?.value.duration.inMilliseconds ?? 0) > 0 ? _vc!.value.duration.inMilliseconds : _sourceMs,
+          posMs: _posMs,
+          playing: _vc?.value.isPlaying ?? false,
+          ops: _plan.ops,
+          subs: _subs,
+          pieces: _tl.pieces,
+          selectedId: _selId,
+          onSeek: _seek,
+          onSelect: (id) => setState(() => _selId = id),
+        ),
         if (_selected case final o?)
           TeInlineEditor(
             key: ValueKey(o.id),
@@ -871,51 +956,7 @@ class _EditorPanelState extends State<EditorPanel> {
             }),
           ),
         ),
-        Row(children: [
-          IconButton.filledTonal(onPressed: _togglePlay, icon: Icon(c.value.isPlaying ? Icons.pause : Icons.play_arrow)),
-          const SizedBox(width: 6),
-          Text('${_t(pos)} / ${_t(dur)}', style: const TextStyle(fontSize: 12.5, color: DfColors.muted)),
-          Expanded(
-            child: Slider(
-              value: dur > 0 ? pos.toDouble() : 0,
-              min: 0,
-              max: dur > 0 ? dur.toDouble() : 1,
-              onChanged: dur > 0 ? (v) => _seek(v.round()) : null,
-            ),
-          ),
-        ]),
-        if (dur > 0 && _plan.ops.any((o) => o.status != OpStatus.rejected))
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: SizedBox(
-              height: 12,
-              child: LayoutBuilder(builder: (ctx, bc) {
-                return Stack(children: [
-                  Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(color: DfColors.line.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)))),
-                  for (final o in _plan.ops)
-                    if (o.status != OpStatus.rejected && o.valid)
-                      Positioned(
-                        left: (bc.maxWidth * (o.startMs / dur)).clamp(0.0, bc.maxWidth).toDouble(),
-                        width: math.max(4.0, bc.maxWidth * ((o.endMs - o.startMs) / dur)),
-                        top: 0,
-                        bottom: 0,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() => _selId = o.id);
-                            _seek(o.startMs);
-                          },
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: (o.status == OpStatus.approved ? DfColors.ok : DfColors.warn).withValues(alpha: 0.85),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ),
-                      ),
-                ]);
-              }),
-            ),
-          ),
+        _transport(pos, dur),
         const Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(

@@ -86,4 +86,27 @@ void main() {
     expect(edited.ops.first.tool, TransformTool.freezeFrame);
     expect(edited.ops.last.id, 'b');
   });
+
+  test('assignLanes: overlapping ops get different rows, later ones reuse a free row', () {
+    final ops = [
+      op('a', TransformTool.smartCut, 0, 5000, {}),
+      op('b', TransformTool.colorGrade, 2000, 4000, {'brightness': 0.1, 'contrast': 0.0}),
+      op('c', TransformTool.smartCut, 6000, 8000, {}),
+    ];
+    final r = assignLanes(ops);
+    expect(r.count, 2);
+    expect(r.lane['a'], 0);
+    expect(r.lane['b'], 1);
+    expect(r.lane['c'], 0);
+  });
+
+  test('assignLanes: empty list still has one row; a point op occupies a short window', () {
+    expect(assignLanes(const []).count, 1);
+    final r = assignLanes([
+      op('f', TransformTool.freezeFrame, 1000, 1000, {'hold': 2.0}),
+      op('g', TransformTool.smartCut, 1500, 3000, {}),
+    ]);
+    expect(r.lane['f'], 0);
+    expect(r.lane['g'], 1);
+  });
 }

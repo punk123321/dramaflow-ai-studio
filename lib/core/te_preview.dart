@@ -99,3 +99,24 @@ List<double> lookMatrix(LookAdjust l) {
     0, 0, 0, 1, 0, //
   ];
 }
+
+/// Rows for the timeline view: operations that overlap in time are put in
+/// different rows, like tracks in a video editor. Returns the row of each
+/// operation id and the number of rows (at least 1).
+({Map<String, int> lane, int count}) assignLanes(List<TransformOp> ops) {
+  final sorted = [...ops]..sort((a, b) => a.startMs.compareTo(b.startMs));
+  final ends = <int>[];
+  final lane = <String, int>{};
+  for (final o in sorted) {
+    final end = _isPoint(o.tool) ? o.startMs + previewPointWindowMs : (o.endMs > o.startMs + 400 ? o.endMs : o.startMs + 400);
+    var i = ends.indexWhere((e) => e <= o.startMs);
+    if (i < 0) {
+      ends.add(end);
+      i = ends.length - 1;
+    } else {
+      ends[i] = end;
+    }
+    lane[o.id] = i;
+  }
+  return (lane: lane, count: ends.isEmpty ? 1 : ends.length);
+}

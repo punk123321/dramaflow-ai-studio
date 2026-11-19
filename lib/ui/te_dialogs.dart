@@ -10,8 +10,10 @@ import '../platform/audio_channel.dart';
 /// video. [startSec]/[endSec] pre-fill a new operation, for example with the
 /// current preview position.
 class TeOpDialog extends StatefulWidget {
-  const TeOpDialog({super.key, this.initial, this.startSec, this.endSec});
+  const TeOpDialog({super.key, this.initial, this.startSec, this.endSec, this.tool});
 
+  /// Tool pre-selected for a NEW operation.
+  final TransformTool? tool;
   final TransformOp? initial;
   final double? startSec;
   final double? endSec;
@@ -99,6 +101,8 @@ class _TeOpDialogState extends State<TeOpDialog> {
           break;
       }
     } else {
+      final t = widget.tool;
+      if (t != null) _tool = t;
       final s = widget.startSec;
       if (s != null) {
         _from.text = _num(s);
