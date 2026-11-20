@@ -86,6 +86,7 @@ class _RenderPanelState extends State<RenderPanel> {
     var tl = _tl.copyWith(pieces: te.pieces, voices: [..._tl.voices, ...te.sounds]);
     var overlays = [for (final o in te.overlays) o.toJson()];
     var splits = [for (final x in te.splits) x.toJson()];
+    final censors = [for (final x in te.censors) x.toJson()];
     if (sample) {
       tl = sampleTimeline(tl);
       overlays = clipWindows(overlays, sampleMs);
@@ -97,6 +98,7 @@ class _RenderPanelState extends State<RenderPanel> {
       timeline: tl,
       overlays: overlays,
       splits: splits,
+      censors: censors,
       sourceSubtitles: _subs,
       settings: _eff,
       aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,

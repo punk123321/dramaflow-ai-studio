@@ -313,6 +313,7 @@ class _EditorPanelState extends State<EditorPanel> {
           'tint' => {'kind': 'tint', 'x': 0.5, 'y': 0.5, 'size': 0.2, 'color': 0xFFFF9800},
           'vignette' => {'kind': 'vignette', 'x': 0.5, 'y': 0.5, 'size': 0.6, 'color': 0xFF000000},
           'bars' => {'kind': 'bars', 'x': 0.5, 'y': 0.5, 'size': 0.1, 'color': 0xFF000000},
+          'blurbox' => {'kind': 'blurBox', 'x': 0.5, 'y': 0.5, 'size': 0.3, 'ar': 0.5, 'strength': 30.0, 'color': 0xFFFFFFFF},
           'shade' => {'kind': 'shade', 'x': 0.5, 'y': 0.5, 'size': 0.4, 'color': 0xFF000000, 'top': false},
           'sticker' => {'kind': 'label', 'x': 0.5, 'y': 0.5, 'size': 0.12, 'color': 0xFFFFFFFF, 'text': text, 'bg': false},
           _ => {'kind': 'label', 'x': 0.5, 'y': 0.15, 'size': 0.06, 'color': 0xFFFFEB3B, 'text': 'စာသား', 'bg': true},
@@ -382,6 +383,7 @@ class _EditorPanelState extends State<EditorPanel> {
           tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
           tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
           tool('Speed', Icons.speed, () => _quickAdd(TransformTool.speedChange)),
+          tool('Censor', Icons.visibility_off, () => _quickAdd(TransformTool.motionGraphics, kind: 'blurbox')),
           tool('Blur', Icons.blur_on, () => _quickAdd(TransformTool.blur)),
           tool('Flip', Icons.flip, () => _quickAdd(TransformTool.mirrorFlip)),
           tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
@@ -1117,6 +1119,41 @@ class _EditorPanelState extends State<EditorPanel> {
             Positioned.fill(child: CustomPaint(painter: ShapePainter(color: Color(m.color), oval: m.kind == MotionKind.circle, fill: m.fill))),
             if (_selId == pm.opId) _resizeHandle(pm.opId, w, h),
           ]),
+        );
+      case MotionKind.blurBox:
+        // The rectangle shows the real blur of what is behind it (the preview strength is scaled down; the render is the real result).
+        final bw = m.size * w;
+        final bh = bw * m.aspect;
+        final sel = _selId == pm.opId;
+        return Positioned(
+          left: m.x * w,
+          top: m.y * h,
+          child: FractionalTranslation(
+            translation: const Offset(-0.5, -0.5),
+            child: GestureDetector(
+              onTap: () => setState(() => _selId = pm.opId),
+              onPanStart: (_) => setState(() => _selId = pm.opId),
+              onPanUpdate: (d) => _dragMotion(pm.opId, d.delta.dx / w, d.delta.dy / h),
+              onPanEnd: (_) => _dragEnd(pm.opId),
+              child: SizedBox(
+                width: bw,
+                height: bh,
+                child: Stack(clipBehavior: Clip.none, children: [
+                  Positioned.fill(
+                    child: ClipRect(
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: m.strength * 0.4, sigmaY: m.strength * 0.4),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(border: Border.all(color: sel ? DfColors.accent : Colors.white54, width: sel ? 2 : 1)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (sel) _resizeHandle(pm.opId, w, h),
+                ]),
+              ),
+            ),
+          ),
         );
       case MotionKind.frame:
         return Positioned.fill(

@@ -11,7 +11,7 @@ import 'transformative_plan.dart';
 /// reported as "not rendered" so nothing is silently skipped.
 
 class CompileResult {
-  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const [], this.sounds = const [], this.splits = const []]);
+  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const [], this.sounds = const [], this.splits = const [], this.censors = const []]);
 
   final List<VideoPiece> pieces;
 
@@ -34,6 +34,10 @@ class CompileResult {
 
   /// Split-screen windows on the OUTPUT time (experimental).
   final List<SplitItem> splits;
+
+  /// Blur boxes (censor). Their times are on the ORIGINAL video; the render
+  /// finds the matching part of every piece itself.
+  final List<CensorItem> censors;
 }
 
 /// Shortest piece the compiler will create. Anything shorter is folded into
@@ -84,9 +88,33 @@ const minSplitMs = 1000;
 /// (to/from a colour, or a flash), vignette (dark edges), tint (a colour wash),
 /// bars (black bars top and bottom) and shade (a dark gradient from the top or
 /// bottom edge, for readable text). For these, `size` is the strength.
-enum MotionKind { label, arrow, image, box, circle, spot, frame, fade, vignette, tint, bars, shade }
+enum MotionKind { label, arrow, image, box, circle, spot, frame, fade, vignette, tint, bars, shade, blurBox }
 
-bool _isShape(MotionKind k) => k == MotionKind.box || k == MotionKind.circle || k == MotionKind.spot;
+bool _isShape(MotionKind k) => k == MotionKind.box || k == MotionKind.circle || k == MotionKind.spot || k == MotionKind.blurBox;
+
+/// Blur strength limits of a blur box (censor).
+const double minCensorBlur = 5;
+const double maxCensorBlur = 60;
+
+/// The most blur boxes at once; each one needs one more video decoder.
+const maxCensors = 3;
+
+/// A rectangle of the picture that is blurred (to censor something) between
+/// [startMs] and [endMs] of the ORIGINAL video. [x], [y]: centre, [size]: width
+/// as a share of the picture width, [aspect]: height divided by width.
+class CensorItem {
+  const CensorItem({required this.startMs, required this.endMs, required this.x, required this.y, required this.size, required this.aspect, required this.strength});
+
+  final int startMs;
+  final int endMs;
+  final double x;
+  final double y;
+  final double size;
+  final double aspect;
+  final double strength;
+
+  Map<String, Object?> toJson() => {'s': startMs, 'e': endMs, 'x': x, 'y': y, 'w': size, 'ar': aspect, 'str': strength};
+}
 
 /// A text label, arrow or picture (picture-in-picture, image only) shown on the finished video between [startMs] and
 /// [endMs] of the OUTPUT time. [x], [y]: centre, 0 to 1 from the top-left.
@@ -111,6 +139,7 @@ class MotionItem {
     this.dir = 'dip',
     this.top = false,
     this.fill = false,
+    this.strength = 25,
   });
 
   final MotionKind kind;
@@ -145,6 +174,9 @@ class MotionItem {
   /// Box / circle: filled with a see-through colour (like a marker).
   final bool fill;
 
+  /// Blur box: blur strength.
+  final double strength;
+
   MotionItem withTime(int s, int e) => MotionItem(
         kind: kind,
         startMs: s,
@@ -163,6 +195,7 @@ class MotionItem {
         dir: dir,
         top: top,
         fill: fill,
+        strength: strength,
       );
 
   Map<String, Object?> toJson() => {
@@ -182,6 +215,7 @@ class MotionItem {
         if (kind == MotionKind.fade) 'dir': dir,
         if (kind == MotionKind.shade) 'top': top,
         if (kind == MotionKind.spot) 'round': round,
+        if (kind == MotionKind.blurBox) 'str': strength,
         if (kind == MotionKind.label || kind == MotionKind.frame) 'grad': gradient,
       };
 }
@@ -200,7 +234,7 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
   final minSize = kind == MotionKind.frame ? 0.005 : 0.03;
   final maxSize = switch (kind) {
     MotionKind.image => 0.6,
-    MotionKind.box || MotionKind.circle || MotionKind.spot => 0.95,
+    MotionKind.box || MotionKind.circle || MotionKind.spot || MotionKind.blurBox => 0.95,
     MotionKind.fade || MotionKind.vignette || MotionKind.tint || MotionKind.shade => 0.95,
     MotionKind.bars => 0.45,
     MotionKind.frame => 0.1,
@@ -221,6 +255,8 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     if (t is! String || t.trim().isEmpty || t.length > maxLabelChars) return null;
     text = t.trim();
   }
+  final st = p['strength'];
+  if (kind == MotionKind.blurBox && st != null && (st is! num || !st.isFinite || st < minCensorBlur || st > maxCensorBlur)) return null;
   final a = p['angle'];
   return MotionItem(
     kind: kind,
@@ -240,6 +276,7 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     dir: const {'in', 'out', 'dip'}.contains(p['dir']) ? p['dir'] as String : 'dip',
     top: p['top'] == true,
     fill: p['fill'] == true,
+    strength: st is num ? st.toDouble() : 25,
   );
 }
 
@@ -549,6 +586,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
 
   // Labels and arrows last, once the final order and length are known.
   final overlays = <MotionItem>[];
+  final censors = <CensorItem>[];
   for (final op in motions) {
     final name = op.tool.title;
     final base = motionFromParams(op.params);
@@ -559,6 +597,16 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     final ranges = [for (final r in outputRanges(cur, op.startMs, op.endMs)) if (r.$2 - r.$1 >= minMotionMs) r];
     if (ranges.isEmpty) {
       notes.add('$name — ဗီဒီယိုအပိုင်းနဲ့ မထိတဲ့ အချိန်မို့ ချန်ထားတယ်');
+      continue;
+    }
+    if (base.kind == MotionKind.blurBox) {
+      // Not a drawing on top: a blurred copy of that part of the picture.
+      if (censors.length >= maxCensors) {
+        notes.add('Blur box — တစ်ပြိုင်နက် $maxCensors ခုထက် မများရလို့ ချန်ထားတယ် (ဖုန်းက မခံနိုင်လို့)');
+        continue;
+      }
+      censors.add(CensorItem(startMs: op.startMs, endMs: op.endMs, x: base.x, y: base.y, size: base.size, aspect: base.aspect, strength: base.strength));
+      applied.add(op);
       continue;
     }
     for (final r in ranges) {
@@ -594,6 +642,12 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     applied.add(op);
   }
   splitItems.sort((a, b) => a.startMs.compareTo(b.startMs));
+  if (censors.isNotEmpty && splitItems.isNotEmpty) {
+    // Both need the video composited in their own way; censoring wins.
+    notes.add('Split Screen — Blur box နဲ့ တပြိုင်နက် မရလို့ Split Screen ကို ချန်ထားတယ်');
+    splitItems.clear();
+    applied.removeWhere((o) => o.tool == TransformTool.splitScreen);
+  }
 
   // Sound effects, placed on the final output time.
   final soundItems = <VoiceItem>[];
@@ -635,7 +689,10 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   if (splitItems.isNotEmpty) {
     infos.add('Split Screen (စမ်းသပ်ဆဲ): ${splitItems.length} နေရာ။ ပုံနှစ်ခုက တစ်ဝက်အရွယ်နဲ့ ပြမယ်');
   }
-  return CompileResult(cur, applied, notes, infos, overlays, soundItems, splitItems);
+  if (censors.isNotEmpty) {
+    infos.add('Blur box (စမ်းသပ်ဆဲ): ${censors.length} နေရာ။ ထုတ်ပြီးရင် မှုန်သွားတာကို ကိုယ်တိုင် ပြန်စစ်ပါ');
+  }
+  return CompileResult(cur, applied, notes, infos, overlays, soundItems, splitItems, censors);
 }
 
 /// Files that the compiled result needs but that are not there. Only app

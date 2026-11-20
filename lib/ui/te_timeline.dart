@@ -103,6 +103,7 @@ class _TeTimelineState extends State<TeTimeline> {
           'tint' => 'Tint',
           'bars' => 'Bars',
           'shade' => 'Shade',
+          'blurBox' => 'Censor',
           _ => (t is String && t.isNotEmpty ? t : 'စာသား'),
         };
       case TransformTool.cropReframe:

@@ -1,3 +1,4 @@
+import 'package:aistudio/core/render_plan.dart';
 import 'package:aistudio/core/te_compile.dart';
 import 'package:aistudio/core/te_preview.dart';
 import 'package:aistudio/core/timeline.dart';
@@ -11,6 +12,7 @@ TransformOp flipOp(int s, int e, {bool h = true, bool v = false, OpStatus st = O
     id: 'f$s-$e', tool: TransformTool.mirrorFlip, startMs: s, endMs: e, params: {'horizontal': h, 'vertical': v}, status: st);
 
 void main() {
+  censorTests();
   test('parameter checks', () {
     expect(blurFromParams({'strength': 10}), 10.0);
     expect(blurFromParams({'strength': 0.1}), isNull);
@@ -92,5 +94,68 @@ void main() {
     expect(TransformTool.blur.title, 'Blur');
     expect(TransformTool.mirrorFlip.title, 'Mirror / Flip');
     expect(TransformTool.blur.status, ToolStatus.experimental);
+  });
+}
+
+TransformOp censorOp(int s, int e, {double x = 0.5, double y = 0.5, double size = 0.3, double ar = 0.5, double? strength, OpStatus st = OpStatus.approved}) => TransformOp(
+    id: 'c$s-$e',
+    tool: TransformTool.motionGraphics,
+    startMs: s,
+    endMs: e,
+    params: {'kind': 'blurBox', 'x': x, 'y': y, 'size': size, 'ar': ar, 'color': 0xFFFFFFFF, if (strength != null) 'strength': strength},
+    status: st);
+
+void censorTests() {
+  test('blur box: parameter checks', () {
+    expect(motionFromParams(censorOp(0, 1000).params)!.kind, MotionKind.blurBox);
+    expect(motionFromParams(censorOp(0, 1000).params)!.strength, 25.0);
+    expect(motionFromParams(censorOp(0, 1000, strength: 40).params)!.strength, 40.0);
+    expect(motionFromParams(censorOp(0, 1000, strength: 1).params), isNull);
+    expect(motionFromParams(censorOp(0, 1000, strength: 500).params), isNull);
+    expect(motionFromParams(censorOp(0, 1000, size: 2).params), isNull);
+    expect(motionFromParams(censorOp(0, 1000, ar: 9).params), isNull);
+    expect(motionFromParams(censorOp(0, 1000).params)!.toJson()['ar'], 0.5);
+  });
+
+  test('blur box: compiled to a censor item on the ORIGINAL time, not an overlay', () {
+    final r = compileOps(const [VideoPiece(0, 20000)], [censorOp(5000, 9000, x: 0.3, y: 0.6, strength: 35)]);
+    expect(r.overlays, isEmpty);
+    expect(r.censors.length, 1);
+    final c = r.censors.single;
+    expect([c.startMs, c.endMs], [5000, 9000]);
+    expect([c.x, c.y, c.size, c.aspect, c.strength], [0.3, 0.6, 0.3, 0.5, 35.0]);
+    expect(c.toJson()['w'], 0.3);
+    expect(r.infos.any((i) => i.contains('Blur box')), isTrue);
+  });
+
+  test('blur box: not approved, outside the pieces, or too many are left out', () {
+    final base = const [VideoPiece(0, 10000)];
+    expect(compileOps(base, [censorOp(1000, 3000, st: OpStatus.proposed)]).censors, isEmpty);
+    expect(compileOps(base, [censorOp(15000, 18000)]).censors, isEmpty);
+    final many = compileOps(base, [for (var i = 0; i < 5; i++) censorOp(1000 + i, 4000 + i)]);
+    expect(many.censors.length, maxCensors);
+    expect(many.notes.any((n) => n.contains('Blur box')), isTrue);
+  });
+
+  test('blur box wins over split screen (both need their own compositing)', () {
+    final split = TransformOp(
+        id: 'sp', tool: TransformTool.splitScreen, startMs: 2000, endMs: 6000, params: {'second': 8.0, 'layout': 'leftRight'}, status: OpStatus.approved);
+    final r = compileOps(const [VideoPiece(0, 20000)], [censorOp(1000, 3000), split]);
+    expect(r.censors.length, 1);
+    expect(r.splits, isEmpty);
+    expect(r.applied.any((o) => o.tool == TransformTool.splitScreen), isFalse);
+  });
+
+  test('render job: censors are listed and the blurred background is replaced by bars', () {
+    final job = buildRenderJob(
+      name: 'x',
+      videoUri: 'v',
+      timeline: const Timeline(pieces: [VideoPiece(0, 10000)]),
+      sourceSubtitles: const [],
+      settings: RenderSettings(fill: FillMode.blur, ratio: OutRatio.values.firstWhere((r) => r != OutRatio.original)),
+      censors: [const CensorItem(startMs: 1000, endMs: 2000, x: 0.5, y: 0.5, size: 0.3, aspect: 0.5, strength: 30).toJson()],
+    );
+    expect((job['censors'] as List).length, 1);
+    expect(job['fit'], isNot('blur'));
   });
 }

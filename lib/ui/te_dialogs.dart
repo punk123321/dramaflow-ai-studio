@@ -92,7 +92,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
           _second.text = _num(d('second') ?? 0);
           _layout = p['layout'] == 'topBottom' ? 'topBottom' : 'leftRight';
         case TransformTool.motionGraphics:
-          if (const {'box', 'circle', 'spot', 'frame', 'fade', 'vignette', 'tint', 'bars', 'shade'}.contains(p['kind'])) _keep = {...p};
+          if (const {'box', 'circle', 'spot', 'frame', 'fade', 'vignette', 'tint', 'bars', 'shade', 'blurBox'}.contains(p['kind'])) _keep = {...p};
           _kind = p['kind'] == 'arrow' ? 'arrow' : 'label';
           _text.text = p['text'] is String ? p['text'] as String : '';
           _mx = (d('x') ?? _mx).clamp(0.0, 1.0).toDouble();

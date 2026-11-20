@@ -186,7 +186,7 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
         return [_slider('ရပ်မယ့်စက္ကန့်', 'hold', 3.0, 0.5, 15.0)];
       case TransformTool.motionGraphics:
         final k = _op.params['kind'] is String ? _op.params['kind'] as String : 'label';
-        final shape = k == 'box' || k == 'circle' || k == 'spot';
+        final shape = k == 'box' || k == 'circle' || k == 'spot' || k == 'blurBox';
         Widget flag(String label, String key, {bool defaultOn = false}) => SwitchListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
@@ -214,6 +214,7 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
           'frame' => 'ဗီဒီယိုပတ်ပတ်လည် ဘောင် — အချိန်ကို timeline မှာ ညှိပါ',
           'spot' => 'အလယ်ခလုတ်နဲ့ ရွှေ့၊ ထောင့်က အစက်နဲ့ အကျယ်ညှိ — ကျန်တာ မှောင်သွားမယ်',
           'box' || 'circle' => 'ဆွဲရွှေ့၊ ထောင့်က အစက်နဲ့ အရွယ်ညှိ',
+          'blurBox' => 'ဆင်ဆာဖြတ်ချင်တဲ့ နေရာကို စတုဂံနဲ့ ဖုံးမှုန်မယ်။ ဆွဲရွှေ့၊ ထောင့်က အစက်နဲ့ ချုံ့ချဲ့။ (ကိုယ့်ဗီဒီယိုထဲက ထိလွယ်တဲ့ အပိုင်းအတွက်ပဲ — တခြားသူရဲ့ watermark/logo ဖုံးဖို့ မသုံးပါနဲ့)',
           'fade' => 'ဗီဒီယိုစမှာ Fade in၊ အဆုံးမှာ Fade out၊ အလယ်မှာ Flash/Dip သုံးပါ',
           'vignette' => 'ဘေးအနားတွေ မှောင်စေတယ် (ရုပ်ရှင်ပုံစံ)',
           'tint' => 'အရောင်တစ်မျိုး ဗီဒီယိုပေါ် ဖော့ဖော့ တင်တယ် (နွေး/အေး/sepia)',
@@ -264,6 +265,7 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
           else if (k == 'label' || k == 'arrow')
             _slider('အရွယ်', 'size', 0.06, 0.03, 0.4),
           if (shape) _slider('အမြင့်', 'ar', 0.5, 0.1, 3.0),
+          if (k == 'blurBox') _slider('မှုန်ပမာဏ', 'strength', 25, 5, 60),
           if (k == 'arrow') _slider('လှည့်', 'angle', 0, 0, 359, whole: true),
           if (k == 'box' || k == 'circle') flag('အတွင်း ဖြည့် (marker)', 'fill'),
           if (k == 'frame') flag('သက်တန့်ရောင်စုံ', 'grad'),

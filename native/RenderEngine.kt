@@ -43,6 +43,7 @@ import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.FrameDropEffect
+import androidx.media3.effect.Crop
 import androidx.media3.effect.GaussianBlur
 import androidx.media3.effect.MatrixTransformation
 import androidx.media3.effect.ScaleAndRotateTransformation
@@ -272,6 +273,90 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         // 1. Video pieces, in order.
         val pieces = job.getJSONArray("pieces")
         val vSeq = EditedMediaItemSequence.Builder()
+
+        // Blur boxes (censor): for each one a second picture of the same video, made with the
+        // same effects as the main picture, cut down to the rectangle and blurred, drawn over the
+        // main picture while the box is on. If anything cannot be done the render stops with an
+        // error, so a video that should have been censored is never exported uncensored.
+        val censorJson = job.optJSONArray("censors")
+        val censorCount = censorJson?.length() ?: 0
+        if (censorCount > 0 && blurMode) throw IllegalStateException("Blur box နဲ့ Blur background တပြိုင်နက် မရပါ")
+        if (censorCount > 0 && (job.optJSONArray("splits")?.length() ?: 0) > 0) throw IllegalStateException("Blur box နဲ့ Split Screen တပြိုင်နက် မရပါ")
+        val cSeqs = ArrayList<EditedMediaItemSequence.Builder>()
+        val cWins = ArrayList<CensorWin>()
+        val cPendingUs = LongArray(censorCount)
+        val cUsed = BooleanArray(censorCount)
+        for (k in 0 until censorCount) {
+            val c = censorJson!!.getJSONObject(k)
+            val wf = c.getDouble("w").coerceIn(0.03, 1.0)
+            val hf = (c.getDouble("w") * c.optDouble("ar", 0.5) * aspect).coerceIn(0.03, 1.0)
+            val l = (c.getDouble("x") - wf / 2).coerceIn(0.0, 1.0)
+            val r = (c.getDouble("x") + wf / 2).coerceIn(0.0, 1.0)
+            val t = (c.getDouble("y") - hf / 2).coerceIn(0.0, 1.0)
+            val bt = (c.getDouble("y") + hf / 2).coerceIn(0.0, 1.0)
+            if (r - l < 0.01 || bt - t < 0.01) throw IllegalStateException("Blur box က ပုံအပြင်ဘက် ရောက်နေပါတယ်")
+            cSeqs.add(EditedMediaItemSequence.Builder().experimentalSetForceVideoTrack(true))
+            cWins.add(CensorWin(l.toFloat(), t.toFloat(), r.toFloat(), bt.toFloat(), c.optDouble("str", 25.0).toFloat().coerceIn(5f, 60f)))
+        }
+        var outCursorMs = 0.0
+
+        // Called once for every piece, after its effects are known.
+        fun censorPass(p: JSONObject, stillFile: File?, baseFx: List<Effect>, zoomMode: Int, pieceUs: Long) {
+            val ps = p.getLong("s")
+            val pe = p.getLong("e")
+            val freeze = stillFile != null
+            val spd = if (freeze) 1.0 else p.optDouble("sp", 1.0).coerceIn(0.25, 4.0)
+            val lenMs = (pe - ps) / spd
+            for (k in 0 until censorCount) {
+                val c = censorJson!!.getJSONObject(k)
+                val cs = c.getLong("s")
+                val ce = c.getLong("e")
+                val lo = maxOf(ps, cs)
+                val hi = minOf(pe, ce)
+                val hit = if (freeze) (ps >= cs && ps < ce) else (hi - lo >= 40)
+                if (!hit) {
+                    cPendingUs[k] += (lenMs * 1000).toLong()
+                    continue
+                }
+                val win = cWins[k]
+                val fx = ArrayList<Effect>(baseFx)
+                if (!freeze && (zoomMode == 1 || zoomMode == 2)) {
+                    if (lo != ps || hi != pe) throw IllegalStateException("Blur box က zoom ဖြစ်နေတဲ့ အပိုင်းရဲ့ တစ်ဝက်ပဲ ကျနေလို့ မရပါ")
+                    fx.add(zoomEffect(zoomMode == 1, pieceUs))
+                }
+                fx.add(Crop(win.l * 2f - 1f, win.r * 2f - 1f, 1f - win.b * 2f, 1f - win.t * 2f))
+                fx.add(GaussianBlur(win.strength))
+                val seq = cSeqs[k]
+                if (freeze) {
+                    val gap = cPendingUs[k]
+                    if (gap > 0) seq.addGap(gap)
+                    cPendingUs[k] = 0
+                    val holdUs = (pe - ps) * 1000L
+                    val st = MediaItem.Builder()
+                        .setUri(Uri.fromFile(stillFile))
+                        .setMimeType(MimeTypes.IMAGE_JPEG)
+                        .setImageDurationMs(pe - ps)
+                        .build()
+                    seq.addItem(EditedMediaItem.Builder(st).setDurationUs(holdUs).setFrameRate(fps).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
+                    win.ranges.add(longArrayOf(outCursorMs.toLong(), (outCursorMs + lenMs).toLong() + 50L))
+                } else {
+                    val gap = cPendingUs[k] + ((lo - ps) / spd * 1000).toLong()
+                    if (gap > 0) seq.addGap(gap)
+                    cPendingUs[k] = ((pe - hi) / spd * 1000).toLong()
+                    val clip = MediaItem.Builder()
+                        .setUri(videoUri)
+                        .setClippingConfiguration(
+                            MediaItem.ClippingConfiguration.Builder().setStartPositionMs(lo).setEndPositionMs(hi).build()
+                        )
+                        .build()
+                    seq.addItem(EditedMediaItem.Builder(clip).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
+                    win.ranges.add(longArrayOf((outCursorMs + (lo - ps) / spd).toLong(), (outCursorMs + (hi - ps) / spd).toLong() + 50L))
+                }
+                cUsed[k] = true
+            }
+            outCursorMs += lenMs
+        }
+
         for (i in 0 until pieces.length()) {
             val p = pieces.getJSONObject(i)
             if (p.optInt("f", 0) == 1) {
@@ -305,6 +390,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 if (stillFlipH || stillFlipV) stillFx.add(flipEffect(stillFlipH, stillFlipV))
                 if (stillFx.isNotEmpty()) still.setEffects(Effects(emptyList<AudioProcessor>(), stillFx))
                 vSeq.addItem(still.build())
+                censorPass(p, file, stillFx, 0, holdUs)
                 continue
             }
             val item = MediaItem.Builder()
@@ -343,10 +429,12 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val flipH = p.optInt("fh", 0) == 1
             val flipV = p.optInt("fv", 0) == 1
             if (flipH || flipV) videoFx.add(flipEffect(flipH, flipV))
+            val censorBaseFx = ArrayList<Effect>(videoFx)
             if (zoom == 1 || zoom == 2) videoFx.add(zoomEffect(zoom == 1, pieceUs))
             if (blurMode) videoFx.add(Presentation.createForWidthAndHeight(fitW, fitH, Presentation.LAYOUT_STRETCH_TO_FIT))
             if (audioFx.isNotEmpty() || videoFx.isNotEmpty()) b.setEffects(Effects(audioFx, videoFx))
             vSeq.addItem(b.build())
+            censorPass(p, null, censorBaseFx, zoom, pieceUs)
         }
         val sequences = ArrayList<EditedMediaItemSequence>()
         var compositor: VideoCompositorSettings? = null
@@ -405,6 +493,17 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             }
             sequences.add(sSeq.build())
             compositor = SplitCompositor(wins)
+        }
+
+        // 1c. Blur boxes: one extra picture per box, after the main picture (inputs 1, 2 ...).
+        if (censorCount > 0) {
+            val usedWins = ArrayList<CensorWin>()
+            for (k in 0 until censorCount) {
+                if (!cUsed[k]) continue
+                sequences.add(cSeqs[k].build())
+                usedWins.add(cWins[k])
+            }
+            if (usedWins.isNotEmpty()) compositor = CensorCompositor(usedWins)
         }
 
         // 2. Narration. Each lane is played one after another with gaps, and
@@ -1018,6 +1117,33 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
 
         override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings =
             StaticOverlaySettings.Builder().build()
+    }
+
+    /** One blur box: the rectangle (shares of the picture) and the output times it is on. */
+    private class CensorWin(val l: Float, val t: Float, val r: Float, val b: Float, val strength: Float) {
+        val ranges = ArrayList<LongArray>()
+    }
+
+    /**
+     * Input 0 is the main picture, input 1, 2 ... the blurred rectangles. A rectangle is drawn
+     * over its place only while its time range is on; otherwise it is invisible.
+     */
+    private class CensorCompositor(private val wins: List<CensorWin>) : VideoCompositorSettings {
+        override fun getOutputSize(inputSizes: List<Size>): Size = inputSizes[0]
+
+        override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
+            if (inputId == 0) return StaticOverlaySettings.Builder().build()
+            val w = wins.getOrNull(inputId - 1) ?: return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
+            val ms = presentationTimeUs / 1000L
+            if (w.ranges.none { ms >= it[0] && ms < it[1] }) return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
+            val cx = (w.l + w.r) / 2f
+            val cy = (w.t + w.b) / 2f
+            return StaticOverlaySettings.Builder()
+                .setScale(w.r - w.l, w.b - w.t)
+                .setOverlayFrameAnchor(0f, 0f)
+                .setBackgroundFrameAnchor(2f * cx - 1f, 1f - 2f * cy)
+                .build()
+        }
     }
 
     private class SplitWin(val startMs: Long, val endMs: Long, val topBottom: Boolean)

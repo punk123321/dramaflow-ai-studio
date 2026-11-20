@@ -212,6 +212,7 @@ Map<String, Object?> buildRenderJob({
   double aspect = 16 / 9,
   List<Map<String, Object?>> overlays = const [],
   List<Map<String, Object?>> splits = const [],
+  List<Map<String, Object?>> censors = const [],
 }) {
   final subs = remapSubtitles(sourceSubtitles, timeline.pieces, offsetMs: timeline.subtitleOffsetMs);
   final lanes = assignVoiceLanes(timeline.voices);
@@ -220,7 +221,7 @@ Map<String, Object?> buildRenderJob({
   // Blur background needs the picture to be one continuous stream; freeze
   // frames are separate pictures, so those jobs use black bars instead.
   final hasFreeze = timeline.pieces.any((p) => p.freeze);
-  final fill = (settings.fill == FillMode.blur && (hasFreeze || splits.isNotEmpty)) ? FillMode.bars : settings.fill;
+  final fill = (settings.fill == FillMode.blur && (hasFreeze || splits.isNotEmpty || censors.isNotEmpty)) ? FillMode.bars : settings.fill;
   return {
     'name': name,
     'videoUri': videoUri,
@@ -264,6 +265,7 @@ Map<String, Object?> buildRenderJob({
     'subtitles': [for (final s in subs) {'s': s.startMs, 'e': s.endMs, 't': s.text}],
     if (overlays.isNotEmpty) 'overlays': overlays,
     if (splits.isNotEmpty) 'splits': splits,
+    if (censors.isNotEmpty) 'censors': censors,
   };
 }
 
