@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../core/assembly.dart';
 import '../core/gemini_tts.dart';
 import '../core/theme.dart';
 import '../data/ai_settings_repo.dart';
+import '../data/assembly_settings_repo.dart';
 import 'backup_screen.dart';
 import 'widgets.dart';
 
@@ -19,6 +21,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _repo = AiSettingsRepo();
   final _keyC = TextEditingController();
   final _modelC = TextEditingController();
+  final _asmRepo = AssemblySettingsRepo();
+  final _asmKeyC = TextEditingController();
+  final _asmLangC = TextEditingController();
+  AssemblySettings _asm = const AssemblySettings();
   GeminiTtsSettings _ai = const GeminiTtsSettings();
   bool _loaded = false;
 
@@ -32,13 +38,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _keyC.dispose();
     _modelC.dispose();
+    _asmKeyC.dispose();
+    _asmLangC.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     final s = await _repo.load();
+    final a = await _asmRepo.load();
     if (!mounted) return;
     setState(() {
+      _asm = a;
+      _asmKeyC.text = a.apiKey;
+      _asmLangC.text = a.language;
       _ai = s;
       _keyC.text = s.apiKey;
       _modelC.text = s.model;
@@ -61,6 +73,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (clearKey) _keyC.clear();
     setState(() => _ai = next);
     _say(clearKey ? 'Key ကို ဖျက်ပြီးပါပြီ။' : 'သိမ်းပြီးပါပြီ။');
+  }
+
+  Future<void> _saveAsm({bool clearKey = false}) async {
+    final next = _asm.copyWith(apiKey: clearKey ? '' : _asmKeyC.text.trim(), language: _asmLangC.text.trim());
+    await _asmRepo.save(next);
+    if (!mounted) return;
+    if (clearKey) _asmKeyC.clear();
+    setState(() => _asm = next);
+    _say(clearKey ? 'AssemblyAI key ကို ဖျက်ပြီးပါပြီ။' : 'သိမ်းပြီးပါပြီ။');
   }
 
   @override
@@ -121,6 +142,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const Text(
                         'Key ကို ဒီဖုန်းထဲ app ရဲ့ သီးသန့်နေရာမှာ စာသားအတိုင်း သိမ်းတယ် (Backup ထဲ မပါ)။ '
                         'Gemini API သုံးတဲ့အခါ စာသားကို Google ဆီ ပို့ပါတယ်။ Billing မဖွင့်ရင် 403 ပြနိုင်ပါတယ်။',
+                        style: TextStyle(color: DfColors.muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.graphic_eq_rounded, color: DfColors.cyan),
+                          const SizedBox(width: 10),
+                          const Expanded(child: Text('AssemblyAI (အသံ → SRT၊ လိုချင်မှ)', style: TextStyle(fontWeight: FontWeight.w600))),
+                          Text(
+                            _asm.hasKey ? '✓ ထည့်ထား' : 'မထည့်ရသေး',
+                            style: TextStyle(color: _asm.hasKey ? DfColors.ok : DfColors.muted, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Subtitle Studio ထဲက ဗီဒီယိုအသံကနေ SRT ထုတ်ဖို့ပါ။ မထည့်လည်း ရပါတယ်။ Signup မှာ free credit ပေးပါတယ်၊ ကုန်ရင် ငွေပေးရပါမယ်။',
+                        style: TextStyle(color: DfColors.muted, fontSize: 12),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _asmKeyC,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(labelText: 'API key (assemblyai.com က ယူ)'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _asmLangC,
+                        autocorrect: false,
+                        decoration: const InputDecoration(
+                          labelText: 'ဘာသာစကား code (zh = တရုတ်၊ en၊ my၊ ဗလာ = အလိုအလျောက်)',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: FilledButton(onPressed: () => _saveAsm(), child: const Text('သိမ်းမယ်'))),
+                          if (_asm.hasKey) ...[
+                            const SizedBox(width: 8),
+                            OutlinedButton(onPressed: () => _saveAsm(clearKey: true), child: const Text('Key ဖျက်')),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Key ကို ဒီဖုန်းထဲမှာပဲ သိမ်းတယ် (Backup ထဲ မပါ)။ ဗီဒီယိုထဲက အသံကိုပဲ AssemblyAI ဆီ ပို့ပါတယ် (အသံကို သီးသန့်ဖြတ်လို့ မရရင် ဗီဒီယိုတစ်ခုလုံး)။ '
+                        'တခြားသူပိုင်တဲ့ ဇာတ်ကားအသံကို ပို့တာမို့ သူတို့ရဲ့ စည်းကမ်းကို ကိုယ်တိုင် စစ်ပါ။ မြန်မာအသံက တိကျမှု နိမ့်ပါတယ်။',
                         style: TextStyle(color: DfColors.muted, fontSize: 12),
                       ),
                     ],

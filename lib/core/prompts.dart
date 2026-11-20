@@ -178,6 +178,21 @@ const templates = <PromptTemplate>[
     ],
   ),
   PromptTemplate(
+    key: 'hook',
+    title: 'အစ ဆွဲဆောင်စာ (Hook)',
+    hint: 'ဗီဒီယိုရဲ့ ပထမ ၃-၅ စက္ကန့် အတွက် စာကြောင်း ၅ ခု',
+    kind: TaskKind.srtToText,
+    defaultChunkChars: 12000,
+    intro: 'Write 5 different opening hook lines in Burmese (Myanmar Unicode) for a recap video of this part of the drama. Each hook is read aloud in 3 to 5 seconds and must make a viewer want to keep watching.',
+    rules: [
+      'Each hook is one or two short spoken sentences, numbered 1 to 5, one per line.',
+      'Use only events and facts that really appear in the text. Do not promise anything that does not happen, and do not use false shock claims.',
+      'Do not reveal how the story ends.',
+      'Give the 5 hooks different styles: a question, a surprising fact, a conflict, a mystery and an emotional line.',
+      'Output only the numbered list.',
+    ],
+  ),
+  PromptTemplate(
     key: 'names',
     title: 'ဇာတ်ကောင်နာမည် တစ်သားတည်းဖြစ်စေ',
     hint: 'နာမည်စာရင်းနဲ့ မြန်မာအသံထွက် အကြံပြု',

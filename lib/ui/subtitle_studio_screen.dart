@@ -9,6 +9,7 @@ import '../data/project.dart';
 import '../platform/handoff_channel.dart';
 import 'quick_screen.dart';
 import 'srt_split_screen.dart';
+import 'asr_dialog.dart';
 import 'widgets.dart';
 
 /// Phase 4: edit subtitles line by line. Works on a copy kept in the
@@ -95,6 +96,28 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
       _error = 'ဖတ်လို့မရပါ: $e';
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  /// SRT made from the video's sound (AssemblyAI). Replaces the Studio's text
+  /// only after asking, and the old text can be brought back with undo.
+  Future<void> _asr() async {
+    final text = await showAsrDialog(context, widget.project);
+    if (text == null || !mounted) return;
+    if (_entries.isNotEmpty) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('လက်ရှိ SRT ကို အစားထိုးမလား'),
+          content: const Text('Studio ထဲက စာတန်းကို အသံက ထုတ်ထားတဲ့ SRT နဲ့ အစားထိုးမယ်။ "နောက်ပြန်" နဲ့ ပြန်ယူလို့ရပါတယ်။'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('မလုပ်ဘူး')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('အစားထိုး')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    await _apply(parseSrt(text).entries, msg: 'အသံကနေ SRT ထည့်ပြီး (အမှားတွေ ပါနိုင်လို့ စစ်ပါ)');
   }
 
   void _markChanged() {
@@ -394,6 +417,7 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
         actions: _tab != 0
             ? null
             : [
+                IconButton(onPressed: _asr, icon: const Icon(Icons.graphic_eq_rounded), tooltip: 'အသံကနေ SRT ထုတ်'),
                 IconButton(onPressed: _undo.isEmpty ? null : _doUndo, icon: const Icon(Icons.undo), tooltip: 'နောက်ပြန်'),
                 IconButton(onPressed: _entries.isEmpty ? null : _shiftDialog, icon: const Icon(Icons.schedule), tooltip: 'အချိန်ရွှေ့'),
                 IconButton(onPressed: _entries.isEmpty ? null : _saveFile, icon: const Icon(Icons.download), tooltip: 'SRT ဖိုင်သိမ်း'),
