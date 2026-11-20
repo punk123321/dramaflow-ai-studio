@@ -585,3 +585,12 @@ Picture and sound of the original only, no subtitles, original ratio. It re-enco
 | Under the preview, a design strip switches the design of a selected frame; thickness slider; colour swatches for the designs that take a colour | Yes (CI green, run 44684055369) | **No** |
 | One drawing list (short-side units) is made in Dart and drawn by BOTH the preview and the render (Kotlin canvas), so they look alike; the list is made for the real output size when the render job is built | Yes (CI green, run 44684055369) | **No** |
 Unproven on a phone: how each design looks in the real render (glow blur, dotted line with round caps, the film-strip holes, gold / rainbow gradient), thin lines on a low-resolution output, and that the frame overlay does not hide subtitles badly (subtitles are drawn on top). The designs that cover the edges (Film, Polaroid, Cinema, Vintage) hide a strip of the picture; they do not shrink it. Frames are drawn by the app only; no pictures or fonts from other places are used. Not merged to main. APK artifact `dramaflow-apk-branch-199`.
+
+## TE-38: "Aurora glass" look + Video Index download options
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| New theme: indigo base with soft violet / cyan / pink glows behind every page, glass cards (light veil + bright edge + shadow), themed dialogs, sheets, sliders, switches, menus | Yes (CI green, run 44685765147) | **No** |
+| New bottom bar: the chosen tab grows into a violet pill with its name; press-shrink on buttons, tiles and chips; tiles fade in one after another | Yes (CI green, run 44685765147) | **No** |
+| Home re-laid out: header with logo, "continue" glass card (or a start card), Studio tiles 01–05 with icon chips, Tools as chips (the old "More Tools" sheet is gone), glass project rows | Yes (CI green, run 44685765147) | **No** |
+| Video Index segment download now also has output ratio and video quality (Mbps), like the SRT split screen | Yes (CI green, run 44685765147) | **No** |
+Unproven on a phone: how the glows, glass blur and nav pill look and perform on a real device (the blurred hero card is the only heavy part), text contrast, and the animation smoothness. Only Home and the shared widgets were redesigned by hand; other screens get the new look through the theme and shared cards, so some may still look plain. Not merged to main. APK artifact `dramaflow-apk-branch-201`.
