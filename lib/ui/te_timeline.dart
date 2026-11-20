@@ -244,9 +244,10 @@ class _TeTimelineState extends State<TeTimeline> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: DfColors.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DfColors.line),
+        gradient: DfGradients.glass,
+        color: DfColors.surface.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DfColors.glassEdge),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(

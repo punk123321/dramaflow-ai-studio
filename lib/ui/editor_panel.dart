@@ -963,7 +963,6 @@ class _EditorPanelState extends State<EditorPanel> {
         OutlinedButton(onPressed: () => _editCorner(null), child: const Text('+ စာတမ်းထည့်')),
         for (var i = 0; i < _tl.corners.length; i++)
           Card(
-            color: DfColors.surface,
             margin: const EdgeInsets.only(top: 6),
             child: ListTile(
               dense: true,
@@ -1301,7 +1300,7 @@ class _EditorPanelState extends State<EditorPanel> {
     final p = _tl.pieces[i];
     final playing = _playingPiece == i;
     return Card(
-      color: playing ? DfColors.accent.withValues(alpha: 0.12) : DfColors.surface,
+      color: playing ? DfColors.accent.withValues(alpha: 0.18) : null,
       margin: const EdgeInsets.only(top: 6),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
@@ -1333,7 +1332,6 @@ class _EditorPanelState extends State<EditorPanel> {
   Widget _voiceRow(int i) {
     final v = _tl.voices[i];
     return Card(
-      color: DfColors.surface,
       margin: const EdgeInsets.only(top: 6),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),

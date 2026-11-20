@@ -167,9 +167,10 @@ class _Card extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: DfColors.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: DfColors.line),
+        gradient: DfGradients.glass,
+        color: DfColors.surface.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: DfColors.glassEdge),
       ),
       child: child,
     );

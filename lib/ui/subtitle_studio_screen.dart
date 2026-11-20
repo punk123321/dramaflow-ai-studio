@@ -358,7 +358,7 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
                         final e = _entries[i];
                         final isBad = bad.contains(i);
                         return Card(
-                          color: i == _selected ? DfColors.accent.withValues(alpha: 0.18) : DfColors.surface,
+                          color: i == _selected ? DfColors.accent.withValues(alpha: 0.18) : null,
                           margin: const EdgeInsets.only(bottom: 8),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
@@ -434,13 +434,13 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
               : const SizedBox.shrink(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: _goTab,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.edit_note), label: 'ပြင် / စစ်'),
-          NavigationDestination(icon: Icon(Icons.bolt), label: 'အမြန်'),
-          NavigationDestination(icon: Icon(Icons.content_cut), label: 'ခွဲ'),
+      bottomNavigationBar: DfNavBar(
+        index: _tab,
+        onChanged: _goTab,
+        items: const [
+          (icon: Icons.edit_note_outlined, activeIcon: Icons.edit_note_rounded, label: 'ပြင် / စစ်'),
+          (icon: Icons.bolt_outlined, activeIcon: Icons.bolt_rounded, label: 'အမြန်'),
+          (icon: Icons.content_cut_outlined, activeIcon: Icons.content_cut_rounded, label: 'ခွဲ'),
         ],
       ),
     );

@@ -167,8 +167,9 @@ class _TeOpsSectionState extends State<TeOpsSection> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: DfColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        gradient: DfGradients.glass,
+        color: DfColors.surface.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: (here || widget.selectedId == op.id) ? DfColors.accent : DfColors.line, width: widget.selectedId == op.id ? 2 : (here ? 1.4 : 1)),
       ),
       child: Column(
