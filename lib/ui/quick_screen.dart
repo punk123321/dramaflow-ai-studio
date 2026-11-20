@@ -19,13 +19,24 @@ import 'widgets.dart';
 /// video: pick the video, bring in the SRT, and go straight to making the MP4.
 /// No Gemini recap, no narration chunks, no editing stage needed.
 ///
+/// Shown as a tab of Subtitle Studio (`embedded`), so it has no scaffold of its own.
+///
 /// The video is the whole original with the subtitles burned in. The original
 /// sound can stay on. Everything else (ratio, presets, look, logo) is still
 /// reachable in the normal stages.
 class QuickScreen extends StatefulWidget {
-  const QuickScreen({super.key, required this.projectId});
+  const QuickScreen({super.key, required this.projectId, this.embedded = false, this.onSrtChanged, this.refresh = 0});
 
   final int projectId;
+
+  /// Inside Subtitle Studio: no AppBar / scaffold.
+  final bool embedded;
+
+  /// Called after a new SRT has been brought in.
+  final VoidCallback? onSrtChanged;
+
+  /// Changes when the SRT was edited in the editor tab: it is read again.
+  final int refresh;
 
   @override
   State<QuickScreen> createState() => _QuickScreenState();
@@ -47,6 +58,12 @@ class _QuickScreenState extends State<QuickScreen> {
   void initState() {
     super.initState();
     _loadSrt();
+  }
+
+  @override
+  void didUpdateWidget(QuickScreen old) {
+    super.didUpdateWidget(old);
+    if (old.refresh != widget.refresh) _loadSrt();
   }
 
   @override
@@ -103,6 +120,7 @@ class _QuickScreenState extends State<QuickScreen> {
       _hasSrt = true;
       _prepared = 0;
     });
+    widget.onSrtChanged?.call();
     _say('စာတန်း ${r.entries.length} ကြောင်း ထည့်ပြီးပါပြီ။${r.badBlocks > 0 ? ' (ဖတ်မရလို့ ${r.badBlocks} ခု ချန်ထားတယ်)' : ''}');
   }
 
@@ -135,35 +153,46 @@ class _QuickScreenState extends State<QuickScreen> {
   Widget build(BuildContext context) {
     final store = context.watch<ProjectStore>();
     final p = _project(store);
-    if (p == null) return const Scaffold(body: Center(child: Text('Project မတွေ့ပါ')));
+    if (p == null) return const DfScaffold(body: Center(child: Text('Project မတွေ့ပါ')));
     final dur = p.videoDurationMs ?? 0;
     final lastEnd = _entries.isEmpty ? 0 : _entries.map((e) => e.endMs).reduce((a, b) => a > b ? a : b);
     final tooLong = dur > 0 && lastEnd > dur + 2000;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('အမြန်လမ်း (SRT ရှိပြီးသား)')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text(
-          'မြန်မာ SRT ရှိပြီးသားဆိုရင် Gemini၊ အသံ chunk၊ edit အဆင့်တွေ မလိုဘဲ ဗီဒီယိုတန်း ထုတ်လို့ရတယ်။ '
-          'မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။ စာတန်းကို ပုံပေါ်ရိုက်ထည့်ပေးမယ်။',
-          style: TextStyle(color: DfColors.muted, fontSize: 13),
-        ),
-        const SectionTitle('၁။ ဗီဒီယို'),
-        if (p.hasVideo)
-          Text('${p.videoName ?? 'ဗီဒီယို'} · ${formatTime(dur)}', style: const TextStyle(fontSize: 13))
-        else
-          const Text('ဗီဒီယို မရွေးရသေးပါ', style: TextStyle(color: DfColors.warn, fontSize: 13)),
-        OutlinedButton.icon(
-          onPressed: () => _pickVideo(store, p),
-          icon: const Icon(Icons.video_file_outlined, size: 18),
-          label: Text(p.hasVideo ? 'တခြားဗီဒီယို ရွေးမယ်' : 'ဗီဒီယို ရွေးမယ်'),
-        ),
-        const SectionTitle('၂။ မြန်မာ SRT'),
-        Row(children: [
-          Expanded(child: OutlinedButton.icon(onPressed: _pickFile, icon: const Icon(Icons.folder_open, size: 18), label: const Text('SRT ဖိုင် ရွေး'))),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
+    final body = ListView(padding: const EdgeInsets.all(16), children: [
+      const InfoHint('SRT ရှိပြီးသားဆိုရင် ဗီဒီယိုတန်း ထုတ်လို့ရတယ်။ မူရင်းဗီဒီယိုကို မပြင်ပါ။'),
+      const SizedBox(height: 10),
+      DfCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(p.hasVideo ? Icons.movie_outlined : Icons.movie_creation_outlined, color: p.hasVideo ? DfColors.ok : DfColors.warn),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                p.hasVideo ? '${p.videoName ?? 'ဗီဒီယို'} · ${formatTime(dur)}' : 'ဗီဒီယို မရွေးရသေးပါ',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13.5, color: p.hasVideo ? null : DfColors.warn),
+              ),
+            ),
+            IconButton.outlined(
+              onPressed: () => _pickVideo(store, p),
+              icon: Icon(p.hasVideo ? Icons.swap_horiz : Icons.video_file_outlined),
+              tooltip: p.hasVideo ? 'တခြားဗီဒီယို' : 'ဗီဒီယို ရွေး',
+            ),
+          ]),
+          const Divider(height: 22),
+          Row(children: [
+            Icon(Icons.subtitles_outlined, color: _hasSrt ? DfColors.ok : DfColors.muted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _hasSrt ? '${_entries.length} · ${formatTime(lastEnd)}${_bad > 0 ? ' · ⚠$_bad' : ''}' : 'SRT မရှိသေးပါ',
+                style: TextStyle(fontSize: 13.5, color: _hasSrt ? null : DfColors.muted),
+              ),
+            ),
+            IconButton.outlined(onPressed: _pickFile, icon: const Icon(Icons.folder_open), tooltip: 'SRT ဖိုင်ရွေး'),
+            const SizedBox(width: 6),
+            IconButton.outlined(
               onPressed: () async {
                 final d = await Clipboard.getData('text/plain');
                 if (d?.text != null) {
@@ -171,53 +200,68 @@ class _QuickScreenState extends State<QuickScreen> {
                   await _useText(d.text!);
                 }
               },
-              icon: const Icon(Icons.paste, size: 18),
-              label: const Text('Clipboard က ထည့်'),
+              icon: const Icon(Icons.content_paste),
+              tooltip: 'Clipboard က ထည့်',
             ),
-          ),
+          ]),
+          if (tooLong)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Row(children: [
+                Icon(Icons.warning_amber, size: 16, color: DfColors.warn),
+                SizedBox(width: 6),
+                Expanded(child: Text('SRT က ဗီဒီယိုထက် ရှည်နေတယ်', style: TextStyle(color: DfColors.warn, fontSize: 12.5))),
+              ]),
+            ),
+          const Divider(height: 22),
+          Row(children: [
+            Icon(_keepSound ? Icons.volume_up_outlined : Icons.volume_off_outlined, color: _keepSound ? DfColors.ok : DfColors.muted),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('မူရင်းအသံ', style: TextStyle(fontSize: 13.5))),
+            Switch(
+              value: _keepSound,
+              onChanged: (v) => setState(() {
+                _keepSound = v;
+                _prepared = 0;
+              }),
+            ),
+          ]),
         ]),
-        if (_hasSrt)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text('✓ စာတန်း ${_entries.length} ကြောင်း · နောက်ဆုံး ${formatTime(lastEnd)}${_bad > 0 ? ' · ဖတ်မရတာ $_bad' : ''}', style: const TextStyle(fontSize: 13, color: DfColors.ok)),
-          ),
-        if (tooLong)
-          const Padding(
-            padding: EdgeInsets.only(top: 4),
-            child: Text('⚠ SRT က ဗီဒီယိုထက် ရှည်နေတယ်။ ဗီဒီယိုနဲ့ ကိုက်တဲ့ SRT လားစစ်ပါ။', style: TextStyle(color: DfColors.warn, fontSize: 12.5)),
-          ),
-        const SectionTitle('၃။ အသံ'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          value: _keepSound,
-          onChanged: (v) => setState(() {
-            _keepSound = v;
-            _prepared = 0;
-          }),
-          title: const Text('မူရင်းဗီဒီယိုရဲ့ အသံ ထည့်မယ်'),
-          subtitle: const Text('ပိတ်ရင် အသံမပါဘဲ ထွက်မယ်'),
+      ),
+      const SizedBox(height: 12),
+      FilledButton.icon(
+        onPressed: (!p.hasVideo || !_hasSrt || _busy) ? null : () => _prepare(p),
+        icon: _busy
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.check_circle_outline, size: 18),
+        label: const Text('ပြင်ဆင်မယ်'),
+      ),
+      if (_msg != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13)),
         ),
-        const SizedBox(height: 6),
-        FilledButton.icon(
-          onPressed: (!p.hasVideo || !_hasSrt || _busy) ? null : () => _prepare(p),
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('ပြင်ဆင်မယ်'),
-        ),
-        if (_msg != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13)),
-          ),
-        if (_prepared > 0) ...[
-          const SectionTitle('၄။ ဗီဒီယို ထုတ်'),
-          const Text('Ratio (9:16 စသည်)၊ Platform preset၊ ၈ စက္ကန့် စမ်းထုတ်တာတွေလည်း ဒီမှာ ရွေးလို့ရတယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12.5)),
-          const SizedBox(height: 8),
-          RenderPanel(key: ValueKey('quick-render-$_prepared'), project: p),
-          const SectionTitle('၅။ Gallery ထဲ သိမ်း'),
-          SavePanel(key: ValueKey('quick-save-$_prepared'), project: p),
-        ],
-      ]),
-    );
+      if (_prepared > 0) ...[
+        const SizedBox(height: 14),
+        const Row(children: [
+          Icon(Icons.movie_filter_outlined, size: 18, color: DfColors.muted),
+          SizedBox(width: 8),
+          Text('ထုတ်', style: TextStyle(fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 8),
+        RenderPanel(key: ValueKey('quick-render-$_prepared'), project: p),
+        const SizedBox(height: 14),
+        const Row(children: [
+          Icon(Icons.save_alt, size: 18, color: DfColors.muted),
+          SizedBox(width: 8),
+          Text('Gallery သိမ်း', style: TextStyle(fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 8),
+        SavePanel(key: ValueKey('quick-save-$_prepared'), project: p),
+      ],
+    ]);
+
+    if (widget.embedded) return body;
+    return DfScaffold(appBar: AppBar(title: const Text('အမြန်လမ်း')), body: body);
   }
 }

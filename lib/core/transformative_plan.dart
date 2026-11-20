@@ -29,6 +29,9 @@ enum TransformTool {
   splitScreen,
   criticalCommentary,
   colorGrade,
+  speedChange,
+  blur,
+  mirrorFlip,
 }
 
 /// How far a tool really goes today. Used so the screen never suggests more
@@ -61,6 +64,9 @@ extension TransformToolLabel on TransformTool {
         TransformTool.splitScreen => 'Split Screen',
         TransformTool.criticalCommentary => 'Critical Commentary / Recap',
         TransformTool.colorGrade => 'Brightness & Contrast',
+        TransformTool.speedChange => 'Speed',
+        TransformTool.blur => 'Blur',
+        TransformTool.mirrorFlip => 'Mirror / Flip',
       };
 
   String get description => switch (this) {
@@ -70,16 +76,23 @@ extension TransformToolLabel on TransformTool {
         TransformTool.commentaryVoiceOver => 'ကိုယ်ပိုင်ရှင်းပြချက်နဲ့ Voice-over ထည့်ရန်',
         TransformTool.freezeFrame => 'အရေးကြီးတဲ့ Scene ကို ရပ်ပြပြီး ရှင်းပြရန်',
         TransformTool.sceneReordering => 'Scene အစီအစဉ်ကို ပြန်စီရန်',
-        TransformTool.motionGraphics => 'စာသား၊ မြား၊ Label နဲ့ Infographic ထည့်ရန်',
+        TransformTool.motionGraphics => 'စာသား၊ မြား၊ Label၊ အကွက်/ဝိုင်း၊ အလင်းထိုး (spot)၊ ဘောင် (frame) ထည့်ရန်',
         TransformTool.soundDesign => 'အသံအကျိုးသက်ရောက်မှုနဲ့ Background Audio ချိန်ရန်',
         TransformTool.splitScreen => 'မျက်နှာပြင်ကို နှစ်ပိုင်းခွဲပြီး မူရင်းဗီဒီယိုရဲ့ အချိန်နှစ်ခု တစ်ပြိုင်နက်ပြရန် (စမ်းသပ်ဆဲ)',
         TransformTool.criticalCommentary => 'ဇာတ်လမ်းကို ကိုယ်ပိုင်ဝေဖန်ချက်နဲ့ အသစ်ပြန်တင်ပြရန်',
+        TransformTool.speedChange => 'အချိန်ပိုင်းတစ်ခုကို အမြန်/နှေးပြီး ပြရန် (၀.၂၅× မှ ၄×၊ အသံနှုန်း မပြောင်း) — စမ်းသပ်ဆဲ',
+        TransformTool.blur => 'အချိန်ပိုင်းတစ်ခုလုံးကို Gaussian Blur နဲ့ မှုန်ဝါးစေရန် (strength ၀.၅–၅၀) — စမ်းသပ်ဆဲ',
+        TransformTool.mirrorFlip => 'အချိန်ပိုင်းတစ်ခုကို ဘယ်-ညာ သို့မဟုတ် အပေါ်-အောက် လှန်ပြရန် (ဖွဲ့စည်းမှု/ဖန်တီးမှုအတွက်) — စမ်းသပ်ဆဲ',
         TransformTool.colorGrade => 'အလင်း/အမှောင်၊ ကွဲလွဲမှု (contrast) ကို အချိန်ပိုင်းအလိုက် ညှိရန် (ပုံသဏ္ဍာန်/mood အတွက်)',
       };
 
   /// What the app really does for each tool today (see CHECKLIST.md).
   ToolStatus get status => switch (this) {
-        TransformTool.splitScreen => ToolStatus.experimental,
+        TransformTool.splitScreen ||
+        TransformTool.speedChange ||
+        TransformTool.blur ||
+        TransformTool.mirrorFlip =>
+          ToolStatus.experimental,
         TransformTool.colorGrade ||
         TransformTool.smartCut ||
         TransformTool.pictureInPicture ||
@@ -161,6 +174,26 @@ class TransformOp {
         note: note,
         params: params,
         status: s,
+        source: source,
+        extra: extra,
+      );
+
+  /// Same operation with some fields changed. Unknown fields are kept.
+  TransformOp copyWith({
+    int? startMs,
+    int? endMs,
+    String? note,
+    Map<String, Object?>? params,
+    OpStatus? status,
+  }) =>
+      TransformOp(
+        id: id,
+        tool: tool,
+        startMs: startMs ?? this.startMs,
+        endMs: endMs ?? this.endMs,
+        note: note ?? this.note,
+        params: params ?? this.params,
+        status: status ?? this.status,
         source: source,
         extra: extra,
       );
@@ -263,6 +296,10 @@ class TransformativePlan {
 
   TransformativePlan setOpStatus(String id, OpStatus status) =>
       copyWith(ops: [for (final o in ops) o.id == id ? o.withStatus(status) : o]);
+
+  /// Replaces the operation with the same id (used after the user edits it).
+  TransformativePlan replaceOp(TransformOp op) =>
+      copyWith(ops: [for (final o in ops) o.id == op.id ? op : o]);
 
   TransformativePlan removeOp(String id) => copyWith(ops: [for (final o in ops) if (o.id != id) o]);
 

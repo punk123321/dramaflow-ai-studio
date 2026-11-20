@@ -196,7 +196,7 @@ class _PublishScreenState extends State<PublishScreen> {
   @override
   Widget build(BuildContext context) {
     final credit = uploadNote(_fair, dramaTitle: widget.project.dramaTitle);
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Upload & Thumbnail')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

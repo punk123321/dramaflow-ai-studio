@@ -23,7 +23,7 @@ class LibraryScreen extends StatelessWidget {
     final store = context.watch<LibraryStore>();
     final list = store.filtered;
 
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Drama Library')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showDramaSheet(context),

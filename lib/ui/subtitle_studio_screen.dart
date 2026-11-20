@@ -7,14 +7,24 @@ import '../core/theme.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/handoff_channel.dart';
+import 'quick_screen.dart';
+import 'srt_split_screen.dart';
+import 'widgets.dart';
 
 /// Phase 4: edit subtitles line by line. Works on a copy kept in the
 /// database (documents / studio_srt). The source SRT from Stage 2 is never
 /// changed here.
+///
+/// It is also the home of the other subtitle tools, as tabs along the bottom:
+/// edit / check, the quick lane (an SRT you already have to an MP4) and
+/// splitting the video and SRT into parts.
 class SubtitleStudioScreen extends StatefulWidget {
-  const SubtitleStudioScreen({super.key, required this.project});
+  const SubtitleStudioScreen({super.key, required this.project, this.initialTab = 0});
 
   final Project project;
+
+  /// 0 edit / check, 1 quick lane, 2 split.
+  final int initialTab;
 
   @override
   State<SubtitleStudioScreen> createState() => _SubtitleStudioScreenState();
@@ -31,6 +41,17 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
   String? _msg;
   String? _error;
 
+  late int _tab = widget.initialTab.clamp(0, 2);
+  late final Set<int> _visited = {0, _tab};
+
+  /// The SRT was changed in one tab, so the split tab must read it again.
+  bool _splitStale = false;
+  int _splitRev = 0;
+
+  /// The editor tab changed the SRT, so the quick lane must read it again.
+  bool _quickStale = false;
+  int _quickRev = 0;
+
   int get _pid => widget.project.id!;
 
   @override
@@ -39,25 +60,52 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
     _load();
   }
 
+  void _goTab(int i) {
+    if (i == _tab) return;
+    setState(() {
+      _tab = i;
+      _visited.add(i);
+      if (i == 2 && _splitStale) {
+        _splitRev++;
+        _splitStale = false;
+      }
+      if (i == 1 && _quickStale) {
+        _quickRev++;
+        _quickStale = false;
+      }
+    });
+    // The quick lane can bring in a new SRT, so the editor reads it again.
+    if (i == 0) _load();
+  }
+
   Future<void> _load() async {
     try {
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final text = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
+      final before = serializeSrt(_entries);
       if (text == null || text.trim().isEmpty) {
         _entries = [];
       } else {
         _entries = parseSrt(text).entries;
         if (studio == null) await _repo.setDoc(_pid, DocKind.studioSrt, serializeSrt(_entries));
       }
+      // The SRT was replaced elsewhere (quick lane): old undo steps would bring the old text back.
+      if (before != serializeSrt(_entries)) _undo.clear();
     } catch (e) {
       _error = 'ဖတ်လို့မရပါ: $e';
     }
     if (mounted) setState(() => _loading = false);
   }
 
+  void _markChanged() {
+    _splitStale = true;
+    _quickStale = true;
+  }
+
   Future<void> _apply(List<SrtEntry> next, {String? msg}) async {
     _undo.add(_entries);
     if (_undo.length > 30) _undo.removeAt(0);
+    _markChanged();
     setState(() {
       _entries = next;
       if (_selected >= next.length) _selected = next.isEmpty ? 0 : next.length - 1;
@@ -77,6 +125,7 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
 
   Future<void> _doUndo() async {
     if (_undo.isEmpty) return;
+    _markChanged();
     setState(() {
       _entries = _undo.removeLast();
       if (_selected >= _entries.length) _selected = _entries.isEmpty ? 0 : _entries.length - 1;
@@ -240,117 +289,160 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final problems = findProblems(_entries);
+    final all = findProblems(_entries);
+    // Only real faults are flagged. "Hard to read fast" lines are just counted: auto-made English captions trip that rule on almost every line.
+    final problems = all.where(_isSerious).toList();
+    final soft = all.length - problems.length;
     final bad = problems.map((p) => p.pos).toSet();
     final shown = _problemsOnly ? [for (var i = 0; i < _entries.length; i++) if (bad.contains(i)) i] : List<int>.generate(_entries.length, (i) => i);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Subtitle Studio'),
-        actions: [
-          IconButton(onPressed: _undo.isEmpty ? null : _doUndo, icon: const Icon(Icons.undo), tooltip: 'နောက်ပြန်'),
-          PopupMenuButton<String>(
-            onSelected: (v) {
-              switch (v) {
-                case 'shift':
-                  _shiftDialog();
-                case 'overlap':
-                  _fixOverlaps();
-                case 'terms':
-                  _applyTerms();
-                case 'editTerms':
-                  _editTerms();
-                case 'copy':
-                  _copyAll();
-                case 'save':
-                  _saveFile();
-                case 'reset':
-                  _resetToSource();
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'shift', child: Text('အချိန်ရွှေ့')),
-              PopupMenuItem(value: 'overlap', child: Text('ထပ်နေတာ ပြင်')),
-              PopupMenuItem(value: 'terms', child: Text('စာရင်းအတိုင်း အစားထိုး')),
-              PopupMenuItem(value: 'editTerms', child: Text('စာရင်းပြင်')),
-              PopupMenuItem(value: 'copy', child: Text('SRT ကူး')),
-              PopupMenuItem(value: 'save', child: Text('SRT ဖိုင်သိမ်း')),
-              PopupMenuItem(value: 'reset', child: Text('Source ပြန်ယူ')),
-            ],
-          ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _entries.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'SRT မရှိသေးပါ။ Recap Workflow အဆင့် ၂ မှာ SRT အရင်ထည့်ပါ။',
+    final Widget editor = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _entries.isEmpty
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.subtitles_off_outlined, size: 44, color: DfColors.muted),
+                    SizedBox(height: 10),
+                    Text(
+                      'SRT မရှိသေးပါ — အောက်က ⚡ အမြန် မှာ ထည့်နိုင်တယ်',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: DfColors.muted),
                     ),
+                  ]),
+                ),
+              )
+            : Column(
+                children: [
+                  _Preview(entry: _entries[_selected.clamp(0, _entries.length - 1)]),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                    child: Row(children: [
+                      const Icon(Icons.format_list_numbered, size: 16, color: DfColors.muted),
+                      const SizedBox(width: 6),
+                      Text('${_entries.length}', style: const TextStyle(color: DfColors.muted, fontSize: 13)),
+                      if (soft > 0) ...[
+                        const SizedBox(width: 14),
+                        const Icon(Icons.speed, size: 16, color: DfColors.muted),
+                        const SizedBox(width: 6),
+                        Text('$soft', style: const TextStyle(color: DfColors.muted, fontSize: 13)),
+                      ],
+                      const Spacer(),
+                      FilterChip(
+                        avatar: Icon(Icons.warning_amber, size: 16, color: problems.isEmpty ? DfColors.muted : DfColors.warn),
+                        label: Text('${problems.length}'),
+                        tooltip: 'ပြဿနာရှိတာပဲ ပြ',
+                        selected: _problemsOnly,
+                        onSelected: (v) => setState(() => _problemsOnly = v),
+                      ),
+                    ]),
                   ),
-                )
-              : Column(
-                  children: [
-                    _Preview(entry: _entries[_selected.clamp(0, _entries.length - 1)]),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                      child: Row(children: [
-                        Expanded(
-                          child: Text(
-                            '${_entries.length} ကြောင်း · ပြဿနာ ${problems.length}',
-                            style: const TextStyle(color: DfColors.muted, fontSize: 13),
+                  if (_msg != null || _error != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: (_error != null ? DfColors.danger : DfColors.ok).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(_error ?? _msg!, style: const TextStyle(fontSize: 13)),
+                    ),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
+                      itemCount: shown.length,
+                      itemBuilder: (_, k) {
+                        final i = shown[k];
+                        final e = _entries[i];
+                        final isBad = bad.contains(i);
+                        return Card(
+                          color: i == _selected ? DfColors.accent.withValues(alpha: 0.18) : DfColors.surface,
+                          margin: const EdgeInsets.only(bottom: 8),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(color: i == _selected ? DfColors.accent : DfColors.line),
                           ),
-                        ),
-                        FilterChip(
-                          label: const Text('ပြဿနာရှိတာပဲ'),
-                          selected: _problemsOnly,
-                          onSelected: (v) => setState(() => _problemsOnly = v),
-                        ),
-                      ]),
-                    ),
-                    if (_msg != null || _error != null)
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: (_error != null ? DfColors.danger : DfColors.ok).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(_error ?? _msg!, style: const TextStyle(fontSize: 13)),
-                      ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
-                        itemCount: shown.length,
-                        itemBuilder: (_, k) {
-                          final i = shown[k];
-                          final e = _entries[i];
-                          final isBad = bad.contains(i);
-                          return Card(
-                            color: i == _selected ? DfColors.accent.withValues(alpha: 0.12) : DfColors.surface,
-                            margin: const EdgeInsets.only(bottom: 6),
-                            child: ListTile(
-                              dense: true,
-                              onTap: () => _edit(i),
-                              leading: Text('${e.index}', style: const TextStyle(color: DfColors.muted)),
-                              title: Text(e.text, maxLines: 3, overflow: TextOverflow.ellipsis),
-                              subtitle: Text(
-                                '${formatSrtTime(e.startMs)} → ${formatSrtTime(e.endMs)}',
-                                style: const TextStyle(fontSize: 12, color: DfColors.muted),
-                              ),
-                              trailing: isBad ? const Icon(Icons.warning_amber, color: DfColors.warn, size: 20) : null,
+                          child: ListTile(
+                            dense: true,
+                            onTap: () => _edit(i),
+                            leading: Text('${e.index}', style: const TextStyle(color: DfColors.muted)),
+                            title: Text(e.text, maxLines: 3, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              '${formatSrtTime(e.startMs)} → ${formatSrtTime(e.endMs)}',
+                              style: const TextStyle(fontSize: 12, color: DfColors.muted),
                             ),
-                          );
-                        },
-                      ),
+                            trailing: isBad ? const Icon(Icons.warning_amber, color: DfColors.warn, size: 20) : null,
+                          ),
+                        );
+                      },
                     ),
+                  ),
+                ],
+              );
+
+    PopupMenuItem<String> item(String v, IconData icon, String label) => PopupMenuItem(
+          value: v,
+          child: Row(children: [Icon(icon, size: 20, color: DfColors.muted), const SizedBox(width: 12), Text(label)]),
+        );
+
+    return DfScaffold(
+      appBar: AppBar(
+        title: Text(const ['Subtitle Studio', 'အမြန်လမ်း', 'အပိုင်းခွဲ'][_tab]),
+        actions: _tab != 0
+            ? null
+            : [
+                IconButton(onPressed: _undo.isEmpty ? null : _doUndo, icon: const Icon(Icons.undo), tooltip: 'နောက်ပြန်'),
+                IconButton(onPressed: _entries.isEmpty ? null : _shiftDialog, icon: const Icon(Icons.schedule), tooltip: 'အချိန်ရွှေ့'),
+                IconButton(onPressed: _entries.isEmpty ? null : _saveFile, icon: const Icon(Icons.download), tooltip: 'SRT ဖိုင်သိမ်း'),
+                PopupMenuButton<String>(
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'overlap':
+                        _fixOverlaps();
+                      case 'terms':
+                        _applyTerms();
+                      case 'editTerms':
+                        _editTerms();
+                      case 'copy':
+                        _copyAll();
+                      case 'reset':
+                        _resetToSource();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    item('overlap', Icons.layers_clear, 'ထပ်နေတာ ပြင်'),
+                    item('terms', Icons.find_replace, 'စာရင်းအတိုင်း အစားထိုး'),
+                    item('editTerms', Icons.list_alt, 'စာရင်းပြင်'),
+                    item('copy', Icons.copy, 'SRT ကူး'),
+                    item('reset', Icons.restore, 'Source ပြန်ယူ'),
                   ],
                 ),
+              ],
+      ),
+      body: IndexedStack(
+        index: _tab,
+        children: [
+          editor,
+          _visited.contains(1)
+              ? QuickScreen(embedded: true, projectId: _pid, refresh: _quickRev, onSrtChanged: _markChanged)
+              : const SizedBox.shrink(),
+          _visited.contains(2)
+              ? SrtSplitScreen(embedded: true, project: widget.project, refresh: _splitRev)
+              : const SizedBox.shrink(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: _goTab,
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.edit_note), label: 'ပြင် / စစ်'),
+          NavigationDestination(icon: Icon(Icons.bolt), label: 'အမြန်'),
+          NavigationDestination(icon: Icon(Icons.content_cut), label: 'ခွဲ'),
+        ],
+      ),
     );
   }
 }
@@ -358,6 +450,9 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
 extension on SrtEntry {
   SrtEntry withTextAndTime(String t, int s, int e) => SrtEntry(index, s, e, t);
 }
+
+/// Faults that break the subtitle file; speed / length notes are not counted as faults.
+bool _isSerious(SubProblem p) => p.kind == ProblemKind.empty || p.kind == ProblemKind.badRange || p.kind == ProblemKind.overlap;
 
 class _Preview extends StatelessWidget {
   const _Preview({required this.entry});
@@ -368,11 +463,19 @@ class _Preview extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      height: 96,
+      height: 112,
       width: double.infinity,
       alignment: Alignment.bottomCenter,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(10)),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: DfColors.line),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF26215E), Color(0xFF0A0B1E)],
+        ),
+      ),
       child: Text(
         entry.text,
         textAlign: TextAlign.center,

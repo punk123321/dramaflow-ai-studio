@@ -43,8 +43,10 @@ import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.Brightness
 import androidx.media3.effect.Contrast
 import androidx.media3.effect.FrameDropEffect
+import androidx.media3.effect.Crop
 import androidx.media3.effect.GaussianBlur
 import androidx.media3.effect.MatrixTransformation
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.VideoCompositorSettings
@@ -271,6 +273,90 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         // 1. Video pieces, in order.
         val pieces = job.getJSONArray("pieces")
         val vSeq = EditedMediaItemSequence.Builder()
+
+        // Blur boxes (censor): for each one a second picture of the same video, made with the
+        // same effects as the main picture, cut down to the rectangle and blurred, drawn over the
+        // main picture while the box is on. If anything cannot be done the render stops with an
+        // error, so a video that should have been censored is never exported uncensored.
+        val censorJson = job.optJSONArray("censors")
+        val censorCount = censorJson?.length() ?: 0
+        if (censorCount > 0 && blurMode) throw IllegalStateException("Blur box နဲ့ Blur background တပြိုင်နက် မရပါ")
+        if (censorCount > 0 && (job.optJSONArray("splits")?.length() ?: 0) > 0) throw IllegalStateException("Blur box နဲ့ Split Screen တပြိုင်နက် မရပါ")
+        val cSeqs = ArrayList<EditedMediaItemSequence.Builder>()
+        val cWins = ArrayList<CensorWin>()
+        val cPendingUs = LongArray(censorCount)
+        val cUsed = BooleanArray(censorCount)
+        for (k in 0 until censorCount) {
+            val c = censorJson!!.getJSONObject(k)
+            val wf = c.getDouble("w").coerceIn(0.03, 1.0)
+            val hf = (c.getDouble("w") * c.optDouble("ar", 0.5) * aspect).coerceIn(0.03, 1.0)
+            val l = (c.getDouble("x") - wf / 2).coerceIn(0.0, 1.0)
+            val r = (c.getDouble("x") + wf / 2).coerceIn(0.0, 1.0)
+            val t = (c.getDouble("y") - hf / 2).coerceIn(0.0, 1.0)
+            val bt = (c.getDouble("y") + hf / 2).coerceIn(0.0, 1.0)
+            if (r - l < 0.01 || bt - t < 0.01) throw IllegalStateException("Blur box က ပုံအပြင်ဘက် ရောက်နေပါတယ်")
+            cSeqs.add(EditedMediaItemSequence.Builder().experimentalSetForceVideoTrack(true))
+            cWins.add(CensorWin(l.toFloat(), t.toFloat(), r.toFloat(), bt.toFloat(), c.optDouble("str", 25.0).toFloat().coerceIn(5f, 60f)))
+        }
+        var outCursorMs = 0.0
+
+        // Called once for every piece, after its effects are known.
+        fun censorPass(p: JSONObject, stillFile: File?, baseFx: List<Effect>, zoomMode: Int, pieceUs: Long) {
+            val ps = p.getLong("s")
+            val pe = p.getLong("e")
+            val freeze = stillFile != null
+            val spd = if (freeze) 1.0 else p.optDouble("sp", 1.0).coerceIn(0.25, 4.0)
+            val lenMs = (pe - ps) / spd
+            for (k in 0 until censorCount) {
+                val c = censorJson!!.getJSONObject(k)
+                val cs = c.getLong("s")
+                val ce = c.getLong("e")
+                val lo = maxOf(ps, cs)
+                val hi = minOf(pe, ce)
+                val hit = if (freeze) (ps >= cs && ps < ce) else (hi - lo >= 40)
+                if (!hit) {
+                    cPendingUs[k] += (lenMs * 1000).toLong()
+                    continue
+                }
+                val win = cWins[k]
+                val fx = ArrayList<Effect>(baseFx)
+                if (!freeze && (zoomMode == 1 || zoomMode == 2)) {
+                    if (lo != ps || hi != pe) throw IllegalStateException("Blur box က zoom ဖြစ်နေတဲ့ အပိုင်းရဲ့ တစ်ဝက်ပဲ ကျနေလို့ မရပါ")
+                    fx.add(zoomEffect(zoomMode == 1, pieceUs))
+                }
+                fx.add(Crop(win.l * 2f - 1f, win.r * 2f - 1f, 1f - win.b * 2f, 1f - win.t * 2f))
+                fx.add(GaussianBlur(win.strength))
+                val seq = cSeqs[k]
+                if (freeze) {
+                    val gap = cPendingUs[k]
+                    if (gap > 0) seq.addGap(gap)
+                    cPendingUs[k] = 0
+                    val holdUs = (pe - ps) * 1000L
+                    val st = MediaItem.Builder()
+                        .setUri(Uri.fromFile(stillFile))
+                        .setMimeType(MimeTypes.IMAGE_JPEG)
+                        .setImageDurationMs(pe - ps)
+                        .build()
+                    seq.addItem(EditedMediaItem.Builder(st).setDurationUs(holdUs).setFrameRate(fps).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
+                    win.ranges.add(longArrayOf(outCursorMs.toLong(), (outCursorMs + lenMs).toLong() + 50L))
+                } else {
+                    val gap = cPendingUs[k] + ((lo - ps) / spd * 1000).toLong()
+                    if (gap > 0) seq.addGap(gap)
+                    cPendingUs[k] = ((pe - hi) / spd * 1000).toLong()
+                    val clip = MediaItem.Builder()
+                        .setUri(videoUri)
+                        .setClippingConfiguration(
+                            MediaItem.ClippingConfiguration.Builder().setStartPositionMs(lo).setEndPositionMs(hi).build()
+                        )
+                        .build()
+                    seq.addItem(EditedMediaItem.Builder(clip).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
+                    win.ranges.add(longArrayOf((outCursorMs + (lo - ps) / spd).toLong(), (outCursorMs + (hi - ps) / spd).toLong() + 50L))
+                }
+                cUsed[k] = true
+            }
+            outCursorMs += lenMs
+        }
+
         for (i in 0 until pieces.length()) {
             val p = pieces.getJSONObject(i)
             if (p.optInt("f", 0) == 1) {
@@ -297,8 +383,14 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 if (c != null && c.length() == 3) {
                     stillFx.add(cropEffect(c.getDouble(0).toFloat(), c.getDouble(1).toFloat(), c.getDouble(2).toFloat()))
                 }
+                val stillBlur = p.optDouble("bl", 0.0).toFloat()
+                if (stillBlur in 0.5f..50f) stillFx.add(GaussianBlur(stillBlur))
+                val stillFlipH = p.optInt("fh", 0) == 1
+                val stillFlipV = p.optInt("fv", 0) == 1
+                if (stillFlipH || stillFlipV) stillFx.add(flipEffect(stillFlipH, stillFlipV))
                 if (stillFx.isNotEmpty()) still.setEffects(Effects(emptyList<AudioProcessor>(), stillFx))
                 vSeq.addItem(still.build())
+                censorPass(p, file, stillFx, 0, holdUs)
                 continue
             }
             val item = MediaItem.Builder()
@@ -312,10 +404,17 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 .build()
             val b = EditedMediaItem.Builder(item)
             if (origVol <= 0f) b.setRemoveAudio(true)
-            val audioFx = if (origVol <= 0f) emptyList<AudioProcessor>() else listOf(volume(origVol))
+            // Speed (from approved Speed operations): picture and sound play faster or slower, pitch is kept.
+            val pieceSpeed = p.optDouble("sp", 1.0).toFloat()
+            val audioFx = ArrayList<AudioProcessor>()
+            if (origVol > 0f) {
+                if (pieceSpeed != 1f) audioFx.add(androidx.media3.common.audio.SpeedChangingAudioProcessor(constantSpeed(pieceSpeed)))
+                audioFx.add(volume(origVol))
+            }
             val zoom = p.optInt("z", 0)
             val pieceUs = (p.getLong("e") - p.getLong("s")) * 1000L
             val videoFx = ArrayList<Effect>()
+            if (pieceSpeed != 1f) videoFx.add(androidx.media3.effect.SpeedChangeEffect(pieceSpeed))
             val look = p.optJSONArray("l")
             if (look != null && look.length() == 2) {
                 videoFx.add(Brightness(look.getDouble(0).toFloat()))
@@ -325,10 +424,17 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             if (crop != null && crop.length() == 3) {
                 videoFx.add(cropEffect(crop.getDouble(0).toFloat(), crop.getDouble(1).toFloat(), crop.getDouble(2).toFloat()))
             }
+            val blur = p.optDouble("bl", 0.0).toFloat()
+            if (blur in 0.5f..50f) videoFx.add(GaussianBlur(blur))
+            val flipH = p.optInt("fh", 0) == 1
+            val flipV = p.optInt("fv", 0) == 1
+            if (flipH || flipV) videoFx.add(flipEffect(flipH, flipV))
+            val censorBaseFx = ArrayList<Effect>(videoFx)
             if (zoom == 1 || zoom == 2) videoFx.add(zoomEffect(zoom == 1, pieceUs))
             if (blurMode) videoFx.add(Presentation.createForWidthAndHeight(fitW, fitH, Presentation.LAYOUT_STRETCH_TO_FIT))
             if (audioFx.isNotEmpty() || videoFx.isNotEmpty()) b.setEffects(Effects(audioFx, videoFx))
             vSeq.addItem(b.build())
+            censorPass(p, null, censorBaseFx, zoom, pieceUs)
         }
         val sequences = ArrayList<EditedMediaItemSequence>()
         var compositor: VideoCompositorSettings? = null
@@ -347,10 +453,11 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                             .build()
                     )
                     .build()
-                val fx = listOf<Effect>(
-                    Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP),
-                    GaussianBlur(25f)
-                )
+                val fx = ArrayList<Effect>()
+                val bgSpeed = p.optDouble("sp", 1.0).toFloat()
+                if (bgSpeed != 1f) fx.add(androidx.media3.effect.SpeedChangeEffect(bgSpeed))
+                fx.add(Presentation.createForWidthAndHeight(outW, outH, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP))
+                fx.add(GaussianBlur(25f))
                 bg.addItem(EditedMediaItem.Builder(item).setRemoveAudio(true).setEffects(Effects(emptyList<AudioProcessor>(), fx)).build())
             }
             sequences.add(bg.build())
@@ -386,6 +493,17 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             }
             sequences.add(sSeq.build())
             compositor = SplitCompositor(wins)
+        }
+
+        // 1c. Blur boxes: one extra picture per box, after the main picture (inputs 1, 2 ...).
+        if (censorCount > 0) {
+            val usedWins = ArrayList<CensorWin>()
+            for (k in 0 until censorCount) {
+                if (!cUsed[k]) continue
+                sequences.add(cSeqs[k].build())
+                usedWins.add(cWins[k])
+            }
+            if (usedWins.isNotEmpty()) compositor = CensorCompositor(usedWins)
         }
 
         // 2. Narration. Each lane is played one after another with gaps, and
@@ -464,6 +582,8 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
 
         // Labels and arrows from approved Motion Graphics operations (output time).
         val motion = job.optJSONArray("overlays")
+        // One transparent full-size picture shared by every whole-picture effect when it is not shown.
+        val fullBlank by lazy { Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888) }
         if (motion != null) {
             for (i in 0 until motion.length()) {
                 val m = motion.getJSONObject(i)
@@ -482,11 +602,52 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                         val blank = Bitmap.createBitmap(pic.width, pic.height, Bitmap.Config.ARGB_8888)
                         overlays.add(WindowedBitmapOverlay(pic, blank, startMs, endMs, settings))
                     }
+                } else if (m.optString("k") == "box" || m.optString("k") == "circle") {
+                    // Outline to point at something. size = share of the width, ar = height / width.
+                    val bw = (m.getDouble("size") * outW).toInt().coerceIn(40, outW)
+                    val bh = (bw * m.optDouble("ar", 0.5)).toInt().coerceIn(20, outH)
+                    val shape = shapeBitmap(bw, bh, color, m.optString("k") == "circle", m.optBoolean("fill", false))
+                    val blank = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+                    overlays.add(WindowedBitmapOverlay(shape, blank, startMs, endMs, settings))
+                } else if (m.optString("k") == "frame") {
+                    // Border around the whole picture; size = thickness as a share of the short side.
+                    val thick = (m.getDouble("size") * base).toFloat().coerceAtLeast(2f)
+                    val tplPrims = m.optJSONArray("prims")
+                    val frame = if (tplPrims != null && tplPrims.length() > 0) templateFrameBitmap(outW, outH, tplPrims)
+                    else frameBitmap(outW, outH, thick, color, m.optBoolean("grad", false))
+                    overlays.add(WindowedBitmapOverlay(frame, fullBlank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                } else if (m.optString("k") == "spot") {
+                    // Everything dimmed except one window.
+                    val hw = (m.getDouble("size") * outW).toFloat().coerceIn(40f, outW.toFloat())
+                    val hh = (hw * m.optDouble("ar", 0.6).toFloat()).coerceIn(20f, outH.toFloat())
+                    val spot = spotBitmap(outW, outH, cx * outW, cy * outH, hw, hh, m.optBoolean("round", true))
+                    overlays.add(WindowedBitmapOverlay(spot, fullBlank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                } else if (m.optString("k") in listOf("fade", "vignette", "tint", "bars", "shade")) {
+                    // Whole-picture looks. size = strength (see te_compile.dart).
+                    val kind = m.optString("k")
+                    val sz = m.getDouble("size").toFloat()
+                    val whole = when (kind) {
+                        "fade" -> solidBitmap(outW, outH, color)
+                        "vignette" -> vignetteBitmap(outW, outH, sz)
+                        "tint" -> tintBitmap(outW, outH, color, sz)
+                        "bars" -> barsBitmap(outW, outH, sz)
+                        else -> shadeBitmap(outW, outH, sz, m.optBoolean("top", false))
+                    }
+                    if (kind == "fade") {
+                        overlays.add(FadeOverlay(whole, fullBlank, startMs, endMs, m.optString("dir", "dip")))
+                    } else {
+                        overlays.add(WindowedBitmapOverlay(whole, fullBlank, startMs, endMs, centerSettings(0.5f, 0.5f)))
+                    }
                 } else if (m.optString("k") == "arrow") {
                     val n = px.coerceIn(24, 1200)
                     val arrow = arrowBitmap(n, color, m.optDouble("angle", 0.0).toFloat())
                     val blank = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
                     overlays.add(WindowedBitmapOverlay(arrow, blank, startMs, endMs, settings))
+                } else if (m.optBoolean("grad", false) && m.optString("t", "").isNotBlank()) {
+                    // Label on a colourful rounded background, drawn as a picture.
+                    val lbl = gradientLabelBitmap(m.optString("t", ""), color, px, (outW * 0.9f).toInt())
+                    val blank = Bitmap.createBitmap(lbl.width, lbl.height, Bitmap.Config.ARGB_8888)
+                    overlays.add(WindowedBitmapOverlay(lbl, blank, startMs, endMs, settings))
                 } else {
                     overlays.add(WindowedTextOverlay(wrapText(m.optString("t", ""), px, (outW * 0.9f).toInt()), color, px, m.optBoolean("bg", true), startMs, endMs, settings))
                 }
@@ -611,6 +772,13 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         tempFrames.clear()
     }
 
+    /** The same playback speed for the whole item. */
+    private fun constantSpeed(speed: Float): androidx.media3.common.audio.SpeedProvider =
+        object : androidx.media3.common.audio.SpeedProvider {
+            override fun getSpeed(timeUs: Long): Float = speed
+            override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = androidx.media3.common.C.TIME_UNSET
+        }
+
     private fun volume(v: Float): AudioProcessor {
         val p = ChannelMixingAudioProcessor()
         for (ch in 1..2) {
@@ -625,6 +793,12 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
      * Still crop: keeps the area of size 1/zoom centred on (cx, cy), both 0..1
      * from the top-left. Screen coordinates here run -1..1 with y up.
      */
+    /** Mirrors the picture left-right and/or top-bottom (scale -1 on that axis). */
+    private fun flipEffect(h: Boolean, v: Boolean): Effect =
+        ScaleAndRotateTransformation.Builder()
+            .setScale(if (h) -1f else 1f, if (v) -1f else 1f)
+            .build()
+
     private fun cropEffect(zoom: Float, cx: Float, cy: Float): Effect {
         val z = zoom.coerceIn(1f, 4f)
         val tx = 2f * cx.coerceIn(0f, 1f) - 1f
@@ -691,6 +865,212 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         }
         c.drawPath(path, fill)
         c.drawPath(path, outline)
+        return bmp
+    }
+
+    /** Outline of a rounded rectangle or an oval on a transparent picture. */
+    private fun shapeBitmap(w: Int, h: Int, color: Int, oval: Boolean, fill: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val stroke = (minOf(w, h) * 0.06f).coerceIn(3f, 24f)
+        val r = android.graphics.RectF(stroke, stroke, w - stroke, h - stroke)
+        val dark = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke * 1.6f
+            this.color = Color.argb(150, 0, 0, 0)
+        }
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
+            this.color = color
+        }
+        if (fill) {
+            val f = Paint(Paint.ANTI_ALIAS_FLAG)
+            f.color = Color.argb(77, Color.red(color), Color.green(color), Color.blue(color))
+            if (oval) c.drawOval(r, f) else c.drawRoundRect(r, stroke, stroke, f)
+        }
+        if (oval) {
+            c.drawOval(r, dark)
+            c.drawOval(r, line)
+        } else {
+            c.drawRoundRect(r, stroke, stroke, dark)
+            c.drawRoundRect(r, stroke, stroke, line)
+        }
+        return bmp
+    }
+
+    /** A border around the whole picture (rainbow or one colour). */
+    private fun frameBitmap(w: Int, h: Int, thick: Float, color: Int, rainbow: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = thick
+        if (rainbow) {
+            p.shader = android.graphics.LinearGradient(
+                0f, 0f, w.toFloat(), h.toFloat(),
+                intArrayOf(0xFF2979FF.toInt(), 0xFF00E5FF.toInt(), 0xFF76FF03.toInt(), 0xFFFFEA00.toInt(), 0xFFFF1744.toInt(), 0xFFD500F9.toInt()),
+                null, android.graphics.Shader.TileMode.CLAMP
+            )
+        } else {
+            p.color = color
+        }
+        Canvas(bmp).drawRect(thick / 2f, thick / 2f, w - thick / 2f, h - thick / 2f, p)
+        return bmp
+    }
+
+    /** A ready-made frame: draws the primitive list made by lib/core/te_frames.dart (units = short side). */
+    private fun templateFrameBitmap(w: Int, h: Int, prims: JSONArray): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val s = minOf(w, h).toFloat()
+        for (i in 0 until prims.length()) {
+            val m = prims.getJSONObject(i)
+            val sw = (m.optDouble("sw", 0.0) * s).toFloat()
+            val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            if (sw <= 0f) {
+                p.style = Paint.Style.FILL
+            } else {
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = sw
+            }
+            p.color = m.optLong("c", 0xFFFFFFFFL).toInt()
+            when (m.optString("t")) {
+                "l" -> canvas.drawLine(
+                    (m.getDouble("x1") * s).toFloat(), (m.getDouble("y1") * s).toFloat(),
+                    (m.getDouble("x2") * s).toFloat(), (m.getDouble("y2") * s).toFloat(), p
+                )
+                "o" -> canvas.drawCircle((m.getDouble("x") * s).toFloat(), (m.getDouble("y") * s).toFloat(), (m.getDouble("r") * s).toFloat(), p)
+                "r" -> {
+                    val l = (m.getDouble("x") * s).toFloat()
+                    val t = (m.getDouble("y") * s).toFloat()
+                    val r = l + (m.getDouble("w") * s).toFloat()
+                    val b = t + (m.getDouble("h") * s).toFloat()
+                    val g = m.optJSONArray("g")
+                    if (g != null && g.length() >= 2) {
+                        val cols = IntArray(g.length()) { g.getLong(it).toInt() }
+                        p.shader = android.graphics.LinearGradient(l, t, r, b, cols, null, android.graphics.Shader.TileMode.CLAMP)
+                    }
+                    val rad = (m.optDouble("rad", 0.0) * s).toFloat()
+                    val rect = android.graphics.RectF(l, t, r, b)
+                    val glow = (m.optDouble("glow", 0.0) * s).toFloat()
+                    if (glow > 0f) {
+                        val gp = Paint(p)
+                        gp.maskFilter = android.graphics.BlurMaskFilter(glow, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                        canvas.drawRoundRect(rect, rad, rad, gp)
+                    }
+                    val dash = m.optJSONArray("dash")
+                    if (dash != null && dash.length() == 2 && sw > 0f) {
+                        p.strokeCap = Paint.Cap.ROUND
+                        p.pathEffect = android.graphics.DashPathEffect(
+                            floatArrayOf(maxOf((dash.getDouble(0) * s).toFloat(), 0.5f), (dash.getDouble(1) * s).toFloat()), 0f
+                        )
+                    }
+                    canvas.drawRoundRect(rect, rad, rad, p)
+                }
+            }
+        }
+        return bmp
+    }
+
+    /** The whole picture dimmed except one window (centre cx, cy). */
+    private fun spotBitmap(w: Int, h: Int, cx: Float, cy: Float, hw: Float, hh: Float, oval: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(Color.argb(150, 0, 0, 0))
+        val clear = Paint(Paint.ANTI_ALIAS_FLAG)
+        clear.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+        val r = android.graphics.RectF(cx - hw / 2f, cy - hh / 2f, cx + hw / 2f, cy + hh / 2f)
+        if (oval) c.drawOval(r, clear) else c.drawRoundRect(r, hw * 0.08f, hw * 0.08f, clear)
+        return bmp
+    }
+
+    private fun solidBitmap(w: Int, h: Int, color: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(color)
+        return bmp
+    }
+
+    /** Dark edges, clear middle. strength 0..1. */
+    private fun vignetteBitmap(w: Int, h: Int, strength: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val radius = Math.hypot(w.toDouble(), h.toDouble()).toFloat() / 2f
+        val edge = Color.argb((strength.coerceIn(0f, 1f) * 0.9f * 255f).toInt(), 0, 0, 0)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.shader = android.graphics.RadialGradient(
+            w / 2f, h / 2f, radius,
+            intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, edge),
+            floatArrayOf(0f, 0.45f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        Canvas(bmp).drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+        return bmp
+    }
+
+    /** A see-through wash of one colour; opacity 0..1. */
+    private fun tintBitmap(w: Int, h: Int, color: Int, opacity: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(Color.argb((opacity.coerceIn(0f, 1f) * 255f).toInt(), Color.red(color), Color.green(color), Color.blue(color)))
+        return bmp
+    }
+
+    /** Black bars at the top and bottom, each frac of the height. */
+    private fun barsBitmap(w: Int, h: Int, frac: Float): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val bar = (h * frac.coerceIn(0f, 0.45f))
+        val p = Paint()
+        p.color = Color.BLACK
+        val c = Canvas(bmp)
+        c.drawRect(0f, 0f, w.toFloat(), bar, p)
+        c.drawRect(0f, h - bar, w.toFloat(), h.toFloat(), p)
+        return bmp
+    }
+
+    /** Dark gradient from the top or bottom edge, covering frac of the height. */
+    private fun shadeBitmap(w: Int, h: Int, frac: Float, top: Boolean): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val cover = h * frac.coerceIn(0.05f, 1f)
+        val dark = Color.argb(190, 0, 0, 0)
+        val p = Paint()
+        if (top) {
+            p.shader = android.graphics.LinearGradient(0f, 0f, 0f, cover, dark, Color.TRANSPARENT, android.graphics.Shader.TileMode.CLAMP)
+            Canvas(bmp).drawRect(0f, 0f, w.toFloat(), cover, p)
+        } else {
+            p.shader = android.graphics.LinearGradient(0f, h.toFloat(), 0f, h - cover, dark, Color.TRANSPARENT, android.graphics.Shader.TileMode.CLAMP)
+            Canvas(bmp).drawRect(0f, h - cover, w.toFloat(), h.toFloat(), p)
+        }
+        return bmp
+    }
+
+    /** Text on a violet to pink rounded background with a thin gold edge. */
+    private fun gradientLabelBitmap(text: String, color: Int, px: Int, maxW: Int): Bitmap {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = color
+        paint.textSize = px.toFloat()
+        paint.typeface = Typeface.DEFAULT_BOLD
+        val padX = px * 0.7f
+        val padY = px * 0.4f
+        val lw = (maxW - 2 * padX).toInt().coerceAtLeast(60)
+        val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, lw)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
+        var tw = 0f
+        for (i in 0 until layout.lineCount) tw = maxOf(tw, layout.getLineWidth(i))
+        val w = (tw + 2 * padX).toInt().coerceAtLeast(2)
+        val h = (layout.height + 2 * padY).toInt().coerceAtLeast(2)
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG)
+        bg.shader = android.graphics.LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), 0xFFA44CFF.toInt(), 0xFFFF3D9A.toInt(), android.graphics.Shader.TileMode.CLAMP)
+        val r = android.graphics.RectF(2f, 2f, w - 2f, h - 2f)
+        val rad = px * 0.45f
+        c.drawRoundRect(r, rad, rad, bg)
+        val edge = Paint(Paint.ANTI_ALIAS_FLAG)
+        edge.style = Paint.Style.STROKE
+        edge.strokeWidth = maxOf(2f, px * 0.06f)
+        edge.color = 0xFFFFD54F.toInt()
+        c.drawRoundRect(r, rad, rad, edge)
+        c.translate(padX, padY)
+        layout.draw(c)
         return bmp
     }
 
@@ -795,6 +1175,33 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             StaticOverlaySettings.Builder().build()
     }
 
+    /** One blur box: the rectangle (shares of the picture) and the output times it is on. */
+    private class CensorWin(val l: Float, val t: Float, val r: Float, val b: Float, val strength: Float) {
+        val ranges = ArrayList<LongArray>()
+    }
+
+    /**
+     * Input 0 is the main picture, input 1, 2 ... the blurred rectangles. A rectangle is drawn
+     * over its place only while its time range is on; otherwise it is invisible.
+     */
+    private class CensorCompositor(private val wins: List<CensorWin>) : VideoCompositorSettings {
+        override fun getOutputSize(inputSizes: List<Size>): Size = inputSizes[0]
+
+        override fun getOverlaySettings(inputId: Int, presentationTimeUs: Long): OverlaySettings {
+            if (inputId == 0) return StaticOverlaySettings.Builder().build()
+            val w = wins.getOrNull(inputId - 1) ?: return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
+            val ms = presentationTimeUs / 1000L
+            if (w.ranges.none { ms >= it[0] && ms < it[1] }) return StaticOverlaySettings.Builder().setAlphaScale(0f).build()
+            val cx = (w.l + w.r) / 2f
+            val cy = (w.t + w.b) / 2f
+            return StaticOverlaySettings.Builder()
+                .setScale(w.r - w.l, w.b - w.t)
+                .setOverlayFrameAnchor(0f, 0f)
+                .setBackgroundFrameAnchor(2f * cx - 1f, 1f - 2f * cy)
+                .build()
+        }
+    }
+
     private class SplitWin(val startMs: Long, val endMs: Long, val topBottom: Boolean)
 
     /**
@@ -847,6 +1254,31 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
         }
 
         override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings = settings
+    }
+
+    /** A full-picture colour whose strength follows the fade: in (1 to 0), out (0 to 1) or dip (0 to 1 to 0). */
+    private class FadeOverlay(
+        private val shown: Bitmap,
+        private val blank: Bitmap,
+        private val startMs: Long,
+        private val endMs: Long,
+        private val dir: String
+    ) : BitmapOverlay() {
+        override fun getBitmap(presentationTimeUs: Long): Bitmap {
+            val ms = presentationTimeUs / 1000L
+            return if (ms >= startMs && ms < endMs) shown else blank
+        }
+
+        override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
+            val span = (endMs - startMs).coerceAtLeast(1L).toFloat()
+            val t = (((presentationTimeUs / 1000L) - startMs).toFloat() / span).coerceIn(0f, 1f)
+            val a = when (dir) {
+                "in" -> 1f - t
+                "out" -> t
+                else -> 1f - Math.abs(2f * t - 1f)
+            }
+            return StaticOverlaySettings.Builder().setAlphaScale(a.coerceIn(0f, 1f)).build()
+        }
     }
 
     private class WindowedBitmapOverlay(

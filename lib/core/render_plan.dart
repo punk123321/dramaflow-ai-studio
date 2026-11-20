@@ -1,4 +1,5 @@
 import 'srt.dart';
+import 'te_frames.dart';
 import 'timeline.dart';
 
 /// Turns the edit description into the job that the native renderer runs, and
@@ -212,6 +213,7 @@ Map<String, Object?> buildRenderJob({
   double aspect = 16 / 9,
   List<Map<String, Object?>> overlays = const [],
   List<Map<String, Object?>> splits = const [],
+  List<Map<String, Object?>> censors = const [],
 }) {
   final subs = remapSubtitles(sourceSubtitles, timeline.pieces, offsetMs: timeline.subtitleOffsetMs);
   final lanes = assignVoiceLanes(timeline.voices);
@@ -220,7 +222,7 @@ Map<String, Object?> buildRenderJob({
   // Blur background needs the picture to be one continuous stream; freeze
   // frames are separate pictures, so those jobs use black bars instead.
   final hasFreeze = timeline.pieces.any((p) => p.freeze);
-  final fill = (settings.fill == FillMode.blur && (hasFreeze || splits.isNotEmpty)) ? FillMode.bars : settings.fill;
+  final fill = (settings.fill == FillMode.blur && (hasFreeze || splits.isNotEmpty || censors.isNotEmpty)) ? FillMode.bars : settings.fill;
   return {
     'name': name,
     'videoUri': videoUri,
@@ -241,6 +243,10 @@ Map<String, Object?> buildRenderJob({
           if (p.crop != null) 'c': p.crop!.toJson(),
           if (p.freeze) 'f': 1,
           if (p.look != null) 'l': p.look!.toJson(),
+          if (p.speed != 1.0) 'sp': p.speed,
+          if (p.blur != null) 'bl': p.blur,
+          if (p.flipH) 'fh': 1,
+          if (p.flipV) 'fv': 1,
         }
     ],
     'aspect': aspect,
@@ -258,8 +264,9 @@ Map<String, Object?> buildRenderJob({
         : {'uri': _uri(timeline.music!.source), 'vol': timeline.music!.volume, 'loop': timeline.music!.loop},
     'burn': timeline.burnSubtitles,
     'subtitles': [for (final s in subs) {'s': s.startMs, 'e': s.endMs, 't': s.text}],
-    if (overlays.isNotEmpty) 'overlays': overlays,
+    if (overlays.isNotEmpty) 'overlays': [for (final o in overlays) _withFramePrims(o, size.w, size.h)],
     if (splits.isNotEmpty) 'splits': splits,
+    if (censors.isNotEmpty) 'censors': censors,
   };
 }
 
@@ -278,7 +285,7 @@ Timeline sampleTimeline(Timeline t, {int limitMs = sampleMs}) {
       out.add(p);
       used += p.lengthMs;
     } else {
-      if (room >= 200) out.add(p.withRange(p.startMs, p.startMs + room));
+      if (room >= 200) out.add(p.withRange(p.startMs, p.startMs + (room * p.speed).round()));
       used += room;
     }
   }
@@ -308,4 +315,15 @@ String safeFileName(String raw) {
   final cleaned = raw.replaceAll(RegExp(r'[\\/:*?"<>|\n\r\t]'), '_').trim();
   final s = cleaned.isEmpty ? 'dramaflow' : cleaned;
   return s.length > 60 ? s.substring(0, 60) : s;
+}
+
+/// A frame overlay with a ready-made template gets its drawing primitives for
+/// the real output size, so the render draws exactly the list the preview shows.
+Map<String, Object?> _withFramePrims(Map<String, Object?> o, int w, int h) {
+  final tpl = o['tpl'];
+  if (o['k'] != 'frame' || tpl is! int || tpl <= 0) return o;
+  final size = o['size'];
+  final color = o['color'];
+  final prims = framePrims(tpl, color is int ? color : 0xFFFFFFFF, size is num ? size.toDouble() : 0.012, w.toDouble(), h.toDouble());
+  return prims.isEmpty ? o : {...o, 'prims': prims};
 }

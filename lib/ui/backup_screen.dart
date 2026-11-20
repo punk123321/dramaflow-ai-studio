@@ -93,7 +93,7 @@ class _BackupScreenState extends State<BackupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Backup / Restore')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Text(

@@ -35,7 +35,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       _open = null;
     }
 
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Recap Workflow')),
       body: p == null
           ? const Center(
@@ -52,7 +52,7 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
                 if (store.error != null) ErrorBanner(store.error!),
-                _Header(project: p),
+                DfCard(margin: EdgeInsets.zero, child: _Header(project: p)),
                 const SizedBox(height: 12),
                 SegmentedButton<bool>(
                   segments: const [
@@ -88,15 +88,15 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: DfColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          color: DfColors.surface.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: open ? c : c.withValues(alpha: 0.4), width: open ? 2 : 1.5),
           boxShadow: open ? [BoxShadow(color: c.withValues(alpha: 0.3), blurRadius: 18)] : null,
         ),
         child: Column(
           children: [
             InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               onTap: unlocked ? () => setState(() => _open = open ? -1 : s.index) : null,
               child: Padding(
                 padding: const EdgeInsets.all(12),

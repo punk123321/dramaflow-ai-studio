@@ -24,6 +24,9 @@ class DocKind {
 
   /// Titles, description and hashtags written with Gemini (copy/paste).
   static const publishText = 'publish_text';
+
+  /// Scenes found by Scene Recap, as JSON [[startMs, endMs], ...].
+  static const scenePlan = 'scene_plan';
 }
 
 /// Source subtitles, name/term notes and the replies brought back from Gemini.

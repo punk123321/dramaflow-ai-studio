@@ -82,19 +82,27 @@ class LookAdjust {
   int get hashCode => Object.hash(brightness, contrast);
 }
 
+/// Blur strength limits (shared by the operation check and the saved timeline).
+const double minBlur = 0.5;
+const double maxBlur = 50;
+
 class VideoPiece {
-  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false, this.look]);
+  const VideoPiece(this.startMs, this.endMs, [this.zoom = ZoomMode.none, this.crop, this.freeze = false, this.look, this.speed = 1.0, this.blur, this.flipH = false, this.flipV = false]);
 
   /// A still frame of the original at [atMs], held for [holdMs]. Only the
   /// render step creates these (from approved Freeze Frame operations); they
   /// are never saved in the timeline.
-  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c, LookAdjust? l])
+  const VideoPiece.freezeAt(int atMs, int holdMs, [CropFrame? c, LookAdjust? l, double? blurStrength, bool flipHorizontal = false, bool flipVertical = false])
       : startMs = atMs,
         endMs = atMs + holdMs,
         zoom = ZoomMode.none,
         crop = c,
         freeze = true,
-        look = l;
+        look = l,
+        speed = 1.0,
+        blur = blurStrength,
+        flipH = flipHorizontal,
+        flipV = flipVertical;
 
   /// Range inside the ORIGINAL video.
   final int startMs;
@@ -107,12 +115,30 @@ class VideoPiece {
   final bool freeze;
   final LookAdjust? look;
 
-  int get lengthMs => endMs - startMs;
+  /// Playback speed of this piece (1 = normal, 2 = twice as fast). Only the
+  /// render step sets it, from approved Speed operations; the saved timeline
+  /// always has 1.
+  final double speed;
 
-  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze, look);
-  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze, look);
-  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze, look);
-  VideoPiece withLook(LookAdjust? l) => VideoPiece(startMs, endMs, zoom, crop, freeze, l);
+  /// Gaussian blur of the whole picture (strength 0.5 to 50), null = none.
+  /// Like [speed] it is only set by the render step from approved Blur
+  /// operations.
+  final double? blur;
+
+  /// Whole-picture flip, from approved Mirror / Flip operations.
+  final bool flipH;
+  final bool flipV;
+
+  /// How long the piece lasts on the OUTPUT timeline.
+  int get lengthMs => freeze ? endMs - startMs : ((endMs - startMs) / speed).round();
+
+  VideoPiece withRange(int s, int e) => VideoPiece(s, e, zoom, crop, freeze, look, speed, blur, flipH, flipV);
+  VideoPiece withZoom(ZoomMode z) => VideoPiece(startMs, endMs, z, crop, freeze, look, speed, blur, flipH, flipV);
+  VideoPiece withCrop(CropFrame? c) => VideoPiece(startMs, endMs, zoom, c, freeze, look, speed, blur, flipH, flipV);
+  VideoPiece withLook(LookAdjust? l) => VideoPiece(startMs, endMs, zoom, crop, freeze, l, speed, blur, flipH, flipV);
+  VideoPiece withSpeed(double s) => VideoPiece(startMs, endMs, zoom, crop, freeze, look, s, blur, flipH, flipV);
+  VideoPiece withBlur(double? b) => VideoPiece(startMs, endMs, zoom, crop, freeze, look, speed, b, flipH, flipV);
+  VideoPiece withFlip(bool h, bool v) => VideoPiece(startMs, endMs, zoom, crop, freeze, look, speed, blur, h, v);
 
   @override
   bool operator ==(Object other) =>
@@ -122,10 +148,14 @@ class VideoPiece {
       other.zoom == zoom &&
       other.crop == crop &&
       other.freeze == freeze &&
-      other.look == look;
+      other.look == look &&
+      other.speed == speed &&
+      other.blur == blur &&
+      other.flipH == flipH &&
+      other.flipV == flipV;
 
   @override
-  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze, look);
+  int get hashCode => Object.hash(startMs, endMs, zoom, crop, freeze, look, speed, blur, flipH, flipV);
 
   Map<String, Object?> toJson() => {
         's': startMs,
@@ -134,6 +164,10 @@ class VideoPiece {
         if (crop != null) 'c': crop!.toJson(),
         if (freeze) 'f': 1,
         if (look != null) 'l': look!.toJson(),
+        if (speed != 1.0) 'sp': speed,
+        if (blur != null) 'bl': blur,
+        if (flipH) 'fh': 1,
+        if (flipV) 'fv': 1,
       };
   static VideoPiece fromJson(Map<String, Object?> m) {
     final z = (m['z'] as int?) ?? 0;
@@ -144,6 +178,10 @@ class VideoPiece {
       CropFrame.fromJson(m['c']),
       m['f'] == 1,
       LookAdjust.fromJson(m['l']),
+      m['sp'] is num && (m['sp'] as num) >= 0.25 && (m['sp'] as num) <= 4 ? (m['sp'] as num).toDouble() : 1.0,
+      m['bl'] is num && (m['bl'] as num).isFinite && (m['bl'] as num) >= minBlur && (m['bl'] as num) <= maxBlur ? (m['bl'] as num).toDouble() : null,
+      m['fh'] == 1,
+      m['fv'] == 1,
     );
   }
 }
@@ -472,7 +510,7 @@ int pieceStartOnTimeline(List<VideoPiece> p, int i) {
   var t = 0;
   for (var i = 0; i < p.length; i++) {
     final len = p[i].lengthMs;
-    if (timeMs < t + len) return (piece: i, sourceMs: p[i].startMs + (timeMs - t));
+    if (timeMs < t + len) return (piece: i, sourceMs: p[i].startMs + ((timeMs - t) * p[i].speed).round());
     t += len;
   }
   return null;
@@ -502,10 +540,10 @@ List<VoiceItem> placeVoicesInSequence(List<VoiceItem> clips, {int gapMs = 0}) {
 List<SrtEntry> remapSubtitles(List<SrtEntry> subs, List<VideoPiece> pieces, {int offsetMs = 0}) {
   final out = <SrtEntry>[];
   var base = 0;
-  final parts = <({int start, int end, int base, int pieceStart})>[];
+  final parts = <({int start, int end, int base, int pieceStart, double speed})>[];
   for (final p in pieces) {
     // A held still frame shows no original subtitle (it is for commentary).
-    if (!p.freeze) parts.add((start: p.startMs, end: p.endMs, base: base, pieceStart: p.startMs));
+    if (!p.freeze) parts.add((start: p.startMs, end: p.endMs, base: base, pieceStart: p.startMs, speed: p.speed));
     base += p.lengthMs;
   }
   for (final s in subs) {
@@ -513,8 +551,8 @@ List<SrtEntry> remapSubtitles(List<SrtEntry> subs, List<VideoPiece> pieces, {int
       final a = s.startMs > part.start ? s.startMs : part.start;
       final b = s.endMs < part.end ? s.endMs : part.end;
       if (b <= a) continue;
-      final ns = part.base + (a - part.pieceStart) + offsetMs;
-      final ne = part.base + (b - part.pieceStart) + offsetMs;
+      final ns = part.base + ((a - part.pieceStart) / part.speed).round() + offsetMs;
+      final ne = part.base + ((b - part.pieceStart) / part.speed).round() + offsetMs;
       if (ne <= 0) continue;
       out.add(SrtEntry(0, ns < 0 ? 0 : ns, ne, s.text));
     }

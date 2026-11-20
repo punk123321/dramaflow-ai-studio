@@ -27,7 +27,8 @@ open(path, "w", encoding="utf-8").write(s)
 print("gradle patched:", path)
 
 # ---- fixed signing key, so a new APK installs over the old one ----
-# native/dramaflow.jks is copied to android/app/dramaflow.jks by the workflow.
+# The keystore is NOT in the repo. The workflow writes it to android/app/dramaflow.jks
+# from the GitHub secret DF_KEYSTORE_BASE64; the password comes from DF_KEY_PASSWORD.
 s = open(path, encoding="utf-8").read()
 if "dramaflow.jks" not in s:
     if kts:
@@ -35,9 +36,9 @@ if "dramaflow.jks" not in s:
             '    signingConfigs {\n'
             '        create("dramaflow") {\n'
             '            storeFile = file("dramaflow.jks")\n'
-            '            storePassword = "dramaflow"\n'
+            '            storePassword = System.getenv("DF_KEY_PASSWORD")\n'
             '            keyAlias = "dramaflow"\n'
-            '            keyPassword = "dramaflow"\n'
+            '            keyPassword = System.getenv("DF_KEY_PASSWORD")\n'
             '        }\n'
             '    }\n\n'
         )
@@ -47,9 +48,9 @@ if "dramaflow.jks" not in s:
             '    signingConfigs {\n'
             '        dramaflow {\n'
             '            storeFile file("dramaflow.jks")\n'
-            '            storePassword "dramaflow"\n'
+            '            storePassword System.getenv("DF_KEY_PASSWORD")\n'
             '            keyAlias "dramaflow"\n'
-            '            keyPassword "dramaflow"\n'
+            '            keyPassword System.getenv("DF_KEY_PASSWORD")\n'
             '        }\n'
             '    }\n\n'
         )

@@ -408,9 +408,9 @@ Fix (user report 2026-11-13): wrapped subtitle lines were left-aligned inside th
 
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Foreground service + progress notification keeps render alive with screen off | pending CI | **No** |
-| Notification permission asked on Android 13+ | pending CI | **No** |
-| SRT split: "ခဏရပ်/ဆက်လုပ်" before the next part (multi-part runs) | pending CI | **No** |
+| Foreground service + progress notification keeps render alive with screen off | Yes (CI green, 4c5832e) | **No** |
+| Notification permission asked on Android 13+ | Yes (CI green, 4c5832e) | **No** |
+| SRT split: "ခဏရပ်/ဆက်လုပ်" before the next part (multi-part runs) | Yes (CI green, 4c5832e) | **No** |
 
 Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current part ends; a single file can only be cancelled. Some phones' battery savers can still stop background work.
 
@@ -423,20 +423,181 @@ Limit: Media3 Transformer cannot pause mid-file. Pause waits until the current p
 ## TE-19: fit video to narration (te-12)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| "ဗီဒီယိုကို အသံအတိုင်း ညှိ": piece N gets the length of voice N, voice starts at its piece; undo button | pending CI | **No** |
+| "ဗီဒီယိုကို အသံအတိုင်း ညှိ": piece N gets the length of voice N, voice starts at its piece; undo button | Yes (CI green, 4c5832e) | **No** |
 Rules: pairs by order; piece end moves in the original video (the file is never changed); video too short is reported; extra voices/pieces are reported. Preview still does not play narration with the video.
 
 ## TE-20: Video Recap, Gemini watches the video (te-12)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Home tile "Video Recap": per-part prompt (5 parts per prompt), Gemini open/copy, reply split by "=== PART n ===", save as narration script (one part = one voice) | pending CI | **No** |
+| Home tile "Video Recap": per-part prompt (5 parts per prompt), Gemini open/copy, reply split by "=== PART n ===", save as narration script (one part = one voice) | Yes (CI green, 4c5832e) | **No** |
 Limits: the app does NOT send the video; the user attaches it in the Gemini app. Whether Gemini can watch the video (length/size limits) and how good the script is are NOT checked. Parts come from Video Index, or 1-minute parts if none (then saved as the Video Index).
 
 ## TE-21: News (RSS) reader inside DramaFlow (te-12)
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Home tile "သတင်း (RSS)": loads the user's RSS/Atom feeds, newest first, category chips, pull to refresh, cached for offline | pending CI | **No** |
-| Tap a story: new layer slides in (title, source, age, snippet, "မူရင်းမှာ ဖတ်" opens the browser) | pending CI | **No** |
-| Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | pending CI | **No** |
-| Feed manager: add/switch off/delete, suggestions restore | pending CI | **No** |
+| Home tile "သတင်း (RSS)": loads the user's RSS/Atom feeds, newest first, category chips, pull to refresh, cached for offline | Yes (CI green, 4c5832e) | **No** |
+| Tap a story: new layer slides in (title, source, age, snippet, "မူရင်းမှာ ဖတ်" opens the browser) | Yes (CI green, 4c5832e) | **No** |
+| Recap script from a story: Gemini prompt (headline + snippet + user-pasted text), reply paste, "Project ဖန်တီး + script သိမ်း" | Yes (CI green, 4c5832e) | **No** |
+| Feed manager: add/switch off/delete, suggestions restore | Yes (CI green, 4c5832e) | **No** |
 Rules: only headline, link, time and a ~220 character snippet are kept; no article copy, no pictures, no video from news sites. Feed links in the suggested list were NOT checked (the build session could not reach them): the user must try them on the phone. Parser is tested on sample RSS/Atom text only, not on live feeds. News data is app-wide and not part of Backup.
+
+## TE-22: Scene Recap (scene finding + contact sheet for Gemini)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Home tile "Scene Recap": scenes found from colour changes between sampled frames (range, step 1/2/4 s, max scenes), long still scenes split at 45 s, "ပေါင်း" removes a wrong cut | Yes (CI green, 4c5832e) | **No** |
+| Contact sheet (one numbered tile per scene, 12 per sheet) saved to Pictures/DramaFlow and shared to Gemini with the prompt; prompt includes the SRT lines of each scene | Yes (CI green, 4c5832e) | **No** |
+| Reply "=== PART n ===" read per scene, saved as the narration script (one scene = one voice) and the scenes saved as the Video Index | Yes (CI green, 4c5832e) | **No** |
+Unproven: how fast scene finding is on a long video on the phone; how well colour differences find real cuts (fades, fast action); whether the Gemini app accepts the shared picture with text; token savings (the per-token figures are from memory, not checked). Gemini cannot hear the audio in this mode, so an SRT gives much better scripts. Speech-to-text (Whisper or similar) is NOT built.
+
+## TE-23: UI refresh (indigo/violet theme, big gradient tiles)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| New theme: deep indigo page gradient, violet accent, rounded buttons/chips/snackbars/bottom bar | Yes (CI green, 4c5832e) | **No** |
+| Home: hero banner, six big gradient tiles (Recap Studio, Voice Studio, Subtitle Studio, Video Editor, Render Center, More Tools), "More Tools" sheet holds every other module | Yes (CI green, 4c5832e) | **No** |
+Unproven: how it looks on a real phone (no screenshot was taken, there is no local Flutter), tile text fit with Burmese fonts, contrast on the other screens after the colour change. Only the home screen was redesigned; the other screens only pick up the new colours and button/chip shapes. No "Projects" tab, no Translation Studio / Voice Clone screens (voice cloning is deliberately not built).
+
+## Signing key moved out of the repo (before making the repo public)
+The old keystore and its password were committed in the repo. A new key is created outside the repo; the workflow reads it from the GitHub secrets `DF_KEYSTORE_BASE64` and `DF_KEY_PASSWORD` and stops with a clear error if they are missing. The old key is still in git history, so it must be treated as public and never used again. **APKs signed with the new key do not install over APKs signed with the old key: back up in the app, uninstall, install, restore.** Compiles on CI: yes (4c5832e; build with the new secrets worked, the APK signature itself was not inspected). Phone-tested: **No**.
+
+## TE-24: UI refresh, all screens
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Every screen except Home sits on the same indigo gradient (shared `DfScaffold`), transparent app bar with bold title | Yes (CI green, run 44228633814) | **No** |
+| Home: "Project အသစ်" is a wide gradient button under the tiles (the floating button covered the resume card); duplicate "ဆက်လုပ်ရန်" title removed | Yes (CI green, run 44228633814) | **No** |
+| Settings tab is a real screen: optional Gemini key + model (save / remove), Backup / Restore link, short About | Yes (CI green, run 44228633814) | **No** |
+Unproven: how each inner screen looks on the phone (only Home has been seen in a screenshot). The inner screens keep their old layouts; only the background, app bar, buttons and chips changed. No Language/Theme switch (nothing to switch yet). No Projects tab. Voice Clone is deliberately not built.
+
+## TE-25: inner screens restyled (Render Center, Subtitle Studio, Workflow)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Render Center: "ထုတ်ဖို့ အဆင်သင့်လား" checklist (video readable, pieces, voices, subtitles), progress ring with % and a time-left guess (elapsed ÷ percent, a guess only), gradient "MP4 ထုတ်မယ်" button | Yes (CI green, run 44260535793) | **No** |
+| Subtitle Studio: rounded list cards, bigger preview, bottom bar "အချိန်ရွှေ့ / ပြင် / SRT သိမ်း" (the same actions as the menu) | Yes (CI green, run 44260535793) | **No** |
+| Workflow: project header and step cards in the new card style | Yes (CI green, run 44260535793) | **No** |
+Unproven: how they look on the phone. Not done yet: Voice Studio tabs, Video Editor tool row, "Projects" tab, Translation Studio screen. The progress steps in the mockup ("Preparing / Applying subtitles / Rendering") are NOT shown because the render engine does not report such steps; only the percent is real.
+
+## TE-26: less clutter
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Long explanation paragraphs (Render, Video Recap, Scene Recap, Quick, SRT split) shrink to one "ℹ ရှင်းလင်းချက်" line, tap to read | Yes (CI green, run 44264606257) | **No** |
+| Render: resolution / fps / quality moved into a collapsed "အဆင့်မြင့် setting" (its summary line shows the current values); "ဖုန်းမှာ ကျန်နေရာ" row removed (the low-space warning stays) | Yes (CI green, run 44264606257) | **No** |
+| Subtitle Studio: only empty / bad-time / overlapping lines count as problems; "hard to read fast / long line" are only counted, not flagged on each line | Yes (CI green, run 44264606257) | **No** |
+Unproven: how it looks on the phone. The rule thresholds (17 characters per second, 42 per line) did not change.
+
+## TE-27: Video Editor + TE are one editor
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| One screen (Home "Video Editor" tile and Workflow Stage 4): preview, effect list, pieces, narration, subtitles; the separate "Transformative Editor" tile and its Mode selector are gone (the stored mode is kept) | Yes (CI green, run 44309080019) | **No** |
+| Preview shows the first frame at once, scrubber with effect markers (green = approved, orange = proposed), play/pause | Yes (same run) | **No** |
+| Effects drawn on the preview at the playhead: crop/zoom, brightness/contrast, text/arrow/picture; badges for cut, freeze, split, sound. Proposed (AI) effects are shown too, slightly faded, so a suggestion can be judged before approving. It is an **approximation**; the render makes the real result | Yes (same run) | **No** |
+| Text/arrow/picture can be dragged on the preview (position saved on release) | Yes (same run) | **No** |
+| Effect list: tap = jump to its start, approve / reject / edit (same dialog, pre-filled) / delete, "add at playhead", "approve all pending", find quiet stretches, Gemini copy-paste (collapsed) | Yes (same run) | **No** |
+| TE plan saves at once on every change (no save button) | Yes (same run) | **No** |
+| Pure helper `te_preview.dart` (which effects are active at a time, crop, look matrix, badges) | Yes, 9 tests (same run) | n/a |
+Unproven: how the preview overlays line up with the render on a real video; the dragging gesture inside a scrolling page; the marker bar alignment with the slider (approximate). Smart cut is only dimmed in the preview, playback does not skip it. Split screen and Sound are shown as badges only. APK: artifact `dramaflow-apk-branch-119`. Not merged to main. APK artifact `dramaflow-apk-branch-191`.
+
+## TE-28: edit effects directly on the preview
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Tap an effect (list, timeline block or overlay on the picture) to select it; its values are edited right under the preview with sliders (no dialog): zoom, brightness/contrast, freeze seconds, text, size, angle, colour; "start/end ← here" sets the time from the playhead | Yes (CI green, run 44311061814) | **No** |
+| Crop/zoom by pinch (zoom) and drag (move) on the preview itself, only while the playhead is inside that effect | Yes (same run) | **No** |
+| Unproven: pinch/drag inside a scrolling page may fight with the page scroll |  |  |
+
+## TE-29: timeline-editor layout
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Transport row: undo / redo (effect list only, 50 steps), play/pause, time `mm:ss.t / total` | Yes (CI green, run 44431045192) | **No** |
+| Bottom tool row: Text, Arrow, Zoom, Filter, Freeze, Cut add an effect at the playhead in one tap; Picture and Sound open the detail dialog | Yes (same run) | **No** |
+| Multi-track timeline on the original video's time: ruler (tap/drag to move the playhead), Video track (kept pieces), subtitle track, one coloured block per effect (overlapping effects on separate rows), zoom in/out, follows the playhead while playing | Yes (same run) | **No** |
+| `assignLanes` helper | Yes, 2 tests (same run) | n/a |
+NOT built: Border (frame around the video), gradient text box with corner resize handles, Canvas (aspect ratio / background), AI Hook, Voice track in the timeline (narration lives on the edit time, not the original time), dragging block edges to trim, full-screen preview. Border and gradient text need changes in the render engine (native/RenderEngine.kt), which cannot be tested here. APK: `dramaflow-apk-branch-122`. Not merged to main. APK artifact `dramaflow-apk-branch-191`.
+
+## TE-30: more effects (all under Motion Graphics)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Box and Circle: an outline to point at something; drag to move, corner dot to resize (width and height) | Yes (CI green, run 44433026494; Kotlin compiled) | **No** |
+| Spot: the whole picture is dimmed except one window (oval or rounded rectangle); centre button moves it, corner dot resizes | Yes (same run) | **No** |
+| Border: a frame around the whole video, rainbow or one colour, thickness slider; added for the whole video by default | Yes (same run) | **No** |
+| Label with a colourful (violet to pink, gold edge) background, as an option on the text effect | Yes (same run) | **No** |
+| Filter presets (dark mood, bright, high contrast, soft) set brightness/contrast only | Yes (same run) | **No** |
+| Tool row: Box, Circle, Spot, Border added; the detail dialog keeps the values of these effects (they are edited with the sliders under the preview) | Yes (same run) | **No** |
+| Parameter checks (`motionFromParams`) for the new kinds | Yes, 5 tests (same run) | n/a |
+Unproven: the render drawing (native/RenderEngine.kt) of all of these, how closely the preview matches it, and Burmese text on the colourful label background (drawn with StaticLayout). The AI (Gemini) prompt still only suggests label and arrow. NOT built: fade in/out, speed change (slow/fast), transitions between pieces, saturation / black-and-white / warm-cool filters (the render only has brightness and contrast), Canvas (aspect/background), blur or mosaic boxes (deliberately not built: they could be used to hide someone else's watermark). Not merged to main. APK artifact `dramaflow-apk-branch-191`.
+
+## TE-31: more effects (Motion Graphics kinds)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Fade in / Fade out / Flash (dip, white or colour), length slider | Yes (CI green, run 44441551934; Kotlin compiled) | **No** |
+| Vignette (dark edges), Tint (warm / cool / sepia / red / green colour wash), Cinema bars, Shade (dark gradient from top or bottom edge for readable text) | Yes (same run) | **No** |
+| Box / Circle can be filled like a marker | Yes (same run) | **No** |
+| Sticker: tap an emoji, it is added as a big label without background | Yes (same run) | **No** |
+| Tool row is longer (scrolls sideways): Text, Arrow, Box, Circle, Spot, Border, Sticker, Zoom, Filter, Freeze, Cut, Fade in/out, Flash, Tint, Vignette, Bars, Shade, Picture, Sound | Yes (same run) | **No** |
+| Parameter checks + `fadeAlpha` | Yes, 2 more tests (same run) | n/a |
+Unproven: the render drawing of all these (native/RenderEngine.kt: fade uses a changing alpha per frame, the others are full-size pictures, sharing one empty picture when hidden), memory use with many of them on a long 1080p video, emoji drawing in the render text, and the preview showing subtitles above a fade (the render covers them). Whole-video effects (Border, Vignette, Tint, Bars, Shade) are added for the whole video; trim with the start/end buttons. NOT built: black-and-white / saturation (the render has no saturation control), speed change, transitions between pieces, blur / mosaic (not built on purpose: it can hide someone else's watermark), mirror/flip, pitch change. Not merged to main. APK artifact: `dramaflow-apk-branch-126`.
+
+## TE-32: Speed change
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Speed effect (0.25x to 4x, pitch kept) on a time range: tool row "Speed", presets 0.25 / 0.5 / 0.75 / 1.5 / 2 / 3 / 4, slider; detail dialog too | Yes (CI green, run 44476310269; Kotlin compiled after one fix: Media3 1.8 has no `setSpeed`, so `SpeedChangeEffect` + `SpeedChangingAudioProcessor` are used) | **No** |
+| Compile: the range splits the pieces, the middle gets the speed; output length, overlay/sound/split times and subtitles follow the speed (`VideoPiece.speed`, never saved in the saved timeline) | Yes, 6 tests (same run) | n/a |
+| Preview plays at that speed while the playhead is inside the range, badge shows the speed | Yes (same run) | **No** |
+Unproven (all of it on a phone): the render result (picture and sound staying in sync at other speeds, the blurred background copy matching the length, very slow 0.25x on long ranges), the preview speed switching. Narration is placed on the OUTPUT time: after adding a Speed effect, re-check where the voices sit ("fit video to voices" is not redone automatically). Not merged to main. APK artifact `dramaflow-apk-branch-130`.
+
+## TE-33: Subtitle Studio as a hub (Quick lane, SRT edit/check, SRT split)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Subtitle Studio has three tabs along the bottom (icons): edit / check, Quick lane (SRT you already have to an MP4), split video + SRT into parts | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+| Home: the separate "Quick lane" and "SRT split" tiles are removed; the Subtitle Studio tile opens the hub | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+| Less text: icon buttons (video/SRT pick, undo, shift, save, per-part SRT/MP4), count + warning chip instead of sentences, short hints | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+| Behaviour kept: all functions of the three old screens still exist; the editor reloads the SRT when you come back to its tab, the split tab reloads after the SRT was changed | Yes (CI green, run 44523463164; analyze, tests and Kotlin build passed) | **No** |
+Unproven (phone): that all three tabs work inside one screen (render panel and long split runs keep running when switching tabs because the tabs stay alive), icons being understandable without text (tooltips on long-press), the editor reloading correctly after the quick lane brings in a new SRT. Not merged to main. APK artifact `dramaflow-apk-branch-191`.
+Review fix for TE-33 (found when re-reading the code, not on a phone): undo in the editor tab did not tell the other tabs the SRT had changed, and the quick lane tab kept showing the old SRT count after edits in the editor tab. Now both tabs read the SRT again when opened after a change (without being rebuilt, so a running split export is not stopped), and undo steps are dropped when the quick lane replaced the SRT. Still **not** phone-tested.
+
+## TE-34: Blur and Mirror / Flip (taken from PR #6 and rebuilt on the current editor)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Blur (Gaussian, strength 0.5–50) and Mirror / Flip (left-right and/or top-bottom) as TE operations on a time range; tool row "Blur" and "Flip", presets and sliders under the preview, detail dialog, timeline blocks | Yes (CI green, run 44579032309; analyze, tests, Kotlin build passed) | **No** |
+| Compile: only approved, valid operations set `blur` / `flipH` / `flipV` on the pieces; they combine with crop, speed and freeze frame (a freeze keeps them); never saved in the plain timeline | Yes (CI green, run 44579032309; analyze, tests, Kotlin build passed) | n/a |
+| Preview: the video is blurred (strength scaled down, an estimate) and mirrored while the playhead is inside the effect; subtitles and labels are NOT mirrored | Yes (CI green, run 44579032309; analyze, tests, Kotlin build passed) | **No** |
+| Render (native): `GaussianBlur` and `ScaleAndRotateTransformation` (scale -1) on video pieces and on freeze stills; overlays and subtitles are added afterwards so they stay readable | Yes (CI green, run 44579032309; analyze, tests, Kotlin build passed) | **No** |
+Taken from PR #6: the compile/JSON design (keys `bl`, `fh`, `fv`), Kotlin effects and the parameter checks. NOT taken: the "global border template" (40 frames) in that PR: it had a Kotlin compile error (`sy` is not defined, so its CI failed) and the current Border effect already covers a frame; and its old Editing-stage UI, which this editor replaced. PR #6 stays open, nothing was merged from it by Git, so it can be closed.
+Not offered to the AI (Gemini) proposals: the AI can only propose cut, crop, freeze, label and arrow. Both effects are described as creative tools only; Mirror / Flip must not be used to get around a platform's copyright check, and the app does not claim it helps with that. Unproven on a phone: the render result of both effects (blur strength in pixels versus the preview estimate, a flip together with crop/zoom, a flip on a blurred-background layout), memory use. Not merged to main. APK artifact `dramaflow-apk-branch-195`.
+
+## TE-35: Blur box (rectangle blur, to censor part of the picture)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| "Censor" in the tool row: a rectangle you drag and resize (corner dot) on the preview, strength slider under it; time range set like any effect; up to 3 at once | Yes (CI green, run 44650568363) | **No** |
+| Preview: the rectangle really blurs what is behind it (strength scaled down, an estimate) | Yes (CI green, run 44650568363) | **No** |
+| Render (native): a second picture of the same video is made with the SAME effects as the piece (speed, filter, zoom, flip), cut down to the rectangle (`Crop`), blurred (`GaussianBlur`), and drawn over its place only while the box is on (`CensorCompositor`, like the split screen). Works with cuts, speed changes and freeze frames | Yes (CI green, run 44650568363) | **No** |
+| Fail-safe: if the box cannot be made (outside the picture, at the same time as Split Screen / blurred background, half of a slow-zoom piece) the render stops with an error and nothing is exported uncensored. Split Screen is dropped (with a note) when a box is used; the blurred background becomes black bars | Yes (CI green, run 44650568363) | n/a |
+Meant for censoring sensitive parts of your own video; the editor says it must not be used to cover someone else's watermark or logo. Unproven on a phone (all of it): that the overlay lands exactly on the preview rectangle (scale / anchor meaning in Media3 1.8), blur strength in the render versus the preview estimate, three decoders at once on a long 1080p video (memory, time), freeze frames inside a box. CHECK THE EXPORT BY EYE before publishing anything. Not merged to main. APK artifact `dramaflow-apk-branch-197`.
+
+## TE-36: Video Index: download all segments at once
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Under the segment list: one "download all" button makes an MP4 of every segment, one after another, and puts each in the Gallery (file name `<project>_segNN_<time>`); a download icon on each row does just that one; progress bar, pause (after the current segment) and stop | Yes (CI green, run 44651575811) | **No** |
+| Options: original sound on/off, 480p / 720p / 1080p (quality follows the source file size) | Yes (CI green, run 44651575811) | **No** |
+Picture and sound of the original only, no subtitles, original ratio. It re-encodes (the same render as the Render stage), so a 10-minute segment takes a while; the original file is never changed. Unproven on a phone: the whole run with many segments (time, heat, storage), keep-alive when the screen turns off, the Gallery save on each Android version, stopping in the middle. Not merged to main. APK artifact `dramaflow-apk-branch-198`.
+
+## TE-37: ready-made Frame templates
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Tool row "Frame" opens a gallery with small pictures of 12 designs (Classic, Double, Gold, Neon, Film strip, Polaroid, Viewfinder, Cinema, Rounded, Dotted, Vintage, Rainbow glow) plus the old plain / rainbow border; tap one to put it on the whole video | Yes (CI green, run 44684055369) | **No** |
+| Under the preview, a design strip switches the design of a selected frame; thickness slider; colour swatches for the designs that take a colour | Yes (CI green, run 44684055369) | **No** |
+| One drawing list (short-side units) is made in Dart and drawn by BOTH the preview and the render (Kotlin canvas), so they look alike; the list is made for the real output size when the render job is built | Yes (CI green, run 44684055369) | **No** |
+Unproven on a phone: how each design looks in the real render (glow blur, dotted line with round caps, the film-strip holes, gold / rainbow gradient), thin lines on a low-resolution output, and that the frame overlay does not hide subtitles badly (subtitles are drawn on top). The designs that cover the edges (Film, Polaroid, Cinema, Vintage) hide a strip of the picture; they do not shrink it. Frames are drawn by the app only; no pictures or fonts from other places are used. Not merged to main. APK artifact `dramaflow-apk-branch-199`.
+
+## TE-38: "Aurora glass" look + Video Index download options
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| New theme: indigo base with soft violet / cyan / pink glows behind every page, glass cards (light veil + bright edge + shadow), themed dialogs, sheets, sliders, switches, menus | Yes (CI green, run 44685765147) | **No** |
+| New bottom bar: the chosen tab grows into a violet pill with its name; press-shrink on buttons, tiles and chips; tiles fade in one after another | Yes (CI green, run 44685765147) | **No** |
+| Home re-laid out: header with logo, "continue" glass card (or a start card), Studio tiles 01–05 with icon chips, Tools as chips (the old "More Tools" sheet is gone), glass project rows | Yes (CI green, run 44685765147) | **No** |
+| Video Index segment download now also has output ratio and video quality (Mbps), like the SRT split screen | Yes (CI green, run 44685765147) | **No** |
+Unproven on a phone: how the glows, glass blur and nav pill look and perform on a real device (the blurred hero card is the only heavy part), text contrast, and the animation smoothness. Only Home and the shared widgets were redesigned by hand; other screens get the new look through the theme and shared cards, so some may still look plain. Phone test found a bug in this APK (201): the bottom bar grew to the whole screen height and hid every page. Fixed (fixed bar height), CI green run 44723159162, APK `dramaflow-apk-branch-203`; the fix is not yet phone-tested. Not merged to main.
+
+## TE-39: Studio pages opened straight from Home
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Video Index, Recap Studio, TTS / MP3 and Render Center now open as their own full page (like Subtitle Studio) instead of jumping to the Workflow tab; the page shows the same panel as the Workflow tab, the project header, and a "stage done" switch | Yes (CI green, run 44727168604) | **No** |
+| Home Studio grid now has 6 tiles: Video Index, Recap Studio, Scene Studio, TTS / MP3, Subtitle Studio, Video Editor; Render Center is the wide tile; step numbers removed | Yes (CI green, run 44727168604) | **No** |
+The Workflow tab still exists and shows all stages in order. Scene Studio is the old Scene Recap screen, only renamed and moved up to the grid. Unproven on a phone: that every panel behaves the same on its own page as inside the Workflow tab. Not merged to main. APK artifact `dramaflow-apk-branch-205`.

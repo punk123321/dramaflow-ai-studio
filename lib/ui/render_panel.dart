@@ -16,6 +16,7 @@ import '../data/project.dart';
 import '../platform/render_channel.dart';
 import '../state/project_store.dart';
 import '../state/render_store.dart';
+import 'widgets.dart';
 
 String _mb(int bytes) => '${(bytes / 1048576).toStringAsFixed(bytes < 10485760 ? 1 : 0)} MB';
 
@@ -45,6 +46,7 @@ class _RenderPanelState extends State<RenderPanel> {
   int _free = 0;
   bool _videoOk = true;
   bool _markedDone = false;
+  DateTime? _t0; // when the running render was first seen, for the time-left guess
 
   int get _pid => widget.project.id!;
 
@@ -84,6 +86,7 @@ class _RenderPanelState extends State<RenderPanel> {
     var tl = _tl.copyWith(pieces: te.pieces, voices: [..._tl.voices, ...te.sounds]);
     var overlays = [for (final o in te.overlays) o.toJson()];
     var splits = [for (final x in te.splits) x.toJson()];
+    final censors = [for (final x in te.censors) x.toJson()];
     if (sample) {
       tl = sampleTimeline(tl);
       overlays = clipWindows(overlays, sampleMs);
@@ -95,6 +98,7 @@ class _RenderPanelState extends State<RenderPanel> {
       timeline: tl,
       overlays: overlays,
       splits: splits,
+      censors: censors,
       sourceSubtitles: _subs,
       settings: _eff,
       aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
@@ -131,30 +135,48 @@ class _RenderPanelState extends State<RenderPanel> {
       });
     }
 
+    String? left;
+    if (mine) {
+      _t0 ??= DateTime.now();
+      final pct = rs.percent;
+      if (pct >= 5) {
+        final ms = (DateTime.now().difference(_t0!).inMilliseconds * (100 - pct) / pct).round();
+        left = _dur(ms);
+      }
+    } else {
+      _t0 = null;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Stage 4 မှာ စီစဉ်ထားတာကို MP4 အသစ်အဖြစ် ထုတ်မယ်။ မူရင်းဗီဒီယိုကို မထိပါဘူး။ ထုတ်နေတုန်း app ကို ဖွင့်ထားပါ (screen ကို ဖွင့်ထားပေးမယ်)။',
-          style: TextStyle(color: DfColors.muted, fontSize: 13),
-        ),
+        const InfoHint('Stage 4 မှာ စီစဉ်ထားတာကို MP4 အသစ်အဖြစ် ထုတ်မယ်။ မူရင်းဗီဒီယိုကို မထိပါဘူး။ ထုတ်နေတုန်း app ကို ဖွင့်ထားပါ (screen ကို ဖွင့်ထားပေးမယ်)။'),
         const SizedBox(height: 10),
-        _row('အရှည်', dur > 0 ? _dur(dur) : '—'),
-        _row('အပိုင်း', '${_tl.pieces.length}'),
-        if (te.applied.isNotEmpty) _row('TE operation', '${te.applied.length} ခု ပါမယ်'),
-        for (final n in te.infos)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('TE: $n', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+        DfCard(
+          title: 'ထုတ်ဖို့ အဆင်သင့်လား',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CheckLine('မူရင်းဗီဒီယို ဖွင့်လို့ရ', ok: p.hasVideo && _videoOk),
+              CheckLine('အပိုင်း ${_tl.pieces.length} ခု', ok: _tl.pieces.isNotEmpty),
+              CheckLine('အသံ ${_tl.voices.length} ခု · music ${_tl.music == null ? 'မရှိ' : 'ရှိ'}', ok: _tl.voices.isNotEmpty),
+              CheckLine('စာတန်း ${_tl.burnSubtitles ? 'ထည့်ရိုက်မယ်' : 'မထည့်'}', ok: _tl.burnSubtitles),
+              const SizedBox(height: 6),
+              _row('အရှည်', dur > 0 ? _dur(dur) : '—'),
+              if (te.applied.isNotEmpty) _row('TE operation', '${te.applied.length} ခု ပါမယ်'),
+              for (final n in te.infos)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('TE: $n', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+                ),
+              for (final n in te.notes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('TE: $n', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
+                ),
+            ],
           ),
-        for (final n in te.notes)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('TE: $n', style: const TextStyle(color: DfColors.warn, fontSize: 12.5)),
-          ),
-        _row('အသံ / music', '${_tl.voices.length} / ${_tl.music == null ? 'မရှိ' : 'ရှိ'}'),
-        _row('စာတန်း', _tl.burnSubtitles ? 'ထည့်ရိုက်မယ်' : 'မထည့်'),
-        const SizedBox(height: 8),
+        ),
         const Text('Platform အတွက် အမြန်ရွေး', style: TextStyle(color: DfColors.muted, fontSize: 13)),
         const SizedBox(height: 4),
         Wrap(spacing: 6, runSpacing: 6, children: [
@@ -165,13 +187,7 @@ class _RenderPanelState extends State<RenderPanel> {
               onPressed: mine ? null : () => setState(() => _settings = pr.settings),
             ),
         ]),
-        const Padding(
-          padding: EdgeInsets.only(top: 4),
-          child: Text(
-            'ဒါတွေက အသုံးများတဲ့ setting တွေပါ။ Platform ရဲ့ လက်ရှိစည်းမျဉ်းကို app က မစစ်ပါဘူး။ တင်ခါနီး ကိုယ်တိုင် စစ်ပါ။',
-            style: TextStyle(color: DfColors.muted, fontSize: 11.5),
-          ),
-        ),
+        const InfoHint('ဒါတွေက အသုံးများတဲ့ setting တွေပါ။ Platform ရဲ့ လက်ရှိစည်းမျဉ်းကို app က မစစ်ပါဘူး။ တင်ခါနီး ကိုယ်တိုင် စစ်ပါ။', label: 'Preset အကြောင်း'),
         const SizedBox(height: 8),
         DropdownButtonFormField<OutRatio>(
           key: ValueKey('r${_settings.ratio.name}'),
@@ -190,16 +206,21 @@ class _RenderPanelState extends State<RenderPanel> {
             onChanged: mine ? null : (v) => setState(() => _settings = _settings.copyWith(fill: v)),
           ),
           if (_settings.fill == FillMode.blur)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                _tl.pieces.any((p) => p.freeze) || _plan.ops.any((o) => o.tool == TransformTool.splitScreen && o.runnable)
-                    ? '⚠ Freeze Frame ဒါမှမဟုတ် Split Screen ပါနေလို့ ဒီတစ်ခါ အနက်ရောင်အကွက်နဲ့ ထုတ်မယ်။'
-                    : 'Blur နောက်ခံက မူရင်းဗီဒီယိုရဲ့ ကိုယ်ပိုင်ပုံကို ချဲ့ပြီး မှုန်ထားတာပါ။ အလွတ်နေရာဖြည့်ဖို့ပဲ၊ ဘာကိုမှ ဖုံးဖို့ မဟုတ်ပါ။ စမ်းသပ်အဆင့်ပါ၊ ဖုန်းမှာ မစမ်းရသေးပါ။',
-                style: const TextStyle(color: DfColors.muted, fontSize: 11.5),
-              ),
+            InfoHint(
+              _tl.pieces.any((p) => p.freeze) || _plan.ops.any((o) => o.tool == TransformTool.splitScreen && o.runnable)
+                  ? '⚠ Freeze Frame ဒါမှမဟုတ် Split Screen ပါနေလို့ ဒီတစ်ခါ အနက်ရောင်အကွက်နဲ့ ထုတ်မယ်။'
+                  : 'Blur နောက်ခံက မူရင်းဗီဒီယိုရဲ့ ကိုယ်ပိုင်ပုံကို ချဲ့ပြီး မှုန်ထားတာပါ။ အလွတ်နေရာဖြည့်ဖို့ပဲ၊ ဘာကိုမှ ဖုံးဖို့ မဟုတ်ပါ။ စမ်းသပ်အဆင့်ပါ၊ ဖုန်းမှာ မစမ်းရသေးပါ။',
+              label: 'Blur အကြောင်း',
             ),
         ],
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('အဆင့်မြင့် setting', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: Text('${_settings.height}p · ${_settings.fps} fps · ${qualityLabel(_settings.videoKbps)}', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+            children: [
         const SizedBox(height: 8),
         Row(children: [
           Expanded(
@@ -238,18 +259,17 @@ class _RenderPanelState extends State<RenderPanel> {
           items: [for (final k in qualityChoices) DropdownMenuItem(value: k, child: Text(qualityLabel(k)))],
           onChanged: mine ? null : (v) => setState(() => _settings = _settings.copyWith(videoKbps: v)),
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            _eff.sourceBps > 0
-                ? 'မူရင်းဖိုင် ≈ ${(_eff.sourceBps / 1000000).toStringAsFixed(1)} Mbps။ Auto က ဒါနဲ့ ကပ်ပြီး ထုတ်မယ်၊ ဖိုင်ကြီးမသွားဘူး။ ဂဏန်းနိမ့်လေ ဖိုင်သေးလေ (ပုံကြည်လင်မှု ကျနိုင်)။'
-                : 'မူရင်းဖိုင် bitrate မသိလို့ Auto က အရွယ်အလိုက် ပုံမှန်တန်ဖိုး သုံးမယ်။',
-            style: const TextStyle(color: DfColors.muted, fontSize: 11.5),
-          ),
+        InfoHint(
+          _eff.sourceBps > 0
+              ? 'မူရင်းဖိုင် ≈ ${(_eff.sourceBps / 1000000).toStringAsFixed(1)} Mbps။ Auto က ဒါနဲ့ ကပ်ပြီး ထုတ်မယ်၊ ဖိုင်ကြီးမသွားဘူး။ ဂဏန်းနိမ့်လေ ဖိုင်သေးလေ (ပုံကြည်လင်မှု ကျနိုင်)။'
+              : 'မူရင်းဖိုင် bitrate မသိလို့ Auto က အရွယ်အလိုက် ပုံမှန်တန်ဖိုး သုံးမယ်။',
+          label: 'အရည်အသွေး အကြောင်း',
         ),
         const SizedBox(height: 8),
+            ],
+          ),
+        ),
         _row('ခန့်မှန်း ဖိုင်အရွယ်', est > 0 ? '≈ ${_mb(est)}' : '—'),
-        _row('ဖုန်းမှာ ကျန်နေရာ', _free > 0 ? _mb(_free) : '—'),
         if (lowSpace)
           const Padding(
             padding: EdgeInsets.only(top: 4),
@@ -268,16 +288,34 @@ class _RenderPanelState extends State<RenderPanel> {
           const Padding(padding: EdgeInsets.only(top: 6), child: Text('Render ကို ရပ်လိုက်ပါပြီ။ ဖိုင်အပျက် မကျန်ပါ။', style: TextStyle(fontSize: 13))),
         const SizedBox(height: 8),
         if (mine) ...[
-          LinearProgressIndicator(value: rs.percent <= 0 ? null : rs.percent / 100),
-          const SizedBox(height: 6),
-          Text('ထုတ်နေတယ် ${rs.percent}%', style: const TextStyle(fontSize: 13)),
-          const SizedBox(height: 6),
+          DfCard(
+            child: Row(
+              children: [
+                ProgressRing(percent: rs.percent),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('ထုတ်နေတယ်…', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      const Text('ခဏစောင့်ပါ', style: TextStyle(color: DfColors.muted)),
+                      if (left != null) ...[
+                        const SizedBox(height: 6),
+                        Text('ကျန်ခန့် $left (ခန့်မှန်းချက်)', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           OutlinedButton(onPressed: rs.cancel, child: const Text('ရပ်မယ်')),
         ] else
-          FilledButton.icon(
+          GradientButton(
             onPressed: (blockers.isNotEmpty || otherRunning) ? null : _start,
-            icon: const Icon(Icons.movie_creation_outlined, size: 18),
-            label: Text(otherRunning ? 'တခြား project render လုပ်နေဆဲ' : 'MP4 ထုတ်မယ်'),
+            icon: Icons.movie_creation_outlined,
+            label: otherRunning ? 'တခြား project render လုပ်နေဆဲ' : 'MP4 ထုတ်မယ်',
           ),
         if (!mine)
           Padding(

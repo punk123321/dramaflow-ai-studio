@@ -1,14 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../core/render_plan.dart';
 import '../core/segments.dart';
 import '../core/theme.dart';
+import '../core/timeline.dart';
 import '../data/project.dart';
+import '../platform/render_channel.dart';
 import '../platform/video_import.dart';
 import '../state/project_store.dart';
+import '../state/render_store.dart';
 
 /// Step 1 of the workflow: pick the original video, split it into segments,
 /// and keep the index. The original video file is only read, never changed.
@@ -30,6 +35,19 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
   /// Minutes per segment. 0 means "custom".
   int _preset = 10;
   final _custom = TextEditingController(text: '12');
+
+  // Downloading the segments as separate MP4 files.
+  bool _keepSound = true;
+  RenderSettings _rset = const RenderSettings();
+  bool _running = false;
+  bool _stop = false;
+  bool _paused = false;
+  int _done = 0;
+  int _total = 0;
+  String _label = '';
+  Set<int> _finished = {};
+  String? _msg;
+  bool _msgErr = false;
 
   @override
   void initState() {
@@ -157,9 +175,218 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
     await _save(next);
   }
 
+  Future<void> _idle(RenderStore rs) {
+    if (!rs.running) return Future.value();
+    final c = Completer<void>();
+    void l() {
+      if (!rs.running && !c.isCompleted) {
+        rs.removeListener(l);
+        c.complete();
+      }
+    }
+
+    rs.addListener(l);
+    return c.future;
+  }
+
+  /// Makes an MP4 of each chosen segment (one after another, picture and sound
+  /// of the original, no subtitles) and puts it in the Gallery. The original
+  /// video is only read.
+  Future<void> _download(List<int> indexes) async {
+    final rs = context.read<RenderStore>();
+    final p = widget.project;
+    if (!p.hasVideo || rs.running || indexes.isEmpty) return;
+    setState(() {
+      _running = true;
+      _stop = false;
+      _paused = false;
+      _done = 0;
+      _total = indexes.length;
+      _label = indexes.length == 1 ? '#${indexes.first + 1}' : '';
+      _finished = {..._finished}..removeAll(indexes);
+      _msg = null;
+      _msgErr = false;
+    });
+    final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final width = _specs.length >= 100 ? 3 : 2;
+    var ok = 0;
+    var saved = 0;
+    if (indexes.length > 1) await RenderChannel.keepAlive(true, text: 'Segment ${indexes.length} ခု');
+    for (final i in indexes) {
+      if (_paused && mounted && !_stop) await RenderChannel.keepAlive(true, text: 'ခဏရပ်ထားတယ် (#${i + 1} မစသေး)');
+      while (_paused && mounted && !_stop) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      if (!mounted || _stop) break;
+      final spec = _specs[i];
+      final name = '${safeFileName(p.name)}_seg${(i + 1).toString().padLeft(width, '0')}_$stamp';
+      final tl = const Timeline().copyWith(
+        pieces: [VideoPiece(spec.startMs, spec.endMs)],
+        originalVolume: _keepSound ? 1.0 : 0.0,
+        burnSubtitles: false,
+      );
+      final job = buildRenderJob(
+        name: name,
+        videoUri: p.sourceVideoUri!,
+        timeline: tl,
+        sourceSubtitles: const [],
+        settings: _rset.copyWith(sourceBps: sourceBitsPerSecond(p.videoSize, p.videoDurationMs)),
+        aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
+      );
+      await rs.start(p.id!, name, job);
+      await _idle(rs);
+      if (rs.error != null || rs.canceled) {
+        if (mounted) setState(() {
+          _msg = '#${i + 1} မှာ ရပ်သွားတယ်: ${rs.error ?? 'ရပ်လိုက်တယ်'}';
+          _msgErr = true;
+        });
+        break;
+      }
+      ok++;
+      final done = rs.lastDone;
+      if (done != null) {
+        try {
+          await RenderChannel.saveToGallery(done.path, name);
+          saved++;
+        } catch (_) {
+          if (mounted) setState(() {
+            _msg = '#${i + 1} ကို Gallery ထဲ မသိမ်းနိုင်ပါ (နေရာမလောက်/Android 9)။ Render stage > Save မှာ ကိုယ်တိုင် သိမ်းပါ။';
+            _msgErr = true;
+          });
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _done = ok;
+          _finished = {..._finished, i};
+        });
+      }
+    }
+    await RenderChannel.keepAlive(false);
+    if (!mounted) return;
+    setState(() {
+      _running = false;
+      _paused = false;
+      if (ok == indexes.length && !_msgErr) _msg = 'Segment $ok ခု ထုတ်ပြီး — Gallery ထဲ $saved ခု သိမ်းပြီး';
+    });
+  }
+
   Future<void> _remove(int index) async {
     final next = [..._specs]..removeAt(index);
     await _save(next);
+  }
+
+  Widget _downloadCard() {
+    final rs = context.watch<RenderStore>();
+    final busyElsewhere = rs.running && !_running;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: DfColors.raise, borderRadius: BorderRadius.circular(12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Icon(Icons.download_for_offline_outlined, size: 20, color: DfColors.muted),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Segment တွေကို MP4 အဖြစ် download', style: TextStyle(fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(
+            child: DropdownButtonFormField<OutRatio>(
+              key: ValueKey('vr${_rset.ratio.name}'),
+              initialValue: _rset.ratio,
+              decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.aspect_ratio, size: 20)),
+              items: [for (final r in OutRatio.values) DropdownMenuItem(value: r, child: Text(r.label, style: const TextStyle(fontSize: 13)))],
+              onChanged: _running ? null : (v) => setState(() => _rset = _rset.copyWith(ratio: v)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 100,
+            child: DropdownButtonFormField<int>(
+              key: ValueKey('vh${_rset.height}'),
+              initialValue: _rset.height,
+              decoration: const InputDecoration(isDense: true),
+              items: const [
+                DropdownMenuItem(value: 480, child: Text('480p')),
+                DropdownMenuItem(value: 720, child: Text('720p')),
+                DropdownMenuItem(value: 1080, child: Text('1080p')),
+              ],
+              onChanged: _running ? null : (v) => setState(() => _rset = _rset.copyWith(height: v)),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          key: ValueKey('vq${_rset.videoKbps}'),
+          initialValue: _rset.videoKbps,
+          decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.high_quality_outlined, size: 20)),
+          items: [for (final k in qualityChoices) DropdownMenuItem(value: k, child: Text(qualityLabel(k)))],
+          onChanged: _running ? null : (v) => setState(() => _rset = _rset.copyWith(videoKbps: v)),
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          secondary: Icon(_keepSound ? Icons.volume_up_outlined : Icons.volume_off_outlined, color: DfColors.muted),
+          title: Text(_keepSound ? 'မူရင်းအသံ ပါမယ်' : 'အသံ မပါ', style: const TextStyle(fontSize: 14)),
+          value: _keepSound,
+          onChanged: _running ? null : (v) => setState(() => _keepSound = v),
+        ),
+        const SizedBox(height: 6),
+        if (_running) ...[
+          LinearProgressIndicator(value: _total == 0 ? null : (_done + rs.percent / 100) / _total),
+          const SizedBox(height: 4),
+          Text(_total == 1 ? '$_label ${rs.percent}%' : '${_done + 1}/$_total · ${rs.percent}%', style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 6),
+          Row(children: [
+            if (_total > 1)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _paused = !_paused),
+                  icon: Icon(_paused ? Icons.play_arrow : Icons.pause, size: 18),
+                  label: Text(_paused ? 'ဆက်' : 'ခဏရပ်'),
+                ),
+              ),
+            if (_total > 1) const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _stop = true;
+                    _paused = false;
+                  });
+                  rs.cancel();
+                },
+                icon: const Icon(Icons.stop, size: 18),
+                label: const Text('ရပ်'),
+              ),
+            ),
+          ]),
+          if (_paused)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text('လက်ရှိ segment ပြီးရင် ရပ်ထားမယ်', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+            ),
+        ] else
+          FilledButton.icon(
+            onPressed: (busyElsewhere || _specs.isEmpty) ? null : () => _download([for (var i = 0; i < _specs.length; i++) i]),
+            icon: const Icon(Icons.download),
+            label: Text('အားလုံး download (${_specs.length})'),
+          ),
+        if (_msg != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_msg!, style: TextStyle(color: _msgErr ? DfColors.danger : DfColors.ok, fontSize: 13)),
+          ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text(
+            'ဗီဒီယိုကို ပြန်ထုတ် (re-encode) ရတာမို့ အချိန်ကြာမယ်။ မူရင်းဖိုင်ကို မပြင်ပါ၊ စာတန်း မပါပါ။ ထုတ်တိုင်း Gallery ထဲ တန်းသိမ်းမယ်။ အစက ခဏရပ်ရင် လက်ရှိ segment ပြီးမှ ရပ်မယ်။',
+            style: TextStyle(color: DfColors.muted, fontSize: 12),
+          ),
+        ),
+      ]),
+    );
   }
 
   @override
@@ -240,8 +467,10 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
             for (var i = 0; i < _specs.length; i++) _SegmentRow(
               number: i + 1,
               spec: _specs[i],
-              onEdit: () => _edit(i),
-              onDelete: () => _remove(i),
+              done: _finished.contains(i),
+              onDownload: (_running || context.watch<RenderStore>().running) ? null : () => _download([i]),
+              onEdit: _running ? null : () => _edit(i),
+              onDelete: _running ? null : () => _remove(i),
             ),
             const SizedBox(height: 6),
             OutlinedButton.icon(
@@ -249,6 +478,7 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
               icon: const Icon(Icons.add),
               label: const Text('Segment ထည့်မယ်'),
             ),
+            if (_specs.isNotEmpty) _downloadCard(),
             if (_specs.isNotEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
@@ -324,12 +554,16 @@ class _SegmentRow extends StatelessWidget {
     required this.spec,
     required this.onEdit,
     required this.onDelete,
+    required this.onDownload,
+    this.done = false,
   });
 
   final int number;
   final SegmentSpec spec;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final bool done;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final VoidCallback? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -348,6 +582,11 @@ class _SegmentRow extends StatelessWidget {
               '${formatTime(spec.startMs)} – ${formatTime(spec.endMs)}  (${formatTime(spec.lengthMs)})',
               style: const TextStyle(fontSize: 14),
             ),
+          ),
+          IconButton(
+            tooltip: done ? 'Download ပြီး (ထပ်ဆွဲမယ်)' : 'Download',
+            onPressed: onDownload,
+            icon: Icon(done ? Icons.download_done : Icons.download_outlined, size: 20, color: done ? DfColors.ok : null),
           ),
           IconButton(
             tooltip: 'ပြင်မယ်',

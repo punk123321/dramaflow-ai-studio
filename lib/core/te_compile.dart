@@ -1,3 +1,4 @@
+import 'te_frames.dart';
 import 'timeline.dart';
 import 'transformative_plan.dart';
 
@@ -11,7 +12,7 @@ import 'transformative_plan.dart';
 /// reported as "not rendered" so nothing is silently skipped.
 
 class CompileResult {
-  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const [], this.sounds = const [], this.splits = const []]);
+  const CompileResult(this.pieces, this.applied, this.notes, [this.infos = const [], this.overlays = const [], this.sounds = const [], this.splits = const [], this.censors = const []]);
 
   final List<VideoPiece> pieces;
 
@@ -34,6 +35,10 @@ class CompileResult {
 
   /// Split-screen windows on the OUTPUT time (experimental).
   final List<SplitItem> splits;
+
+  /// Blur boxes (censor). Their times are on the ORIGINAL video; the render
+  /// finds the matching part of every piece itself.
+  final List<CensorItem> censors;
 }
 
 /// Shortest piece the compiler will create. Anything shorter is folded into
@@ -78,7 +83,39 @@ class SplitItem {
 /// Shortest split-screen window.
 const minSplitMs = 1000;
 
-enum MotionKind { label, arrow, image }
+/// label / arrow / image as before. New: box and circle (an outline to point
+/// at something), spot (the whole picture is dimmed except one window) and
+/// frame (a border around the whole picture). Whole-picture looks: fade
+/// (to/from a colour, or a flash), vignette (dark edges), tint (a colour wash),
+/// bars (black bars top and bottom) and shade (a dark gradient from the top or
+/// bottom edge, for readable text). For these, `size` is the strength.
+enum MotionKind { label, arrow, image, box, circle, spot, frame, fade, vignette, tint, bars, shade, blurBox }
+
+bool _isShape(MotionKind k) => k == MotionKind.box || k == MotionKind.circle || k == MotionKind.spot || k == MotionKind.blurBox;
+
+/// Blur strength limits of a blur box (censor).
+const double minCensorBlur = 5;
+const double maxCensorBlur = 60;
+
+/// The most blur boxes at once; each one needs one more video decoder.
+const maxCensors = 3;
+
+/// A rectangle of the picture that is blurred (to censor something) between
+/// [startMs] and [endMs] of the ORIGINAL video. [x], [y]: centre, [size]: width
+/// as a share of the picture width, [aspect]: height divided by width.
+class CensorItem {
+  const CensorItem({required this.startMs, required this.endMs, required this.x, required this.y, required this.size, required this.aspect, required this.strength});
+
+  final int startMs;
+  final int endMs;
+  final double x;
+  final double y;
+  final double size;
+  final double aspect;
+  final double strength;
+
+  Map<String, Object?> toJson() => {'s': startMs, 'e': endMs, 'x': x, 'y': y, 'w': size, 'ar': aspect, 'str': strength};
+}
 
 /// A text label, arrow or picture (picture-in-picture, image only) shown on the finished video between [startMs] and
 /// [endMs] of the OUTPUT time. [x], [y]: centre, 0 to 1 from the top-left.
@@ -97,6 +134,14 @@ class MotionItem {
     this.path = '',
     this.angle = 0,
     this.background = true,
+    this.aspect = 0.5,
+    this.gradient = false,
+    this.round = true,
+    this.dir = 'dip',
+    this.top = false,
+    this.fill = false,
+    this.strength = 25,
+    this.template = 0,
   });
 
   final MotionKind kind;
@@ -113,6 +158,30 @@ class MotionItem {
   final double angle;
   final bool background;
 
+  /// Height divided by width (box, circle, spot).
+  final double aspect;
+
+  /// Label: colourful background. Frame: rainbow border.
+  final bool gradient;
+
+  /// Spot: oval window (true) or rounded rectangle (false).
+  final bool round;
+
+  /// Fade: 'in' (from the colour), 'out' (to the colour) or 'dip' (out and back).
+  final String dir;
+
+  /// Shade: from the top edge (true) or the bottom edge (false).
+  final bool top;
+
+  /// Box / circle: filled with a see-through colour (like a marker).
+  final bool fill;
+
+  /// Blur box: blur strength.
+  final double strength;
+
+  /// Frame: a ready-made frame (see te_frames.dart), 0 = the plain line / rainbow border.
+  final int template;
+
   MotionItem withTime(int s, int e) => MotionItem(
         kind: kind,
         startMs: s,
@@ -125,6 +194,14 @@ class MotionItem {
         path: path,
         angle: angle,
         background: background,
+        aspect: aspect,
+        gradient: gradient,
+        round: round,
+        dir: dir,
+        top: top,
+        fill: fill,
+        strength: strength,
+        template: template,
       );
 
   Map<String, Object?> toJson() => {
@@ -139,6 +216,14 @@ class MotionItem {
         if (kind == MotionKind.image) 'path': path,
         if (kind == MotionKind.label) 'bg': background,
         if (kind == MotionKind.arrow) 'angle': angle,
+        if (_isShape(kind)) 'ar': aspect,
+        if (kind == MotionKind.box || kind == MotionKind.circle) 'fill': fill,
+        if (kind == MotionKind.fade) 'dir': dir,
+        if (kind == MotionKind.shade) 'top': top,
+        if (kind == MotionKind.spot) 'round': round,
+        if (kind == MotionKind.blurBox) 'str': strength,
+        if (kind == MotionKind.frame && template > 0) 'tpl': template,
+        if (kind == MotionKind.label || kind == MotionKind.frame) 'grad': gradient,
       };
 }
 
@@ -153,7 +238,18 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
   final color = p['color'];
   if (kind == null || x is! num || y is! num || size is! num || color is! int) return null;
   if (x < 0 || x > 1 || y < 0 || y > 1) return null;
-  if (size < 0.03 || size > (kind == MotionKind.image ? 0.6 : 0.4)) return null;
+  final minSize = kind == MotionKind.frame ? 0.005 : 0.03;
+  final maxSize = switch (kind) {
+    MotionKind.image => 0.6,
+    MotionKind.box || MotionKind.circle || MotionKind.spot || MotionKind.blurBox => 0.95,
+    MotionKind.fade || MotionKind.vignette || MotionKind.tint || MotionKind.shade => 0.95,
+    MotionKind.bars => 0.45,
+    MotionKind.frame => 0.1,
+    _ => 0.4,
+  };
+  if (size < minSize || size > maxSize) return null;
+  final ar = p['ar'];
+  if (ar != null && (ar is! num || ar < 0.1 || ar > 4)) return null;
   var text = '';
   var path = '';
   if (kind == MotionKind.image) {
@@ -166,6 +262,8 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     if (t is! String || t.trim().isEmpty || t.length > maxLabelChars) return null;
     text = t.trim();
   }
+  final st = p['strength'];
+  if (kind == MotionKind.blurBox && st != null && (st is! num || !st.isFinite || st < minCensorBlur || st > maxCensorBlur)) return null;
   final a = p['angle'];
   return MotionItem(
     kind: kind,
@@ -179,6 +277,14 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     path: path,
     angle: a is num ? a.toDouble() % 360 : 0,
     background: p['bg'] != false,
+    aspect: ar is num ? ar.toDouble() : (kind == MotionKind.circle ? 1.0 : 0.5),
+    gradient: p['grad'] == true,
+    round: p['round'] != false,
+    dir: const {'in', 'out', 'dip'}.contains(p['dir']) ? p['dir'] as String : 'dip',
+    top: p['top'] == true,
+    fill: p['fill'] == true,
+    strength: st is num ? st.toDouble() : 25,
+    template: p['tpl'] is int && frameTemplateById(p['tpl'] as int) != null ? p['tpl'] as int : 0,
   );
 }
 
@@ -199,8 +305,8 @@ List<(int, int)> outputRanges(List<VideoPiece> pieces, int s, int e) {
       final lo = s > p.startMs ? s : p.startMs;
       final hi = e < p.endMs ? e : p.endMs;
       if (hi > lo) {
-        a = at + (lo - p.startMs);
-        b = at + (hi - p.startMs);
+        a = at + ((lo - p.startMs) / p.speed).round();
+        b = at + ((hi - p.startMs) / p.speed).round();
       }
     }
     if (a != null && b != null) {
@@ -253,6 +359,32 @@ LookAdjust? lookFromParams(Map<String, Object?> p) {
   return l.isNeutral ? null : l;
 }
 
+/// Blur strength from operation parameters (0.5 to 50). Null when not usable.
+double? blurFromParams(Map<String, Object?> p) {
+  final v = p['strength'];
+  if (v is! num || !v.isFinite || v < minBlur || v > maxBlur) return null;
+  return double.parse(v.toStringAsFixed(1));
+}
+
+/// Flip directions from operation parameters. Null when neither is on.
+({bool h, bool v})? flipFromParams(Map<String, Object?> p) {
+  final h = p['horizontal'] == true;
+  final v = p['vertical'] == true;
+  return h || v ? (h: h, v: v) : null;
+}
+
+/// Slowest and fastest playback a Speed operation may ask for.
+const minSpeed = 0.25;
+const maxSpeed = 4.0;
+
+/// Speed from operation parameters. Null when not usable or when it is 1 (nothing to do).
+double? speedFromParams(Map<String, Object?> p) {
+  final v = p['speed'];
+  if (v is! num || !v.isFinite || v < minSpeed || v > maxSpeed) return null;
+  final d = double.parse(v.toStringAsFixed(2));
+  return d == 1.0 ? null : d;
+}
+
 const minFreezeMs = 500;
 const maxFreezeMs = 30000;
 
@@ -279,6 +411,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   final approved = [for (final o in ops) if (o.status == OpStatus.approved) o];
   var cutMs = 0;
   final crops = <TransformOp>[];
+  final speeds = <TransformOp>[];
   final freezes = <TransformOp>[];
   final motions = <TransformOp>[];
   final cuts = <TransformOp>[];
@@ -288,8 +421,13 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     final name = op.tool.title;
     if (!op.valid) {
       notes.add('$name — အချိန် မမှန်လို့ ချန်ထားတယ်');
-    } else if (op.tool == TransformTool.cropReframe || op.tool == TransformTool.colorGrade) {
+    } else if (op.tool == TransformTool.cropReframe ||
+        op.tool == TransformTool.colorGrade ||
+        op.tool == TransformTool.blur ||
+        op.tool == TransformTool.mirrorFlip) {
       crops.add(op);
+    } else if (op.tool == TransformTool.speedChange) {
+      speeds.add(op);
     } else if (op.tool == TransformTool.freezeFrame) {
       freezes.add(op);
     } else if (op.tool == TransformTool.motionGraphics || op.tool == TransformTool.pictureInPicture) {
@@ -338,15 +476,30 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   for (final op in crops) {
     final name = op.tool.title;
     final isLook = op.tool == TransformTool.colorGrade;
-    final crop = isLook ? null : cropFromParams(op.params);
+    final isBlur = op.tool == TransformTool.blur;
+    final isFlip = op.tool == TransformTool.mirrorFlip;
+    final isCrop = !isLook && !isBlur && !isFlip;
+    final crop = isCrop ? cropFromParams(op.params) : null;
     final look = isLook ? lookFromParams(op.params) : null;
-    if (isLook ? look == null : crop == null) {
+    final blur = isBlur ? blurFromParams(op.params) : null;
+    final flip = isFlip ? flipFromParams(op.params) : null;
+    if (isCrop ? crop == null : isLook ? look == null : isBlur ? blur == null : flip == null) {
       notes.add(isLook
           ? '$name — အလင်း/contrast တန်ဖိုး မမှန်ပါ (သို့) ၀ ဖြစ်နေလို့ ချန်ထားတယ်'
-          : '$name — zoom/နေရာ တန်ဖိုး မမှန်လို့ ချန်ထားတယ်');
+          : isBlur
+              ? '$name — Blur strength ($minBlur–$maxBlur) မမှန်လို့ ချန်ထားတယ်'
+              : isFlip
+                  ? '$name — ဘယ်-ညာ ဒါမှမဟုတ် အပေါ်-အောက် တစ်ခုခု ရွေးပါ၊ ချန်ထားတယ်'
+                  : '$name — zoom/နေရာ တန်ဖိုး မမှန်လို့ ချန်ထားတယ်');
       continue;
     }
-    VideoPiece mark(VideoPiece p) => isLook ? p.withLook(look) : p.withCrop(crop);
+    VideoPiece mark(VideoPiece p) => isLook
+        ? p.withLook(look)
+        : isBlur
+            ? p.withBlur(blur)
+            : isFlip
+                ? p.withFlip(flip!.h, flip.v)
+                : p.withCrop(crop);
     final next = <VideoPiece>[];
     var touched = false;
     for (final p in cur) {
@@ -374,6 +527,41 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     }
   }
 
+  // Speed: the piece is split at the edges of the range and the middle part
+  // gets the speed. A later operation wins where two overlap.
+  for (final op in speeds) {
+    final name = op.tool.title;
+    final sp = speedFromParams(op.params);
+    if (sp == null) {
+      notes.add('$name — speed တန်ဖိုး မမှန်ပါ ($minSpeed–$maxSpeed၊ ၁ မဟုတ်ရ) လို့ ချန်ထားတယ်');
+      continue;
+    }
+    final next = <VideoPiece>[];
+    var touched = false;
+    for (final p in cur) {
+      final s = op.startMs > p.startMs ? op.startMs : p.startMs;
+      final e = op.endMs < p.endMs ? op.endMs : p.endMs;
+      if (p.freeze || e - s < minCompiledPieceMs) {
+        next.add(p);
+        continue;
+      }
+      touched = true;
+      var from = s;
+      var to = e;
+      if (from - p.startMs < minCompiledPieceMs) from = p.startMs;
+      if (p.endMs - to < minCompiledPieceMs) to = p.endMs;
+      if (from > p.startMs) next.add(p.withRange(p.startMs, from));
+      next.add(p.withRange(from, to).withSpeed(sp));
+      if (to < p.endMs) next.add(p.withRange(to, p.endMs));
+    }
+    if (touched) {
+      cur = next;
+      applied.add(op);
+    } else {
+      notes.add('$name — ဗီဒီယိုအပိုင်းနဲ့ မထိတဲ့ အချိန်မို့ ချန်ထားတယ်');
+    }
+  }
+
   for (final op in freezes) {
     final name = op.tool.title;
     final hold = freezeHoldMs(op.params);
@@ -388,7 +576,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
       continue;
     }
     final p = cur[i];
-    final still = VideoPiece.freezeAt(t, hold, p.crop, p.look);
+    final still = VideoPiece.freezeAt(t, hold, p.crop, p.look, p.blur, p.flipH, p.flipV);
     final next = [...cur];
     if (t - p.startMs < minCompiledPieceMs) {
       next.insert(i, still);
@@ -406,6 +594,7 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
 
   // Labels and arrows last, once the final order and length are known.
   final overlays = <MotionItem>[];
+  final censors = <CensorItem>[];
   for (final op in motions) {
     final name = op.tool.title;
     final base = motionFromParams(op.params);
@@ -416,6 +605,16 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     final ranges = [for (final r in outputRanges(cur, op.startMs, op.endMs)) if (r.$2 - r.$1 >= minMotionMs) r];
     if (ranges.isEmpty) {
       notes.add('$name — ဗီဒီယိုအပိုင်းနဲ့ မထိတဲ့ အချိန်မို့ ချန်ထားတယ်');
+      continue;
+    }
+    if (base.kind == MotionKind.blurBox) {
+      // Not a drawing on top: a blurred copy of that part of the picture.
+      if (censors.length >= maxCensors) {
+        notes.add('Blur box — တစ်ပြိုင်နက် $maxCensors ခုထက် မများရလို့ ချန်ထားတယ် (ဖုန်းက မခံနိုင်လို့)');
+        continue;
+      }
+      censors.add(CensorItem(startMs: op.startMs, endMs: op.endMs, x: base.x, y: base.y, size: base.size, aspect: base.aspect, strength: base.strength));
+      applied.add(op);
       continue;
     }
     for (final r in ranges) {
@@ -451,6 +650,12 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
     applied.add(op);
   }
   splitItems.sort((a, b) => a.startMs.compareTo(b.startMs));
+  if (censors.isNotEmpty && splitItems.isNotEmpty) {
+    // Both need the video composited in their own way; censoring wins.
+    notes.add('Split Screen — Blur box နဲ့ တပြိုင်နက် မရလို့ Split Screen ကို ချန်ထားတယ်');
+    splitItems.clear();
+    applied.removeWhere((o) => o.tool == TransformTool.splitScreen);
+  }
 
   // Sound effects, placed on the final output time.
   final soundItems = <VoiceItem>[];
@@ -492,7 +697,10 @@ CompileResult compileOps(List<VideoPiece> pieces, List<TransformOp> ops) {
   if (splitItems.isNotEmpty) {
     infos.add('Split Screen (စမ်းသပ်ဆဲ): ${splitItems.length} နေရာ။ ပုံနှစ်ခုက တစ်ဝက်အရွယ်နဲ့ ပြမယ်');
   }
-  return CompileResult(cur, applied, notes, infos, overlays, soundItems, splitItems);
+  if (censors.isNotEmpty) {
+    infos.add('Blur box (စမ်းသပ်ဆဲ): ${censors.length} နေရာ။ ထုတ်ပြီးရင် မှုန်သွားတာကို ကိုယ်တိုင် ပြန်စစ်ပါ');
+  }
+  return CompileResult(cur, applied, notes, infos, overlays, soundItems, splitItems, censors);
 }
 
 /// Files that the compiled result needs but that are not there. Only app

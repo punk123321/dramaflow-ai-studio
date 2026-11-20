@@ -57,7 +57,7 @@ class DramaDetailScreen extends StatelessWidget {
     final store = context.watch<LibraryStore>();
     final d = store.byId(dramaId);
     if (d == null) {
-      return Scaffold(
+      return DfScaffold(
         appBar: AppBar(),
         body: const Center(child: Text('ဒီဇာတ်လမ်း မရှိတော့ပါဘူး။')),
       );
@@ -66,7 +66,7 @@ class DramaDetailScreen extends StatelessWidget {
     final done = eps.where((e) => e.completed).length;
     final showZh = d.titleMy.isNotEmpty && d.titleZh.isNotEmpty;
 
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(
         title: Text(d.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [

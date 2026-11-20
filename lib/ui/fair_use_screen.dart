@@ -92,7 +92,7 @@ class _FairUseScreenState extends State<FairUseScreen> {
       Risk.high => ('အန္တရာယ် မြင့်', DfColors.danger),
     };
 
-    return Scaffold(
+    return DfScaffold(
       appBar: AppBar(title: const Text('Copyright & Fair Use')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
