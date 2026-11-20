@@ -26,6 +26,7 @@ import '../platform/audio_channel.dart';
 import '../state/project_store.dart';
 import 'subtitle_studio_screen.dart';
 import 'te_dialogs.dart';
+import 'te_fullscreen.dart';
 import 'te_inline_editor.dart';
 import 'te_ops_section.dart';
 import 'te_shapes.dart';
@@ -827,6 +828,7 @@ class _EditorPanelState extends State<EditorPanel> {
           selectedId: _selId,
           onSeek: _seek,
           onSelect: (id) => setState(() => _selId = id),
+          onResize: (o, s, e, save) => _changeOp(o.copyWith(startMs: s, endMs: e), save),
         ),
         if (_selected case final o?)
           TeInlineEditor(
@@ -1097,6 +1099,18 @@ class _EditorPanelState extends State<EditorPanel> {
                         ),
                       ),
                     ),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'အပြည့်ကြည့်',
+                      icon: const Icon(Icons.fullscreen_rounded, color: Colors.white, shadows: [Shadow(blurRadius: 6, color: Colors.black)]),
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => TeFullscreenPage(controller: c, ops: _plan.ops, durMs: dur),
+                      )),
+                    ),
+                  ),
                   if (badges.isNotEmpty)
                     Positioned(
                       top: 6,

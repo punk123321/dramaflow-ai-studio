@@ -37,6 +37,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
   String _layout = 'leftRight';
   double _bright = 0.15;
   double _contrast = 0.0;
+  double _sat = 0.0;
   String? _imgPath;
   double _isize = 0.25;
   AudioFile? _sound;
@@ -84,6 +85,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
         case TransformTool.colorGrade:
           _bright = (d('brightness') ?? 0).clamp(-0.6, 0.6).toDouble();
           _contrast = (d('contrast') ?? 0).clamp(-0.6, 0.6).toDouble();
+          _sat = (d('saturation') ?? 0).clamp(-1.0, 1.0).toDouble();
         case TransformTool.cropReframe:
           _zoom = (d('zoom') ?? _zoom).clamp(1.0, 3.0).toDouble();
           _cx = (d('cx') ?? 0.5).clamp(0.0, 1.0).toDouble();
@@ -177,7 +179,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
       case TransformTool.splitScreen:
         return {'second': double.tryParse(_second.text.trim()) ?? -1, 'layout': _layout};
       case TransformTool.colorGrade:
-        return {'brightness': r(_bright), 'contrast': r(_contrast)};
+        return {'brightness': r(_bright), 'contrast': r(_contrast), 'saturation': r(_sat)};
       case TransformTool.cropReframe:
         return {'zoom': r(_zoom), 'cx': r(_cx), 'cy': r(_cy)};
       case TransformTool.motionGraphics:
@@ -308,6 +310,7 @@ class _TeOpDialogState extends State<TeOpDialog> {
             if (_tool == TransformTool.colorGrade) ...[
               _slider('အလင်း ${(_bright * 100).round()}% (အနှုတ် = မှောင်)', _bright, -0.6, 0.6, (v) => _bright = v),
               _slider('Contrast ${(_contrast * 100).round()}%', _contrast, -0.6, 0.6, (v) => _contrast = v),
+              _slider('အရောင်အား ${(_sat * 100).round()}% (−100 = B&W)', _sat, -1.0, 1.0, (v) => _sat = v),
               const Text(
                 'ဒါက ပုံသဏ္ဍာန်/mood ညှိဖို့ပါ (ဥပမာ ဇာတ်ရှိန်မြင့်တဲ့ နေရာကို မှောင်စေ၊ အလင်းဆွဲ)။ ပလက်ဖောင်း၏ မူပိုင်စစ်ဆေးမှုကို ရှောင်ဖို့ မဟုတ်ပါ၊ အဲဒီအတွက် မသုံးပါနဲ့။',
                 style: TextStyle(color: DfColors.muted, fontSize: 12),

@@ -348,14 +348,17 @@ VoiceItem? soundFromParams(Map<String, Object?> p, int offsetMs) {
 /// Shortest cut the compiler will make.
 const minCutMs = 100;
 
-/// Brightness and contrast from operation parameters. Null when not usable
-/// or when both are 0 (nothing to do).
+/// Brightness, contrast and (optional) saturation from operation parameters.
+/// Null when not usable or when all are 0 (nothing to do).
 LookAdjust? lookFromParams(Map<String, Object?> p) {
   final b = p['brightness'];
   final c = p['contrast'];
-  if (b is! num || c is! num) return null;
+  final s = p['saturation'] ?? 0;
+  if (b is! num || c is! num || s is! num) return null;
+  if (!b.isFinite || !c.isFinite || !s.isFinite) return null;
   if (b < -LookAdjust.limit || b > LookAdjust.limit || c < -LookAdjust.limit || c > LookAdjust.limit) return null;
-  final l = LookAdjust(b.toDouble(), c.toDouble());
+  if (s < -LookAdjust.satLimit || s > LookAdjust.satLimit) return null;
+  final l = LookAdjust(b.toDouble(), c.toDouble(), s.toDouble());
   return l.isNeutral ? null : l;
 }
 
