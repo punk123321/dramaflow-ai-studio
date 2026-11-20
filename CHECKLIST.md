@@ -594,3 +594,10 @@ Unproven on a phone: how each design looks in the real render (glow blur, dotted
 | Home re-laid out: header with logo, "continue" glass card (or a start card), Studio tiles 01–05 with icon chips, Tools as chips (the old "More Tools" sheet is gone), glass project rows | Yes (CI green, run 44685765147) | **No** |
 | Video Index segment download now also has output ratio and video quality (Mbps), like the SRT split screen | Yes (CI green, run 44685765147) | **No** |
 Unproven on a phone: how the glows, glass blur and nav pill look and perform on a real device (the blurred hero card is the only heavy part), text contrast, and the animation smoothness. Only Home and the shared widgets were redesigned by hand; other screens get the new look through the theme and shared cards, so some may still look plain. Phone test found a bug in this APK (201): the bottom bar grew to the whole screen height and hid every page. Fixed (fixed bar height), CI green run 44723159162, APK `dramaflow-apk-branch-203`; the fix is not yet phone-tested. Not merged to main.
+
+## TE-39: Studio pages opened straight from Home
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Video Index, Recap Studio, TTS / MP3 and Render Center now open as their own full page (like Subtitle Studio) instead of jumping to the Workflow tab; the page shows the same panel as the Workflow tab, the project header, and a "stage done" switch | Yes (CI green, run 44727168604) | **No** |
+| Home Studio grid now has 6 tiles: Video Index, Recap Studio, Scene Studio, TTS / MP3, Subtitle Studio, Video Editor; Render Center is the wide tile; step numbers removed | Yes (CI green, run 44727168604) | **No** |
+The Workflow tab still exists and shows all stages in order. Scene Studio is the old Scene Recap screen, only renamed and moved up to the grid. Unproven on a phone: that every panel behaves the same on its own page as inside the Workflow tab. Not merged to main. APK artifact `dramaflow-apk-branch-205`.
