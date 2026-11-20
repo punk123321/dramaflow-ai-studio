@@ -498,7 +498,11 @@ class DfNavBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-          child: Row(
+          // Fixed height: the Scaffold gives the bar loose constraints, and a
+          // Center inside would otherwise grow to the whole screen height.
+          child: SizedBox(
+            height: 48,
+            child: Row(
             children: [
               for (var i = 0; i < items.length; i++)
                 Expanded(
@@ -536,6 +540,7 @@ class DfNavBar extends StatelessWidget {
                   ),
                 ),
             ],
+            ),
           ),
         ),
       ),
