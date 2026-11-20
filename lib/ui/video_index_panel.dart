@@ -38,7 +38,7 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
 
   // Downloading the segments as separate MP4 files.
   bool _keepSound = true;
-  int _height = 720;
+  RenderSettings _rset = const RenderSettings();
   bool _running = false;
   bool _stop = false;
   bool _paused = false;
@@ -230,7 +230,7 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
         videoUri: p.sourceVideoUri!,
         timeline: tl,
         sourceSubtitles: const [],
-        settings: RenderSettings(height: _height, sourceBps: sourceBitsPerSecond(p.videoSize, p.videoDurationMs)),
+        settings: _rset.copyWith(sourceBps: sourceBitsPerSecond(p.videoSize, p.videoDurationMs)),
         aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
       );
       await rs.start(p.id!, name, job);
@@ -291,23 +291,47 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Icon(_keepSound ? Icons.volume_up_outlined : Icons.volume_off_outlined, size: 20, color: DfColors.muted),
+          Expanded(
+            child: DropdownButtonFormField<OutRatio>(
+              key: ValueKey('vr${_rset.ratio.name}'),
+              initialValue: _rset.ratio,
+              decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.aspect_ratio, size: 20)),
+              items: [for (final r in OutRatio.values) DropdownMenuItem(value: r, child: Text(r.label, style: const TextStyle(fontSize: 13)))],
+              onChanged: _running ? null : (v) => setState(() => _rset = _rset.copyWith(ratio: v)),
+            ),
+          ),
           const SizedBox(width: 8),
-          Switch(value: _keepSound, onChanged: _running ? null : (v) => setState(() => _keepSound = v)),
-          const Spacer(),
-          const Icon(Icons.high_quality_outlined, size: 20, color: DfColors.muted),
-          const SizedBox(width: 8),
-          DropdownButton<int>(
-            value: _height,
-            underline: const SizedBox.shrink(),
-            items: const [
-              DropdownMenuItem(value: 480, child: Text('480p')),
-              DropdownMenuItem(value: 720, child: Text('720p')),
-              DropdownMenuItem(value: 1080, child: Text('1080p')),
-            ],
-            onChanged: _running ? null : (v) => setState(() => _height = v ?? 720),
+          SizedBox(
+            width: 100,
+            child: DropdownButtonFormField<int>(
+              key: ValueKey('vh${_rset.height}'),
+              initialValue: _rset.height,
+              decoration: const InputDecoration(isDense: true),
+              items: const [
+                DropdownMenuItem(value: 480, child: Text('480p')),
+                DropdownMenuItem(value: 720, child: Text('720p')),
+                DropdownMenuItem(value: 1080, child: Text('1080p')),
+              ],
+              onChanged: _running ? null : (v) => setState(() => _rset = _rset.copyWith(height: v)),
+            ),
           ),
         ]),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          key: ValueKey('vq${_rset.videoKbps}'),
+          initialValue: _rset.videoKbps,
+          decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.high_quality_outlined, size: 20)),
+          items: [for (final k in qualityChoices) DropdownMenuItem(value: k, child: Text(qualityLabel(k)))],
+          onChanged: _running ? null : (v) => setState(() => _rset = _rset.copyWith(videoKbps: v)),
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          secondary: Icon(_keepSound ? Icons.volume_up_outlined : Icons.volume_off_outlined, color: DfColors.muted),
+          title: Text(_keepSound ? 'မူရင်းအသံ ပါမယ်' : 'အသံ မပါ', style: const TextStyle(fontSize: 14)),
+          value: _keepSound,
+          onChanged: _running ? null : (v) => setState(() => _keepSound = v),
+        ),
         const SizedBox(height: 6),
         if (_running) ...[
           LinearProgressIndicator(value: _total == 0 ? null : (_done + rs.percent / 100) / _total),

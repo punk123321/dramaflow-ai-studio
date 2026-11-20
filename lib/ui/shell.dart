@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
+import 'widgets.dart';
 import 'library_screen.dart';
 import 'settings_screen.dart';
 import 'workflow_screen.dart';
@@ -30,14 +31,14 @@ class _ShellState extends State<Shell> {
           const SettingsScreen(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.account_tree_outlined), selectedIcon: Icon(Icons.account_tree), label: 'Workflow'),
-          NavigationDestination(icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Library'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Settings'),
+      bottomNavigationBar: DfNavBar(
+        index: _index,
+        onChanged: (i) => setState(() => _index = i),
+        items: const [
+          (icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),
+          (icon: Icons.account_tree_outlined, activeIcon: Icons.account_tree_rounded, label: 'Workflow'),
+          (icon: Icons.video_library_outlined, activeIcon: Icons.video_library_rounded, label: 'Library'),
+          (icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded, label: 'Settings'),
         ],
       ),
     );

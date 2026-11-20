@@ -14,6 +14,13 @@ class DfColors {
   static const ok = Color(0xFF3DDC84);
   static const warn = Color(0xFFFF9F43);
   static const danger = Color(0xFFFF8A80);
+
+  // "Aurora glass": the violet of the brand with a cyan and a pink glow.
+  static const cyan = Color(0xFF22D3EE);
+  static const pink = Color(0xFFFF4FA3);
+  static const gold = Color(0xFFFFC857);
+  static const glassFill = Color(0x12FFFFFF);
+  static const glassEdge = Color(0x24FFFFFF);
 }
 
 /// Gradients shared by the home screen and the other studio screens.
@@ -24,6 +31,27 @@ class DfGradients {
     end: Alignment.bottomCenter,
     colors: [DfColors.bgTop, DfColors.bg],
     stops: [0.0, 0.55],
+  );
+
+  /// Soft frosted fill used by cards (a light veil over the dark page).
+  static const glass = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0x1CFFFFFF), Color(0x08FFFFFF)],
+  );
+
+  /// Thin bright edge of a glass card: lit from the top left.
+  static const glassEdge = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0x55FFFFFF), Color(0x0FFFFFFF), Color(0x26FFFFFF)],
+  );
+
+  /// Violet to cyan, for accents (logo, selected states).
+  static const aurora = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFA855F7), Color(0xFF6366F1), DfColors.cyan],
   );
 
   /// Main call-to-action (buttons, hero).
@@ -92,7 +120,8 @@ ThemeData buildTheme() {
       backgroundColor: const Color(0xFF0C0E2B),
       surfaceTintColor: Colors.transparent,
       height: 68,
-      indicatorColor: DfColors.accent.withValues(alpha: 0.28),
+      indicatorColor: DfColors.accent.withValues(alpha: 0.32),
+      indicatorShape: const StadiumBorder(),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final on = states.contains(WidgetState.selected);
         return TextStyle(
@@ -145,6 +174,45 @@ ThemeData buildTheme() {
         side: const BorderSide(color: DfColors.line),
       ),
     ),
+    cardTheme: CardThemeData(
+      color: DfColors.surface.withValues(alpha: 0.78),
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: DfColors.glassEdge)),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: const Color(0xFF14183F),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: DfColors.glassEdge)),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Color(0xFF12153A),
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: true,
+      dragHandleColor: DfColors.line,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: const Color(0xFF191D4A),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: DfColors.glassEdge)),
+    ),
+    dividerTheme: const DividerThemeData(color: Color(0x1FFFFFFF), space: 1),
+    listTileTheme: const ListTileThemeData(iconColor: DfColors.muted),
+    sliderTheme: SliderThemeData(
+      activeTrackColor: DfColors.accent,
+      inactiveTrackColor: DfColors.line,
+      thumbColor: Colors.white,
+      overlayColor: DfColors.accent.withValues(alpha: 0.18),
+      trackHeight: 4,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : DfColors.muted),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? DfColors.accent : DfColors.raise),
+      trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.transparent : DfColors.line),
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(color: DfColors.accent, linearTrackColor: DfColors.line),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: DfColors.raise,
