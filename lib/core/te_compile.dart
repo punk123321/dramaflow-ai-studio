@@ -1,3 +1,4 @@
+import 'te_frames.dart';
 import 'timeline.dart';
 import 'transformative_plan.dart';
 
@@ -140,6 +141,7 @@ class MotionItem {
     this.top = false,
     this.fill = false,
     this.strength = 25,
+    this.template = 0,
   });
 
   final MotionKind kind;
@@ -177,6 +179,9 @@ class MotionItem {
   /// Blur box: blur strength.
   final double strength;
 
+  /// Frame: a ready-made frame (see te_frames.dart), 0 = the plain line / rainbow border.
+  final int template;
+
   MotionItem withTime(int s, int e) => MotionItem(
         kind: kind,
         startMs: s,
@@ -196,6 +201,7 @@ class MotionItem {
         top: top,
         fill: fill,
         strength: strength,
+        template: template,
       );
 
   Map<String, Object?> toJson() => {
@@ -216,6 +222,7 @@ class MotionItem {
         if (kind == MotionKind.shade) 'top': top,
         if (kind == MotionKind.spot) 'round': round,
         if (kind == MotionKind.blurBox) 'str': strength,
+        if (kind == MotionKind.frame && template > 0) 'tpl': template,
         if (kind == MotionKind.label || kind == MotionKind.frame) 'grad': gradient,
       };
 }
@@ -277,6 +284,7 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     top: p['top'] == true,
     fill: p['fill'] == true,
     strength: st is num ? st.toDouble() : 25,
+    template: p['tpl'] is int && frameTemplateById(p['tpl'] as int) != null ? p['tpl'] as int : 0,
   );
 }
 

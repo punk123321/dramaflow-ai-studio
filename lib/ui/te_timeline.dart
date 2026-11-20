@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../core/srt.dart';
+import '../core/te_frames.dart';
 import '../core/te_preview.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
@@ -97,7 +98,7 @@ class _TeTimelineState extends State<TeTimeline> {
           'box' => 'Box',
           'circle' => 'Circle',
           'spot' => 'Spot',
-          'frame' => 'Border',
+          'frame' => (o.params['tpl'] is int ? frameTemplateById(o.params['tpl'] as int)?.name : null) ?? 'Border',
           'fade' => o.params['dir'] == 'in' ? 'Fade in' : (o.params['dir'] == 'out' ? 'Fade out' : 'Flash/Dip'),
           'vignette' => 'Vignette',
           'tint' => 'Tint',

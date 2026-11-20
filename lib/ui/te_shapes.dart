@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Preview drawings for the shape effects (box, circle, spot, frame) and the
@@ -177,4 +179,78 @@ class ShadePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(ShadePainter old) => old.frac != frac || old.top != top;
+}
+
+/// Draws a frame template (see core/te_frames.dart): the same list of
+/// primitives the render draws, scaled by the short side of [size].
+class PrimPainter extends CustomPainter {
+  const PrimPainter(this.prims);
+
+  final List<Map<String, Object?>> prims;
+
+  static double _n(Object? v) => v is num ? v.toDouble() : 0.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+    for (final m in prims) {
+      final sw = _n(m['sw']) * s;
+      final c = Color((m['c'] as num?)?.toInt() ?? 0xFFFFFFFF);
+      final paint = Paint()..isAntiAlias = true;
+      if (sw <= 0) {
+        paint.style = PaintingStyle.fill;
+      } else {
+        paint
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = sw;
+      }
+      paint.color = c;
+      switch (m['t']) {
+        case 'l':
+          canvas.drawLine(Offset(_n(m['x1']) * s, _n(m['y1']) * s), Offset(_n(m['x2']) * s, _n(m['y2']) * s), paint);
+        case 'o':
+          canvas.drawCircle(Offset(_n(m['x']) * s, _n(m['y']) * s), _n(m['r']) * s, paint);
+        case 'r':
+          final rect = Rect.fromLTWH(_n(m['x']) * s, _n(m['y']) * s, _n(m['w']) * s, _n(m['h']) * s);
+          final g = m['g'];
+          if (g is List && g.length >= 2) {
+            paint.shader = LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [for (final x in g) Color((x as num).toInt())]).createShader(rect);
+          }
+          final rad = _n(m['rad']) * s;
+          final rr = RRect.fromRectAndRadius(rect, Radius.circular(rad));
+          final glow = _n(m['glow']) * s;
+          if (glow > 0) {
+            final gp = Paint()
+              ..style = paint.style
+              ..strokeWidth = paint.strokeWidth
+              ..color = paint.color
+              ..shader = paint.shader
+              ..maskFilter = MaskFilter.blur(BlurStyle.normal, glow * 0.5);
+            canvas.drawRRect(rr, gp);
+          }
+          final dash = m['dash'];
+          if (dash is List && dash.length == 2 && sw > 0) {
+            paint.strokeCap = StrokeCap.round;
+            _dashed(canvas, Path()..addRRect(rr), paint, _n(dash[0]) * s, _n(dash[1]) * s);
+          } else {
+            canvas.drawRRect(rr, paint);
+          }
+      }
+    }
+  }
+
+  static void _dashed(Canvas canvas, Path path, Paint paint, double on, double off) {
+    final step = on + off;
+    if (step <= 0) return;
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        canvas.drawPath(metric.extractPath(d, math.min(d + math.max(on, 0.01), metric.length)), paint);
+        d += step;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(PrimPainter old) => old.prims != prims;
 }

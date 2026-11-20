@@ -11,6 +11,7 @@ import '../core/srt.dart';
 import '../core/stage.dart';
 import '../core/subtitle_ops.dart';
 import '../core/te_compile.dart';
+import '../core/te_frames.dart';
 import '../core/te_preview.dart';
 import '../core/theme.dart';
 import '../core/sub_presets.dart';
@@ -279,7 +280,7 @@ class _EditorPanelState extends State<EditorPanel> {
 
   /// One tap adds an effect at the playhead with sensible values and selects
   /// it, so it can be adjusted right under the preview.
-  void _quickAdd(TransformTool tool, {String kind = '', String text = ''}) {
+  void _quickAdd(TransformTool tool, {String kind = '', String text = '', Map<String, Object?>? extra}) {
     final pos = _posMs < 0 ? 0 : _posMs;
     final vd = _vc?.value.duration.inMilliseconds ?? 0;
     final dur = vd > 0 ? vd : _sourceMs;
@@ -324,6 +325,7 @@ class _EditorPanelState extends State<EditorPanel> {
       default:
         params = const {};
     }
+    if (extra != null) params = {...params, ...extra};
     final op = TransformOp(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       tool: tool,
@@ -337,6 +339,56 @@ class _EditorPanelState extends State<EditorPanel> {
   }
 
   static const _wholeVideo = {'frame', 'vignette', 'tint', 'bars', 'shade'};
+
+  /// Gallery of ready-made frames: tap one to put it on the whole video.
+  Future<void> _frames() async {
+    Widget thumb(BuildContext ctx, int id, String name, int color) {
+      const w = 92.0;
+      const h = 62.0;
+      final prims = id == 0 ? const <Map<String, Object?>>[] : framePrims(id, color, 0.03, w, h);
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => Navigator.pop(ctx, id),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: w,
+            height: h,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF3B4A6B), Color(0xFF1B2236)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: id == 0
+                ? CustomPaint(painter: FramePainter(color: Colors.white, thick: 3, rainbow: true))
+                : CustomPaint(painter: PrimPainter(prims)),
+          ),
+          const SizedBox(height: 4),
+          Text(name, style: const TextStyle(fontSize: 11.5)),
+        ]),
+      );
+    }
+
+    final pick = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: DfColors.surface,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Wrap(spacing: 12, runSpacing: 14, children: [
+            thumb(ctx, 0, 'Plain', 0xFFFFFFFF),
+            for (final t in frameTemplates) thumb(ctx, t.id, t.name, t.defaultColor),
+          ]),
+        ),
+      ),
+    );
+    if (pick == null) return;
+    final t = frameTemplateById(pick);
+    if (t == null) {
+      _quickAdd(TransformTool.motionGraphics, kind: 'frame');
+    } else {
+      _quickAdd(TransformTool.motionGraphics, kind: 'frame', extra: {'tpl': t.id, 'size': t.defaultThick, 'color': t.defaultColor, 'grad': false});
+    }
+  }
 
   Future<void> _stickers() async {
     const emojis = ['👉', '👆', '👇', '🔥', '❗', '❓', '😱', '😂', '😭', '😡', '👀', '💔', '✅', '❌', '⭐', '💯', '🤔', '😲', '👍', '🙏'];
@@ -378,7 +430,7 @@ class _EditorPanelState extends State<EditorPanel> {
           tool('Box', Icons.crop_square, () => _quickAdd(TransformTool.motionGraphics, kind: 'box')),
           tool('Circle', Icons.circle_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'circle')),
           tool('Spot', Icons.highlight_alt, () => _quickAdd(TransformTool.motionGraphics, kind: 'spot')),
-          tool('Border', Icons.border_outer, () => _quickAdd(TransformTool.motionGraphics, kind: 'frame')),
+          tool('Frame', Icons.filter_frames, _frames),
           tool('Sticker', Icons.emoji_emotions_outlined, _stickers),
           tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
           tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
@@ -1156,6 +1208,9 @@ class _EditorPanelState extends State<EditorPanel> {
           ),
         );
       case MotionKind.frame:
+        if (m.template > 0) {
+          return Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: PrimPainter(framePrims(m.template, m.color, m.size, w, h)))));
+        }
         return Positioned.fill(
           child: IgnorePointer(
             child: CustomPaint(painter: FramePainter(color: Color(m.color), thick: m.size * math.min(w, h), rainbow: m.gradient)),

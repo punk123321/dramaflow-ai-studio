@@ -1,4 +1,5 @@
 import 'srt.dart';
+import 'te_frames.dart';
 import 'timeline.dart';
 
 /// Turns the edit description into the job that the native renderer runs, and
@@ -263,7 +264,7 @@ Map<String, Object?> buildRenderJob({
         : {'uri': _uri(timeline.music!.source), 'vol': timeline.music!.volume, 'loop': timeline.music!.loop},
     'burn': timeline.burnSubtitles,
     'subtitles': [for (final s in subs) {'s': s.startMs, 'e': s.endMs, 't': s.text}],
-    if (overlays.isNotEmpty) 'overlays': overlays,
+    if (overlays.isNotEmpty) 'overlays': [for (final o in overlays) _withFramePrims(o, size.w, size.h)],
     if (splits.isNotEmpty) 'splits': splits,
     if (censors.isNotEmpty) 'censors': censors,
   };
@@ -314,4 +315,15 @@ String safeFileName(String raw) {
   final cleaned = raw.replaceAll(RegExp(r'[\\/:*?"<>|\n\r\t]'), '_').trim();
   final s = cleaned.isEmpty ? 'dramaflow' : cleaned;
   return s.length > 60 ? s.substring(0, 60) : s;
+}
+
+/// A frame overlay with a ready-made template gets its drawing primitives for
+/// the real output size, so the render draws exactly the list the preview shows.
+Map<String, Object?> _withFramePrims(Map<String, Object?> o, int w, int h) {
+  final tpl = o['tpl'];
+  if (o['k'] != 'frame' || tpl is! int || tpl <= 0) return o;
+  final size = o['size'];
+  final color = o['color'];
+  final prims = framePrims(tpl, color is int ? color : 0xFFFFFFFF, size is num ? size.toDouble() : 0.012, w.toDouble(), h.toDouble());
+  return prims.isEmpty ? o : {...o, 'prims': prims};
 }

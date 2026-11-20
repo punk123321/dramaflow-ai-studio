@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/te_frames.dart';
 import '../core/theme.dart';
 import '../core/transformative_plan.dart';
 import 'widgets.dart';
@@ -117,6 +118,41 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
     widget.onChange(_op.copyWith(endMs: pos), true);
   }
 
+  /// Frame designs to switch between (the first one is the plain line / rainbow border).
+  Widget _frameStrip() {
+    final cur = _op.params['tpl'] is int ? _op.params['tpl'] as int : 0;
+    Widget chip(String label, int id) => Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: ChoiceChip(
+            label: Text(label, style: const TextStyle(fontSize: 12)),
+            selected: cur == id,
+            onSelected: (_) {
+              final t = frameTemplateById(id);
+              final next = {..._op.params};
+              if (t == null) {
+                next.remove('tpl');
+              } else {
+                next['tpl'] = id;
+                next['grad'] = false;
+                if (!t.usesColor) next['color'] = 0xFFFFFFFF;
+              }
+              widget.onChange(_op.copyWith(params: next), true);
+            },
+          ),
+        );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [chip('Plain', 0), for (final t in frameTemplates) chip(t.name, t.id)]),
+    );
+  }
+
+  /// The colour swatches are shown for the plain border (not rainbow) and for the designs that take a colour.
+  bool _frameUsesColor() {
+    final id = _op.params['tpl'];
+    if (id is int) return frameTemplateById(id)?.usesColor ?? false;
+    return _op.params['grad'] != true;
+  }
+
   List<Widget> _controls() {
     switch (_op.tool) {
       case TransformTool.cropReframe:
@@ -232,6 +268,7 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
             ),
           if (k == 'label') flag('အရောင်ခြယ် နောက်ခံ (ခရမ်း→ပန်း)', 'grad'),
           Text(hint, style: const TextStyle(fontSize: 12.5, color: DfColors.muted)),
+          if (k == 'frame') _frameStrip(),
           if (k == 'fade') ...[
             Wrap(spacing: 6, children: [
               chip('Fade in', () => widget.onChange(_op.copyWith(params: {..._op.params, 'dir': 'in'}), true), on: _op.params['dir'] == 'in'),
@@ -268,9 +305,9 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
           if (k == 'blurBox') _slider('မှုန်ပမာဏ', 'strength', 25, 5, 60),
           if (k == 'arrow') _slider('လှည့်', 'angle', 0, 0, 359, whole: true),
           if (k == 'box' || k == 'circle') flag('အတွင်း ဖြည့် (marker)', 'fill'),
-          if (k == 'frame') flag('သက်တန့်ရောင်စုံ', 'grad'),
+          if (k == 'frame' && _op.params['tpl'] is! int) flag('သက်တန့်ရောင်စုံ', 'grad'),
           if (k == 'spot') flag('ဘဲဥပုံ (ပိတ် = လေးထောင့်)', 'round', defaultOn: true),
-          if (k == 'label' || k == 'arrow' || k == 'box' || k == 'circle' || (k == 'frame' && _op.params['grad'] != true)) swatches(_colors),
+          if (k == 'label' || k == 'arrow' || k == 'box' || k == 'circle' || (k == 'frame' && _frameUsesColor())) swatches(_colors),
         ];
       case TransformTool.pictureInPicture:
         return [

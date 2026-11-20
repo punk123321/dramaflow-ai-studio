@@ -612,7 +612,9 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 } else if (m.optString("k") == "frame") {
                     // Border around the whole picture; size = thickness as a share of the short side.
                     val thick = (m.getDouble("size") * base).toFloat().coerceAtLeast(2f)
-                    val frame = frameBitmap(outW, outH, thick, color, m.optBoolean("grad", false))
+                    val tplPrims = m.optJSONArray("prims")
+                    val frame = if (tplPrims != null && tplPrims.length() > 0) templateFrameBitmap(outW, outH, tplPrims)
+                    else frameBitmap(outW, outH, thick, color, m.optBoolean("grad", false))
                     overlays.add(WindowedBitmapOverlay(frame, fullBlank, startMs, endMs, centerSettings(0.5f, 0.5f)))
                 } else if (m.optString("k") == "spot") {
                     // Everything dimmed except one window.
@@ -913,6 +915,60 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             p.color = color
         }
         Canvas(bmp).drawRect(thick / 2f, thick / 2f, w - thick / 2f, h - thick / 2f, p)
+        return bmp
+    }
+
+    /** A ready-made frame: draws the primitive list made by lib/core/te_frames.dart (units = short side). */
+    private fun templateFrameBitmap(w: Int, h: Int, prims: JSONArray): Bitmap {
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val s = minOf(w, h).toFloat()
+        for (i in 0 until prims.length()) {
+            val m = prims.getJSONObject(i)
+            val sw = (m.optDouble("sw", 0.0) * s).toFloat()
+            val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            if (sw <= 0f) {
+                p.style = Paint.Style.FILL
+            } else {
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = sw
+            }
+            p.color = m.optLong("c", 0xFFFFFFFFL).toInt()
+            when (m.optString("t")) {
+                "l" -> canvas.drawLine(
+                    (m.getDouble("x1") * s).toFloat(), (m.getDouble("y1") * s).toFloat(),
+                    (m.getDouble("x2") * s).toFloat(), (m.getDouble("y2") * s).toFloat(), p
+                )
+                "o" -> canvas.drawCircle((m.getDouble("x") * s).toFloat(), (m.getDouble("y") * s).toFloat(), (m.getDouble("r") * s).toFloat(), p)
+                "r" -> {
+                    val l = (m.getDouble("x") * s).toFloat()
+                    val t = (m.getDouble("y") * s).toFloat()
+                    val r = l + (m.getDouble("w") * s).toFloat()
+                    val b = t + (m.getDouble("h") * s).toFloat()
+                    val g = m.optJSONArray("g")
+                    if (g != null && g.length() >= 2) {
+                        val cols = IntArray(g.length()) { g.getLong(it).toInt() }
+                        p.shader = android.graphics.LinearGradient(l, t, r, b, cols, null, android.graphics.Shader.TileMode.CLAMP)
+                    }
+                    val rad = (m.optDouble("rad", 0.0) * s).toFloat()
+                    val rect = android.graphics.RectF(l, t, r, b)
+                    val glow = (m.optDouble("glow", 0.0) * s).toFloat()
+                    if (glow > 0f) {
+                        val gp = Paint(p)
+                        gp.maskFilter = android.graphics.BlurMaskFilter(glow, android.graphics.BlurMaskFilter.Blur.NORMAL)
+                        canvas.drawRoundRect(rect, rad, rad, gp)
+                    }
+                    val dash = m.optJSONArray("dash")
+                    if (dash != null && dash.length() == 2 && sw > 0f) {
+                        p.strokeCap = Paint.Cap.ROUND
+                        p.pathEffect = android.graphics.DashPathEffect(
+                            floatArrayOf(maxOf((dash.getDouble(0) * s).toFloat(), 0.5f), (dash.getDouble(1) * s).toFloat()), 0f
+                        )
+                    }
+                    canvas.drawRoundRect(rect, rad, rad, p)
+                }
+            }
+        }
         return bmp
     }
 

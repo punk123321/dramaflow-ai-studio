@@ -574,6 +574,14 @@ Meant for censoring sensitive parts of your own video; the editor says it must n
 ## TE-36: Video Index: download all segments at once
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Under the segment list: one "download all" button makes an MP4 of every segment, one after another, and puts each in the Gallery (file name `<project>_segNN_<time>`); a download icon on each row does just that one; progress bar, pause (after the current segment) and stop | pending CI | **No** |
-| Options: original sound on/off, 480p / 720p / 1080p (quality follows the source file size) | pending CI | **No** |
-Picture and sound of the original only, no subtitles, original ratio. It re-encodes (the same render as the Render stage), so a 10-minute segment takes a while; the original file is never changed. Unproven on a phone: the whole run with many segments (time, heat, storage), keep-alive when the screen turns off, the Gallery save on each Android version, stopping in the middle. Not merged to main.
+| Under the segment list: one "download all" button makes an MP4 of every segment, one after another, and puts each in the Gallery (file name `<project>_segNN_<time>`); a download icon on each row does just that one; progress bar, pause (after the current segment) and stop | Yes (CI green, run 44651575811) | **No** |
+| Options: original sound on/off, 480p / 720p / 1080p (quality follows the source file size) | Yes (CI green, run 44651575811) | **No** |
+Picture and sound of the original only, no subtitles, original ratio. It re-encodes (the same render as the Render stage), so a 10-minute segment takes a while; the original file is never changed. Unproven on a phone: the whole run with many segments (time, heat, storage), keep-alive when the screen turns off, the Gallery save on each Android version, stopping in the middle. Not merged to main. APK artifact `dramaflow-apk-branch-198`.
+
+## TE-37: ready-made Frame templates
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Tool row "Frame" opens a gallery with small pictures of 12 designs (Classic, Double, Gold, Neon, Film strip, Polaroid, Viewfinder, Cinema, Rounded, Dotted, Vintage, Rainbow glow) plus the old plain / rainbow border; tap one to put it on the whole video | pending CI | **No** |
+| Under the preview, a design strip switches the design of a selected frame; thickness slider; colour swatches for the designs that take a colour | pending CI | **No** |
+| One drawing list (short-side units) is made in Dart and drawn by BOTH the preview and the render (Kotlin canvas), so they look alike; the list is made for the real output size when the render job is built | pending CI | **No** |
+Unproven on a phone: how each design looks in the real render (glow blur, dotted line with round caps, the film-strip holes, gold / rainbow gradient), thin lines on a low-resolution output, and that the frame overlay does not hide subtitles badly (subtitles are drawn on top). The designs that cover the edges (Film, Polaroid, Cinema, Vintage) hide a strip of the picture; they do not shrink it. Frames are drawn by the app only; no pictures or fonts from other places are used. Not merged to main.
