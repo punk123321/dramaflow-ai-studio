@@ -618,3 +618,19 @@ Old saved timelines load as before (the look was two numbers, it is now two or t
 | Glass style on Workflow step cards, Library, drama pages, Settings, effect list, timeline, Fair Use, cards in the editor; Subtitle Studio bottom bar uses the same nav pill | Yes (CI green, run 44768403494) | **No** |
 | Widget tests for the nav bar (it stays a bar at the bottom, the page keeps its space), tabs, buttons, Reveal / Glass / Pressable; tests for the AssemblyAI request and reply handling | Yes (CI green, run 44768403494) | n/a |
 Unproven: everything that talks to AssemblyAI. The request was written from AssemblyAI's own docs (upload, create transcript with language_code, poll, /srt?chars_per_caption=28) but has never been run with a real key; the language code "zh" / "my" is not confirmed by the docs (the field in Settings can be edited; the error text from the service is shown); Mandarin accuracy on drama audio, Burmese accuracy (docs list it as "fair"), upload time and data use, whether the sound cut-out works for every phone video (AAC only; otherwise the whole video is copied to the cache and uploaded), and whether the free credit is still given. Not merged to main; branch `claude/te-40-upgrades`. APK artifact `dramaflow-apk-branch-211`.
+
+## TE-42: News Video (own Colab backend) 
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| `tools/news_backend_colab.py` (backend v2): jobs with progress (POST /jobs, GET /jobs/<id>, download), access token, keys not stored, per-scene start/end seconds, ffmpeg errors reported, same encode settings for every clip, strict grounding really sent, real length measured. Only syntax-checked (py_compile); never run | n/a (Python, not built by CI) | **No** |
+| Home > Tools > "News Video" screen: paste "URL#TOKEN" from Colab, Pexels key (optional), Gemini key from Settings, topic, 3 to 5 minutes, 9:16 / 16:9, voice, sources, strict grounding, 4 master prompts (editable); progress; result with scenes; save MP4 to Gallery, save SRT (made from scene timing), copy script | Yes (CI green, run 44847621657) | **No** |
+| Tests for the connect line, settings, request limits, job reply, SRT from scenes | Yes (same run) | n/a |
+Unproven: the backend has never run (not in Colab, not with real keys); Edge TTS Burmese voices, Gemini with Google Search grounding (may need billing or have a free quota; not checked), Pexels downloads, the Cloudflare tunnel, Colab terms for serving a tunnel, ffmpeg concat of the clips, and the app screen on a phone. The video has no burned-in subtitles, ticker or logo (the backend has no Burmese font); the SRT is for the app's own render. News content is made by AI: facts are not verified. APK artifact `dramaflow-apk-branch-213`.
+
+## TE-43: Video Editor page like a phone video editor
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Video Editor page: preview (max about a third of the screen), play bar (undo, redo, previous / play / next, fullscreen) and the tool row stay on top; the timeline, effect editor, effect list and the rest scroll underneath. The workflow's Stage 4 still scrolls as one page | Yes (CI green, run 44848369562) | **No** |
+| "Export Video" button on the editor's top bar opens the Render page | Yes (CI green, run 44848369562) | **No** |
+| Previous / next jump to the previous / next effect start (or the ends of the video) | Yes (CI green, run 44848369562) | **No** |
+Unproven on a phone: the proportions on small screens (the scrolling part may be short when an effect is selected), keyboard covering the editor fields, and portrait videos (preview is capped by height). Not merged to main. APK artifact `dramaflow-apk-branch-214`.
