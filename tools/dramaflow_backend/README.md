@@ -13,7 +13,7 @@ Key တွေ ဘယ်မှာမှ မသိမ်းဘူး (request န�
 4. App ရဲ့ URL (`https://<နာမည်>.go.altare.global`) ကို ကူးပြီး နောက်ကနေ `#` နဲ့ APP_TOKEN ကို ဆက်ရေး:
    `https://<နာမည်>.go.altare.global#စကားဝှက်` → DramaFlow app ထဲ Backend ကွက်မှာ ထည့်
 
-## Colab မှာ run ချင်ရင်
+## Colab မှာ run ချင်ရင် (လွယ်ဆုံး: `tools/dramaflow_recap_colab.ipynb` ကို Colab မှာ ဖွင့်၊ Cell 1 နောက် Cell 2 run)
 ```
 !pip -q install fastapi uvicorn edge-tts google-genai imageio-ffmpeg
 ```
