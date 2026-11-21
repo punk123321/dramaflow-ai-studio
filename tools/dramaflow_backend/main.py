@@ -28,7 +28,7 @@ from typing import List, Optional
 import edge_tts
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
@@ -216,3 +216,34 @@ def audio(job_id: str, n: int, x_app_token: Optional[str] = Header(default=None)
     if not p.exists():
         raise HTTPException(status_code=404, detail="Audio not found")
     return FileResponse(p, media_type="audio/wav", filename=p.name)
+
+
+class TtsRequest(BaseModel):
+    text: str
+    voice: str = DEFAULT_VOICE
+    rate: str = "+0%"
+
+
+@app.post("/tts")
+def tts_once(req: TtsRequest, x_app_token: Optional[str] = Header(default=None)):
+    """One piece of text -> a WAV (24 kHz mono), for the app's Audio stage."""
+    _auth(x_app_token)
+    text = req.text.strip()
+    if not text or len(text) > 6000:
+        raise HTTPException(status_code=400, detail="စာသား မရှိဘူး/ရှည်လွန်းတယ် (၆၀၀၀ လုံးအထိ)")
+    rate = req.rate if re.fullmatch(r"[+-]\d{1,3}%", req.rate) else "+0%"
+    voice = req.voice if req.voice.startswith("my-MM-") else DEFAULT_VOICE
+    d = OUT_DIR / f"tts_{secrets.token_hex(4)}"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        mp3, wav = d / "a.mp3", d / "a.wav"
+        asyncio.run(edge_tts.Communicate(text, voice, rate=rate).save(str(mp3)))
+        p = subprocess.run([_ffmpeg(), "-y", "-i", str(mp3), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)],
+                           capture_output=True, text=True)
+        if p.returncode != 0 or not wav.exists():
+            raise RuntimeError("ffmpeg: " + (p.stderr or "")[-150:])
+        return Response(content=wav.read_bytes(), media_type="audio/wav")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)[:200])
+    finally:
+        shutil.rmtree(d, ignore_errors=True)

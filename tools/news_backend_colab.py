@@ -27,7 +27,7 @@ import requests
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
@@ -313,9 +313,9 @@ def fetch_media(keyword: str, req: "NewsRequest", base: Path):
     return None, ""
 
 
-async def _tts(text: str, voice: str, out_mp3: Path):
+async def _tts(text: str, voice: str, out_mp3: Path, rate: str = "+0%"):
     use = voice if voice.startswith("my-MM-") else "my-MM-ThihaNeural"
-    await edge_tts.Communicate(text, use).save(str(out_mp3))
+    await edge_tts.Communicate(text, use, rate=rate).save(str(out_mp3))
 
 
 def _run(cmd: list):
@@ -491,6 +491,33 @@ def download(filename: str, x_app_token: Optional[str] = Header(default=None)):
     if not p.exists():
         raise HTTPException(status_code=404, detail="Video not found")
     return FileResponse(p, media_type="video/mp4", filename=filename)
+
+
+class TtsRequest(BaseModel):
+    text: str
+    voice: str = "my-MM-ThihaNeural"
+    rate: str = "+0%"  # "+20%" faster, "-10%" slower
+
+
+@app.post("/tts")
+def tts_once(req: TtsRequest, x_app_token: Optional[str] = Header(default=None)):
+    """One piece of text -> a WAV (24 kHz mono), for the app's Audio stage."""
+    _auth(x_app_token)
+    text = req.text.strip()
+    if not text or len(text) > 6000:
+        raise HTTPException(status_code=400, detail="စာသား မရှိဘူး/ရှည်လွန်းတယ် (၆၀၀၀ လုံးအထိ)")
+    rate = req.rate if re.fullmatch(r"[+-]\d{1,3}%", req.rate) else "+0%"
+    d = OUT_DIR / f"tts_{secrets.token_hex(4)}"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        mp3, wav = d / "a.mp3", d / "a.wav"
+        asyncio.run(_tts(text, req.voice, mp3, rate))
+        _run(["ffmpeg", "-y", "-i", str(mp3), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)])
+        return Response(content=wav.read_bytes(), media_type="audio/wav")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)[:200])
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def _serve():

@@ -123,6 +123,41 @@ class RecapClient {
     }
   }
 
+  /// One piece of narration as WAV bytes from the backend's /tts (Edge TTS).
+  /// [ratePercent] 0 = normal, +20 faster, -20 slower. Throws [HttpException].
+  Future<Uint8List> speak(String text, String voice, int ratePercent) async {
+    final c = HttpClient()..connectionTimeout = const Duration(seconds: 20);
+    _http = c;
+    try {
+      final req = await c.postUrl(_uri('/tts'));
+      req.headers.set('x-app-token', settings.token);
+      req.headers.contentType = ContentType.json;
+      final r = ratePercent.clamp(-50, 100);
+      final body = utf8.encode(jsonEncode({'text': text, 'voice': voice, 'rate': '${r >= 0 ? '+' : '-'}${r.abs()}%'}));
+      req.contentLength = body.length;
+      req.add(body);
+      final resp = await req.close().timeout(const Duration(seconds: 90));
+      if (resp.statusCode != 200) {
+        final err = await resp.transform(utf8.decoder).join();
+        throw HttpException(httpError(resp.statusCode, err));
+      }
+      final b = BytesBuilder(copy: false);
+      await for (final chunk in resp) {
+        b.add(chunk);
+      }
+      final bytes = b.takeBytes();
+      if (bytes.isEmpty) throw const HttpException('အသံ မပါလာဘူး');
+      return bytes;
+    } on SocketException {
+      throw const HttpException('Backend နဲ့ ဆက်သွယ်လို့မရဘူး (Colab/Altare ပွင့်နေလား၊ URL မှန်လား)');
+    } on TimeoutException {
+      throw const HttpException('Backend ပြန်မဖြေဘူး (အချိန်ကြာလွန်းတယ်)');
+    } finally {
+      c.close(force: true);
+      _http = null;
+    }
+  }
+
   void dispose() {
     _http?.close(force: true);
     _http = null;

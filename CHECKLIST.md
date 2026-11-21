@@ -653,3 +653,10 @@ Unproven: everything that talks to the network (Gemini video offsets via `video_
 APK artifact `dramaflow-apk-branch-221`. Not merged to main.
 Gemini model default changed to `gemini-3.8-flash` (the old `gemini-2.5-flash` answered 404 NOT_FOUND on the user's account, seen on the phone); the model name is editable in the News Video screen and the Recap Auto card.
 Unproven: picture search quality (keywords may find unrelated pictures; the app does not show them before rendering), Wikimedia / Unsplash licences and credit, portrait crop of landscape pictures, Colab speed with many ffmpeg steps (each scene several encodes). Re-run Cell 2 of the notebook to get the new backend.
+
+## TE-46: Stage 3 (Audio): Edge TTS through the user's backend
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Backends (`news_backend_colab.py` and `tools/dramaflow_backend/main.py`): new `POST /tts` (text, voice, rate) answers a 24 kHz mono WAV; token needed; text up to 6000 characters; only syntax-checked, never run (Edge TTS, ffmpeg) | n/a (Python) | **No** |
+| Audio panel: "Edge TTS" card (paste the same URL#TOKEN as News Video, voice Thiha / Nilar), per-chunk "Edge TTS" button and "all missing" button; the speed slider is sent as a percentage; the clip is stored like the other TTS clips (label "Edge TTS") | see run below | **No** |
+Unproven: Edge TTS Burmese voices through the unofficial library (Microsoft may block or change it), Colab tunnel with the request, long chunks (up to 1500 characters per chunk). Text of the chunk goes to the user's backend and from there to Microsoft's voice service.
