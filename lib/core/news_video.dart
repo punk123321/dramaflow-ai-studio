@@ -9,7 +9,7 @@ import 'srt.dart';
 /// Where the backend is and the key for the stock-footage site, kept on the
 /// phone only.
 class NewsVideoSettings {
-  const NewsVideoSettings({this.url = '', this.token = '', this.provider = 'wikimedia', this.keys = const {}});
+  const NewsVideoSettings({this.url = '', this.token = '', this.provider = 'wikimedia', this.keys = const {}, this.imageCount = 20});
 
   final String url;
   final String token;
@@ -20,14 +20,20 @@ class NewsVideoSettings {
   /// API key per provider (Wikimedia needs none).
   final Map<String, String> keys;
 
+  /// Pictures for the whole video (picture sources only), 0 = one per scene.
+  final int imageCount;
+
   bool get ready => url.isNotEmpty && token.isNotEmpty;
 
-  String get stockKey => keys[provider] ?? '';
+  String get stockKey => keyOf(provider);
 
-  NewsVideoSettings copyWith({String? url, String? token, String? provider, Map<String, String>? keys}) =>
-      NewsVideoSettings(url: url ?? this.url, token: token ?? this.token, provider: provider ?? this.provider, keys: keys ?? this.keys);
+  /// The key for [p]. Pixabay pictures use the same key as Pixabay videos.
+  String keyOf(String p) => keys[p] ?? (p == 'pixabay_photo' ? keys['pixabay'] ?? '' : '');
 
-  String encode() => jsonEncode({'url': url, 'token': token, 'provider': provider, 'keys': keys});
+  NewsVideoSettings copyWith({String? url, String? token, String? provider, Map<String, String>? keys, int? imageCount}) => NewsVideoSettings(
+      url: url ?? this.url, token: token ?? this.token, provider: provider ?? this.provider, keys: keys ?? this.keys, imageCount: imageCount ?? this.imageCount);
+
+  String encode() => jsonEncode({'url': url, 'token': token, 'provider': provider, 'keys': keys, 'images': imageCount});
 
   static NewsVideoSettings decode(String? s) {
     if (s == null || s.trim().isEmpty) return const NewsVideoSettings();
@@ -44,20 +50,31 @@ class NewsVideoSettings {
       }
       if (g('pexels').isNotEmpty) keys.putIfAbsent('pexels', () => g('pexels')); // older saves
       final prov = g('provider');
-      return NewsVideoSettings(url: g('url'), token: g('token'), provider: stockProviders.containsKey(prov) ? prov : (keys.containsKey('pexels') ? 'pexels' : 'wikimedia'), keys: keys);
+      final img = m['images'];
+      return NewsVideoSettings(
+        url: g('url'),
+        token: g('token'),
+        provider: stockProviders.containsKey(prov) ? prov : (keys.containsKey('pexels') ? 'pexels' : 'wikimedia'),
+        keys: keys,
+        imageCount: img is num ? img.toInt().clamp(0, maxNewsImages) : 20,
+      );
     } catch (_) {
       return const NewsVideoSettings();
     }
   }
 }
 
-/// Where the background footage comes from. [needsKey] false = no account needed.
-const stockProviders = <String, ({String title, String note, bool needsKey})>{
-  'wikimedia': (title: 'Wikimedia Commons', note: 'key မလို၊ ပုံသီးသန့် (Ken Burns zoom)၊ လိုင်စင်/credit စစ်ပါ', needsKey: false),
-  'pixabay': (title: 'Pixabay', note: 'ဗီဒီယိုရ၊ free API key လို (pixabay.com/api/docs)', needsKey: true),
-  'unsplash': (title: 'Unsplash', note: 'ပုံသီးသန့် (Ken Burns zoom)၊ Access Key လို', needsKey: true),
-  'pexels': (title: 'Pexels', note: 'ဗီဒီယိုရ၊ API key လို', needsKey: true),
+/// Where the background footage comes from. [needsKey] false = no account
+/// needed; [images] true = pictures (slow zoom), many per video.
+const stockProviders = <String, ({String title, String note, bool needsKey, bool images})>{
+  'wikimedia': (title: 'Wikimedia Commons (ပုံ)', note: 'key မလို၊ ပုံ အများကြီး (Ken Burns zoom)၊ လိုင်စင်/credit စစ်ပါ', needsKey: false, images: true),
+  'pixabay_photo': (title: 'Pixabay (ပုံ)', note: 'ပုံ အများကြီး၊ free API key လို (pixabay.com/api/docs)', needsKey: true, images: true),
+  'unsplash': (title: 'Unsplash (ပုံ)', note: 'ပုံ အများကြီး (Ken Burns zoom)၊ Access Key လို', needsKey: true, images: true),
+  'pixabay': (title: 'Pixabay (ဗီဒီယို)', note: 'scene တစ်ခုကို ဗီဒီယို ၁ ခု၊ free API key လို', needsKey: true, images: false),
+  'pexels': (title: 'Pexels (ဗီဒီယို)', note: 'scene တစ်ခုကို ဗီဒီယို ၁ ခု၊ API key လို', needsKey: true, images: false),
 };
+
+const maxNewsImages = 40;
 
 /// Reads what the backend prints: `https://xxxx.trycloudflare.com#TOKEN`.
 /// Returns null when there is no usable web address.
@@ -138,6 +155,7 @@ Map<String, Object?> newsRequestJson({
   required String geminiKey,
   required String stockProvider,
   required String stockKey,
+  int imageCount = 20,
   required String ratio,
   required double minutes,
   required String voice,
@@ -151,6 +169,7 @@ Map<String, Object?> newsRequestJson({
     'gemini_key': geminiKey.trim(),
     'stock_provider': stockProviders.containsKey(stockProvider) ? stockProvider : 'wikimedia',
     'stock_key': stockKey.trim(),
+    'image_count': imageCount.clamp(0, maxNewsImages),
     if (stockProvider == 'pexels') 'pexels_key': stockKey.trim(),
     'aspect_ratio': ratio == '16:9' ? '16:9' : '9:16',
     'duration_min': m,

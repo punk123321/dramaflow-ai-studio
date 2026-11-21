@@ -37,6 +37,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
   final _connectC = TextEditingController();
   final _stockC = TextEditingController();
   String _provider = 'wikimedia';
+  int _imageCount = 20;
   final _topicC = TextEditingController();
   final _promptC = TextEditingController(text: newsPrompts['anchor']!.text);
 
@@ -74,7 +75,8 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _geminiKey = g.apiKey;
       _connectC.text = s.ready ? '${s.url}#${s.token}' : '';
       _provider = s.provider;
-      _stockC.text = s.keys[s.provider] ?? '';
+      _stockC.text = s.keyOf(s.provider);
+      _imageCount = s.imageCount;
       _loaded = true;
     });
   }
@@ -97,7 +99,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     } else {
       keys[_provider] = k;
     }
-    return base.copyWith(provider: _provider, keys: keys);
+    return base.copyWith(provider: _provider, keys: keys, imageCount: _imageCount);
   }
 
   Future<void> _saveBackend() async {
@@ -134,7 +136,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     }
     // Use what is on screen now (provider and key), not only what was saved before.
     final eff = _withStock(_s);
-    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey) {
+    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey || eff.imageCount != _s.imageCount) {
       await _repo.save(eff);
       _s = eff;
     }
@@ -154,6 +156,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
           geminiKey: _geminiKey,
           stockProvider: _s.provider,
           stockKey: _s.stockKey,
+          imageCount: stockProviders[_s.provider]!.images ? _s.imageCount : 0,
           ratio: _ratio,
           minutes: _minutes,
           voice: _voice,
@@ -263,13 +266,30 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
                           ? null
                           : (v) => setState(() {
                                 _provider = v ?? _provider;
-                                _stockC.text = _s.keys[_provider] ?? '';
+                                _stockC.text = _s.keyOf(_provider);
                               }),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(stockProviders[_provider]!.note, style: const TextStyle(color: DfColors.muted, fontSize: 12)),
                     ),
+                    if (stockProviders[_provider]!.images) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _imageCount == 0
+                            ? 'ပုံ: scene တစ်ခုကို ၁ ပုံ'
+                            : 'ပုံ ${_imageCount} ပုံ တစ်ခါတည်းရှာ၊ အသံအချိန်အလိုက် စဉ်ပေး (တစ်ပုံ ≈ ${(_minutes * 60 / _imageCount).round()} စက္ကန့်)',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      Slider(
+                        value: _imageCount.toDouble(),
+                        min: 0,
+                        max: maxNewsImages.toDouble(),
+                        divisions: maxNewsImages,
+                        label: '$_imageCount',
+                        onChanged: _running ? null : (v) => setState(() => _imageCount = v.round()),
+                      ),
+                    ],
                     if (stockProviders[_provider]!.needsKey) ...[
                       const SizedBox(height: 8),
                       TextField(

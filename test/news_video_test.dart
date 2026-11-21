@@ -41,6 +41,23 @@ void main() {
     expect(bad['stock_provider'], 'wikimedia');
   });
 
+  test('picture count: default 20, kept between 0 and 40, sent with the request, alias key for Pixabay pictures', () {
+    expect(const NewsVideoSettings().imageCount, 20);
+    expect(NewsVideoSettings.decode('{"url":"https://a.b","token":"t","images":99}').imageCount, maxNewsImages);
+    expect(NewsVideoSettings.decode('{"url":"https://a.b","token":"t","images":-5}').imageCount, 0);
+    final back = NewsVideoSettings.decode(const NewsVideoSettings(url: 'https://a.b', token: 't', imageCount: 12).encode());
+    expect(back.imageCount, 12);
+    const s = NewsVideoSettings(provider: 'pixabay_photo', keys: {'pixabay': 'pk'});
+    expect(s.stockKey, 'pk');
+    const own = NewsVideoSettings(provider: 'pixabay_photo', keys: {'pixabay': 'pk', 'pixabay_photo': 'x'});
+    expect(own.stockKey, 'x');
+    final j = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'wikimedia', stockKey: '', imageCount: 99, ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(j['image_count'], maxNewsImages);
+    expect(stockProviders['wikimedia']!.images, isTrue);
+    expect(stockProviders['pexels']!.images, isFalse);
+  });
+
   test('request: duration kept between 3 and 5, ratio only 9:16 or 16:9', () {
     Map<String, Object?> r(double m, String ratio) => newsRequestJson(
           topic: ' t ', geminiKey: ' g ', stockProvider: 'wikimedia', stockKey: '', ratio: ratio, minutes: m, voice: 'v', sources: ['a'], strict: true, prompt: 'p');

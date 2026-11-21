@@ -49,6 +49,7 @@ class NewsRequest(BaseModel):
     pexels_key: str = ""  # old apps; same as stock_key when stock_provider is "pexels"
     stock_provider: str = "wikimedia"  # "wikimedia" (no key), "pixabay", "unsplash", "pexels"
     stock_key: str = ""
+    image_count: int = 20  # pictures for the whole video (picture sources only); 0 = one per scene
     aspect_ratio: str = "9:16"  # "9:16" or "16:9"
     duration_min: float = 4.0  # 3.0 to 5.0
     voice_model: str = "my-MM-ThihaNeural"
@@ -99,7 +100,7 @@ IMPORTANT: Return ONLY valid JSON (no markdown fences) in this exact structure:
 {{
   "title": "Myanmar news headline",
   "scenes": [
-    {{"narration": "Burmese narration (1-3 sentences)", "keyword": "short English stock-video search keyword", "source": "cited source name"}}
+    {{"narration": "Burmese narration (1-3 sentences)", "keywords": ["2 to 3 DIFFERENT short English photo search phrases for this scene, most specific first"], "source": "cited source name"}}
   ]
 }}
 Generate about {scene_count} scenes, about {target_words} Burmese words of narration in total.
@@ -222,6 +223,81 @@ PROVIDERS = {
 }
 
 
+# ---- many pictures for the whole video ------------------------------------
+def images_for(seconds: float, sec_per_image: float, max_per_scene: int = 4) -> int:
+    """How many pictures a scene of this length gets (at least 1)."""
+    if sec_per_image <= 0:
+        return 1
+    return max(1, min(max_per_scene, int(round(seconds / sec_per_image))))
+
+
+def _cands_wikimedia(keyword: str, key: str, ratio: str) -> list:
+    r = requests.get("https://commons.wikimedia.org/w/api.php", headers=UA, timeout=15, params={
+        "action": "query", "format": "json", "generator": "search", "gsrnamespace": 6,
+        "gsrsearch": f"{keyword} filetype:bitmap", "gsrlimit": 15, "prop": "imageinfo",
+        "iiprop": "url|mime|size", "iiurlwidth": 1600})
+    pages = (r.json().get("query") or {}).get("pages") or {}
+    out = []
+    for pg in sorted(pages.values(), key=lambda p: p.get("index", 99)):
+        ii = (pg.get("imageinfo") or [{}])[0]
+        if ii.get("mime") in ("image/jpeg", "image/png") and ii.get("width", 0) >= 900:
+            out.append((f"wm{pg.get('pageid')}", ii.get("thumburl") or ii.get("url"), None))
+    return out
+
+
+def _cands_unsplash(keyword: str, key: str, ratio: str) -> list:
+    if not key:
+        return []
+    orient = "portrait" if ratio == "9:16" else "landscape"
+    r = requests.get("https://api.unsplash.com/search/photos", headers={"Authorization": f"Client-ID {key}", "Accept-Version": "v1"},
+                     params={"query": keyword, "orientation": orient, "per_page": 10}, timeout=15)
+    return [(f"us{x['id']}", x["urls"]["regular"], x["links"].get("download_location")) for x in r.json().get("results", [])]
+
+
+def _cands_pixabay_photo(keyword: str, key: str, ratio: str) -> list:
+    if not key:
+        return []
+    orient = "vertical" if ratio == "9:16" else "horizontal"
+    r = requests.get("https://pixabay.com/api/", params={"key": key, "q": keyword, "image_type": "photo", "orientation": orient,
+                                                          "per_page": 15, "safesearch": "true", "min_width": 900}, timeout=15)
+    return [(f"pb{h['id']}", h.get("largeImageURL") or h.get("webformatURL"), None) for h in r.json().get("hits", [])]
+
+
+IMAGE_SEARCH = {"wikimedia": _cands_wikimedia, "unsplash": _cands_unsplash, "pixabay_photo": _cands_pixabay_photo}
+
+
+def collect_images(keywords: list, provider: str, key: str, ratio: str, need: int, used: set, work: Path, tag) -> list:
+    """Up to [need] different pictures for one scene, never one already used in
+    this video. Falls back to Wikimedia (no key) when the chosen source gives nothing."""
+    got: list = []
+    order = [provider] + (["wikimedia"] if provider != "wikimedia" else [])
+    for name in order:
+        for kw in keywords:
+            if len(got) >= need:
+                break
+            try:
+                cands = IMAGE_SEARCH[name](kw, key if name == provider else "", ratio)
+            except Exception:
+                cands = []
+            for cid, url, loc in cands:
+                if cid in used or not url:
+                    continue
+                path = work / f"img_{tag}_{len(got)}.jpg"
+                if _download(url, path):
+                    used.add(cid)
+                    got.append(path)
+                    if loc and name == "unsplash":  # Unsplash asks apps to report a download
+                        try:
+                            requests.get(loc, headers={"Authorization": f"Client-ID {key}"}, timeout=8)
+                        except Exception:
+                            pass
+                    if len(got) >= need:
+                        break
+        if got:
+            break
+    return got
+
+
 def fetch_media(keyword: str, req: "NewsRequest", base: Path):
     """Tries the chosen provider, then Wikimedia (no key). Returns (path, kind) or (None, "")."""
     chain = [req.stock_provider if req.stock_provider in PROVIDERS else "wikimedia"]
@@ -271,6 +347,36 @@ def render_clip(media: Optional[Path], kind: str, audio_in: Path, out_mp4: Path,
         _run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=0x0f172a:s={w}x{h}:r=30", "-i", str(audio_in), *enc, str(out_mp4)])
 
 
+def render_image_clip(img: Path, out_mp4: Path, ratio: str, dur: float, idx: int):
+    """Silent clip: a slow Ken Burns move on one picture (in, out, in, ...)."""
+    w, h = (720, 1280) if ratio == "9:16" else (1280, 720)
+    frames = max(15, int(round(dur * 30)))
+    z = f"1+0.25*on/{frames}" if idx % 2 == 0 else f"1.25-0.25*on/{frames}"
+    vf = (f"scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},"
+          f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps=30")
+    _run(["ffmpeg", "-y", "-i", str(img), "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+          "-r", "30", "-an", "-t", f"{dur:.2f}", str(out_mp4)])
+
+
+def render_image_scene(imgs: list, audio_in: Path, out_mp4: Path, ratio: str, dur: float, work: Path, tag):
+    """One scene: its pictures one after another, share the voice length equally."""
+    k = len(imgs)
+    parts = []
+    for j, img in enumerate(imgs):
+        p = work / f"kb_{tag}_{j}.mp4"
+        render_image_clip(img, p, ratio, dur / k, j)
+        parts.append(p)
+    if k == 1:
+        vid = parts[0]
+    else:
+        lst = work / f"kb_{tag}.txt"
+        lst.write_text("\n".join(f"file '{p}'" for p in parts))
+        vid = work / f"kb_{tag}_all.mp4"
+        _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(vid)])
+    _run(["ffmpeg", "-y", "-i", str(vid), "-i", str(audio_in), "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2",
+          "-shortest", "-t", f"{dur:.2f}", str(out_mp4)])
+
+
 def clean_old():
     now = time.time()
     with LOCK:
@@ -290,6 +396,9 @@ def run_job(job_id: str, req: NewsRequest):
         scenes = data["scenes"]
         n = len(scenes)
         clips, out_scenes, t, stock_used = [], [], 0.0, {}
+        use_images = req.stock_provider in IMAGE_SEARCH and req.image_count > 0
+        sec_per_image = max(4.0, max(3.0, min(5.0, req.duration_min)) * 60 / max(1, min(60, req.image_count)))
+        used_ids: set = set()
         for i, sc in enumerate(scenes):
             narr = str(sc.get("narration", "")).strip()
             if not narr:
@@ -298,14 +407,26 @@ def run_job(job_id: str, req: NewsRequest):
             mp3, raw, clip = work / f"s{i}.mp3", work / f"raw_{i}", work / f"clip_{i}.mp4"
             asyncio.run(_tts(narr, req.voice_model, mp3))
             dur = audio_seconds(mp3)
-            media, kind = fetch_media(str(sc.get("keyword") or "news"), req, raw)
-            has = media is not None
-            render_clip(media, kind, mp3, clip, req.aspect_ratio, dur)
-            if has:
-                stock_used[kind] = stock_used.get(kind, 0) + 1
+            raw_kw = sc.get("keywords") or []
+            raw_kw = [raw_kw] if isinstance(raw_kw, str) else raw_kw
+            kws = [str(k).strip() for k in raw_kw if str(k).strip()] or [str(sc.get("keyword") or "news")]
+            imgs = []
+            if use_images:
+                imgs = collect_images(kws, req.stock_provider, req.stock_key, req.aspect_ratio,
+                                      images_for(dur, sec_per_image), used_ids, work, i)
+            if imgs:
+                render_image_scene(imgs, mp3, clip, req.aspect_ratio, dur, work, i)
+                stock_used["image"] = stock_used.get("image", 0) + len(imgs)
+                has = True
+            else:
+                media, kind = fetch_media(kws[0], req, raw)
+                has = media is not None
+                render_clip(media, kind, mp3, clip, req.aspect_ratio, dur)
+                if has:
+                    stock_used[kind] = stock_used.get(kind, 0) + 1
             clips.append(clip)
-            out_scenes.append({"narration": narr, "keyword": sc.get("keyword", ""), "source": sc.get("source", ""),
-                               "start": round(t, 2), "end": round(t + dur, 2), "stock": has})
+            out_scenes.append({"narration": narr, "keyword": kws[0], "source": sc.get("source", ""),
+                               "start": round(t, 2), "end": round(t + dur, 2), "stock": has, "images": len(imgs)})
             t += dur
         if not clips:
             raise ValueError("Scene မထွက်ပါ")
@@ -320,7 +441,7 @@ def run_job(job_id: str, req: NewsRequest):
         if not stock_used:
             warnings.append("နောက်ခံ ဗီဒီယို/ပုံ တစ်ခုမှ မရဘူး (key မှန်လား၊ keyword ရှာမတွေ့လား) — အရောင်နောက်ခံပဲ ဖြစ်တယ်")
         elif stock_used.get("image"):
-            warnings.append(f"ပုံ {stock_used['image']} ခု သုံးထားတယ် (Ken Burns zoom)။ Wikimedia/Unsplash ပုံတွေမှာ လိုင်စင်/credit လိုနိုင်တယ် — publish မလုပ်ခင် စစ်ပါ")
+            warnings.append(f"ပုံ {stock_used['image']} ခု သုံးထားတယ် (scene အလိုက် စဉ်ပေး၊ Ken Burns zoom)။ Wikimedia/Unsplash ပုံတွေမှာ လိုင်စင်/credit လိုနိုင်တယ် — publish မလုပ်ခင် စစ်ပါ")
         _set(job_id, status="done", stage="ပြီးပြီ", progress=100, title=data.get("title", req.topic),
              scenes=out_scenes, seconds=round(t, 1), warnings=warnings, size=final.stat().st_size)
     except Exception as e:  # shown in the app
