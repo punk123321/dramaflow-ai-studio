@@ -15,7 +15,7 @@ import 'widgets.dart';
 
 /// Makes a 3 to 5 minute news video with the user's own backend (a Colab
 /// notebook, tools/news_backend_colab.py). The script comes from Gemini with
-/// Google Search, the voice from Edge TTS, the pictures from Pexels, and the
+/// Google Search, the voice from Edge TTS, the pictures or footage from Pixabay, Unsplash, Wikimedia Commons or Pexels, and the
 /// backend joins them. Nothing is checked for truth here: read the script
 /// before you publish a news video.
 class NewsVideoScreen extends StatefulWidget {
@@ -35,7 +35,8 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
 
   final _repo = NewsVideoRepo();
   final _connectC = TextEditingController();
-  final _pexelsC = TextEditingController();
+  final _stockC = TextEditingController();
+  String _provider = 'wikimedia';
   final _topicC = TextEditingController();
   final _promptC = TextEditingController(text: newsPrompts['anchor']!.text);
 
@@ -72,7 +73,8 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _s = s;
       _geminiKey = g.apiKey;
       _connectC.text = s.ready ? '${s.url}#${s.token}' : '';
-      _pexelsC.text = s.pexelsKey;
+      _provider = s.provider;
+      _stockC.text = s.keys[s.provider] ?? '';
       _loaded = true;
     });
   }
@@ -81,10 +83,21 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
   void dispose() {
     _client?.cancel();
     _connectC.dispose();
-    _pexelsC.dispose();
+    _stockC.dispose();
     _topicC.dispose();
     _promptC.dispose();
     super.dispose();
+  }
+
+  NewsVideoSettings _withStock(NewsVideoSettings base) {
+    final keys = {...base.keys};
+    final k = _stockC.text.trim();
+    if (k.isEmpty) {
+      keys.remove(_provider);
+    } else {
+      keys[_provider] = k;
+    }
+    return base.copyWith(provider: _provider, keys: keys);
   }
 
   Future<void> _saveBackend() async {
@@ -93,7 +106,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       setState(() => _error = 'Backend လိပ်စာ မမှန်ပါ။ Colab က ထုတ်ပေးတဲ့ "https://….trycloudflare.com#TOKEN" တစ်ကြောင်းလုံး ကူးထည့်ပါ။');
       return;
     }
-    final next = _s.copyWith(url: c.url, token: c.token, pexelsKey: _pexelsC.text.trim());
+    final next = _withStock(_s.copyWith(url: c.url, token: c.token));
     await _repo.save(next);
     if (!mounted) return;
     setState(() {
@@ -133,7 +146,8 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
         newsRequestJson(
           topic: topic,
           geminiKey: _geminiKey,
-          pexelsKey: _s.pexelsKey,
+          stockProvider: _s.provider,
+          stockKey: _s.stockKey,
           ratio: _ratio,
           minutes: _minutes,
           voice: _voice,
@@ -234,13 +248,32 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
                       decoration: const InputDecoration(labelText: 'https://….trycloudflare.com#TOKEN'),
                     ),
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: _pexelsC,
-                      obscureText: true,
-                      autocorrect: false,
-                      enabled: !_running,
-                      decoration: const InputDecoration(labelText: 'Pexels API key (နောက်ခံ ဗီဒီယိုအတွက်၊ မထည့်လည်းရ)'),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('prov$_provider'),
+                      initialValue: _provider,
+                      decoration: const InputDecoration(labelText: 'နောက်ခံ ပုံ/ဗီဒီယို ရင်းမြစ်'),
+                      items: [for (final e in stockProviders.entries) DropdownMenuItem(value: e.key, child: Text(e.value.title))],
+                      onChanged: _running
+                          ? null
+                          : (v) => setState(() {
+                                _provider = v ?? _provider;
+                                _stockC.text = _s.keys[_provider] ?? '';
+                              }),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(stockProviders[_provider]!.note, style: const TextStyle(color: DfColors.muted, fontSize: 12)),
+                    ),
+                    if (stockProviders[_provider]!.needsKey) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _stockC,
+                        obscureText: true,
+                        autocorrect: false,
+                        enabled: !_running,
+                        decoration: InputDecoration(labelText: '${stockProviders[_provider]!.title} API key'),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     OutlinedButton.icon(onPressed: _running ? null : _saveBackend, icon: const Icon(Icons.link_rounded), label: const Text('သိမ်း + စစ်')),
                     const SizedBox(height: 6),

@@ -89,6 +89,7 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "pickVideo" -> startPickVideo(result)
                     "extractAudio" -> extractAudio(result, call.argument<String>("uri") ?: "")
+                    "copyVideo" -> copyVideo(result, call.argument<String>("uri") ?: "")
                     "shareText" -> {
                         val text = call.argument<String>("text") ?: ""
                         val gemini = call.argument<Boolean>("gemini") ?: true
@@ -165,6 +166,27 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Copies the picked video into the cache so it can be uploaded (the app
+     * cannot read a content:// link as a file). The original is only read.
+     */
+    private fun copyVideo(result: MethodChannel.Result, uri: String) {
+        worker.execute {
+            try {
+                val out = File(cacheDir, "upload_" + System.currentTimeMillis() + ".mp4")
+                val input = contentResolver.openInputStream(Uri.parse(uri))
+                if (input == null) {
+                    runOnUiThread { result.error("copy_failed", "Cannot open the video", null) }
+                } else {
+                    input.use { i -> out.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
+                    runOnUiThread { result.success(hashMapOf("path" to out.absolutePath, "size" to out.length())) }
+                }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("copy_failed", e.message ?: e.toString(), null) }
+            }
+        }
     }
 
     /**

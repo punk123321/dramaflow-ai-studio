@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/recap_auto.dart';
 import '../core/segments.dart';
 import '../core/theme.dart';
 import '../core/video_recap.dart';
@@ -8,6 +9,7 @@ import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../data/segment_repo.dart';
 import '../platform/gemini_open.dart';
+import 'recap_auto_section.dart';
 import 'widgets.dart';
 
 /// Gemini watches the video (the user attaches it in the Gemini app) and writes
@@ -171,6 +173,22 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
           )
         else ...[
           SectionTitle('အပိုင်း ${_parts.length} ခု ${_fromIndex ? '(Video Index က)' : '(၁ မိနစ်စီ အလိုအလျောက်)'}'),
+          RecapAutoSection(
+            projectId: _pid,
+            task: _task,
+            mode: 'video',
+            videoUri: widget.project.sourceVideoUri,
+            buildGroups: (_) async => videoRecapGroups(
+              dramaTitle: widget.project.dramaTitle,
+              episode: widget.project.episode,
+              parts: _parts,
+              notes: _notes.text,
+            ),
+            onTextsSaved: () async {
+              final r = await _repo.results(_pid, _task);
+              if (mounted) setState(() => _texts = r);
+            },
+          ),
           TextField(
             controller: _notes,
             minLines: 1,

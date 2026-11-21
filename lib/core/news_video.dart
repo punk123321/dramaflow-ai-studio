@@ -9,18 +9,25 @@ import 'srt.dart';
 /// Where the backend is and the key for the stock-footage site, kept on the
 /// phone only.
 class NewsVideoSettings {
-  const NewsVideoSettings({this.url = '', this.token = '', this.pexelsKey = ''});
+  const NewsVideoSettings({this.url = '', this.token = '', this.provider = 'wikimedia', this.keys = const {}});
 
   final String url;
   final String token;
-  final String pexelsKey;
+
+  /// Where the background pictures/videos come from: see [stockProviders].
+  final String provider;
+
+  /// API key per provider (Wikimedia needs none).
+  final Map<String, String> keys;
 
   bool get ready => url.isNotEmpty && token.isNotEmpty;
 
-  NewsVideoSettings copyWith({String? url, String? token, String? pexelsKey}) =>
-      NewsVideoSettings(url: url ?? this.url, token: token ?? this.token, pexelsKey: pexelsKey ?? this.pexelsKey);
+  String get stockKey => keys[provider] ?? '';
 
-  String encode() => jsonEncode({'url': url, 'token': token, 'pexels': pexelsKey});
+  NewsVideoSettings copyWith({String? url, String? token, String? provider, Map<String, String>? keys}) =>
+      NewsVideoSettings(url: url ?? this.url, token: token ?? this.token, provider: provider ?? this.provider, keys: keys ?? this.keys);
+
+  String encode() => jsonEncode({'url': url, 'token': token, 'provider': provider, 'keys': keys});
 
   static NewsVideoSettings decode(String? s) {
     if (s == null || s.trim().isEmpty) return const NewsVideoSettings();
@@ -28,12 +35,29 @@ class NewsVideoSettings {
       final m = jsonDecode(s);
       if (m is! Map) return const NewsVideoSettings();
       String g(String k) => m[k] is String ? (m[k] as String).trim() : '';
-      return NewsVideoSettings(url: g('url'), token: g('token'), pexelsKey: g('pexels'));
+      final keys = <String, String>{};
+      final raw = m['keys'];
+      if (raw is Map) {
+        for (final e in raw.entries) {
+          if (e.key is String && e.value is String && (e.value as String).trim().isNotEmpty) keys[e.key as String] = (e.value as String).trim();
+        }
+      }
+      if (g('pexels').isNotEmpty) keys.putIfAbsent('pexels', () => g('pexels')); // older saves
+      final prov = g('provider');
+      return NewsVideoSettings(url: g('url'), token: g('token'), provider: stockProviders.containsKey(prov) ? prov : (keys.containsKey('pexels') ? 'pexels' : 'wikimedia'), keys: keys);
     } catch (_) {
       return const NewsVideoSettings();
     }
   }
 }
+
+/// Where the background footage comes from. [needsKey] false = no account needed.
+const stockProviders = <String, ({String title, String note, bool needsKey})>{
+  'wikimedia': (title: 'Wikimedia Commons', note: 'key မလို၊ ပုံသီးသန့် (Ken Burns zoom)၊ လိုင်စင်/credit စစ်ပါ', needsKey: false),
+  'pixabay': (title: 'Pixabay', note: 'ဗီဒီယိုရ၊ free API key လို (pixabay.com/api/docs)', needsKey: true),
+  'unsplash': (title: 'Unsplash', note: 'ပုံသီးသန့် (Ken Burns zoom)၊ Access Key လို', needsKey: true),
+  'pexels': (title: 'Pexels', note: 'ဗီဒီယိုရ၊ API key လို', needsKey: true),
+};
 
 /// Reads what the backend prints: `https://xxxx.trycloudflare.com#TOKEN`.
 /// Returns null when there is no usable web address.
@@ -112,7 +136,8 @@ const maxNewsMinutes = 5.0;
 Map<String, Object?> newsRequestJson({
   required String topic,
   required String geminiKey,
-  required String pexelsKey,
+  required String stockProvider,
+  required String stockKey,
   required String ratio,
   required double minutes,
   required String voice,
@@ -124,7 +149,9 @@ Map<String, Object?> newsRequestJson({
   return {
     'topic': topic.trim(),
     'gemini_key': geminiKey.trim(),
-    'pexels_key': pexelsKey.trim(),
+    'stock_provider': stockProviders.containsKey(stockProvider) ? stockProvider : 'wikimedia',
+    'stock_key': stockKey.trim(),
+    if (stockProvider == 'pexels') 'pexels_key': stockKey.trim(),
     'aspect_ratio': ratio == '16:9' ? '16:9' : '9:16',
     'duration_min': m,
     'voice_model': voice,

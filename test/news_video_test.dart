@@ -13,17 +13,37 @@ void main() {
   });
 
   test('settings round trip and broken text', () {
-    const s = NewsVideoSettings(url: 'https://a.b', token: 't', pexelsKey: 'k');
+    const s = NewsVideoSettings(url: 'https://a.b', token: 't', provider: 'pixabay', keys: {'pixabay': 'k'});
     final back = NewsVideoSettings.decode(s.encode());
-    expect([back.url, back.token, back.pexelsKey], ['https://a.b', 't', 'k']);
+    expect([back.url, back.token, back.provider, back.stockKey], ['https://a.b', 't', 'pixabay', 'k']);
     expect(back.ready, isTrue);
     expect(NewsVideoSettings.decode('x').ready, isFalse);
     expect(NewsVideoSettings.decode(null).ready, isFalse);
   });
 
+  test('stock provider: older save with a Pexels key still works, unknown provider falls back', () {
+    final old = NewsVideoSettings.decode('{"url":"https://a.b","token":"t","pexels":"pk"}');
+    expect(old.provider, 'pexels');
+    expect(old.stockKey, 'pk');
+    final odd = NewsVideoSettings.decode('{"url":"https://a.b","token":"t","provider":"nope"}');
+    expect(odd.provider, 'wikimedia');
+    expect(odd.stockKey, '');
+    final j = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'unsplash', stockKey: ' u ', ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(j['stock_provider'], 'unsplash');
+    expect(j['stock_key'], 'u');
+    expect(j.containsKey('pexels_key'), isFalse);
+    final px = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'pexels', stockKey: 'p', ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(px['pexels_key'], 'p');
+    final bad = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'zzz', stockKey: '', ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(bad['stock_provider'], 'wikimedia');
+  });
+
   test('request: duration kept between 3 and 5, ratio only 9:16 or 16:9', () {
     Map<String, Object?> r(double m, String ratio) => newsRequestJson(
-          topic: ' t ', geminiKey: ' g ', pexelsKey: '', ratio: ratio, minutes: m, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+          topic: ' t ', geminiKey: ' g ', stockProvider: 'wikimedia', stockKey: '', ratio: ratio, minutes: m, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
     expect(r(1, '9:16')['duration_min'], 3.0);
     expect(r(9, '9:16')['duration_min'], 5.0);
     expect(r(double.nan, '9:16')['duration_min'], 4.0);

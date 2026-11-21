@@ -8,7 +8,7 @@
 #  * Access token: every call except /health needs the header x-app-token.
 #    The token is printed with the URL ("URL#TOKEN") so strangers who find the
 #    random tunnel address cannot use your Colab (and your keys).
-#  * The Gemini and Pexels keys are used for the job and not stored on disk.
+#  * The Gemini and stock-site keys are used for the job and not stored on disk.
 #  * Every scene returns start/end seconds, so the app can make an SRT and
 #    draw the subtitles itself with a Burmese font (ffmpeg here has none).
 #  * ffmpeg errors are reported instead of hidden; all clips use the same
@@ -46,7 +46,9 @@ KEEP_SECONDS = 2 * 3600
 class NewsRequest(BaseModel):
     topic: str
     gemini_key: str
-    pexels_key: str = ""
+    pexels_key: str = ""  # old apps; same as stock_key when stock_provider is "pexels"
+    stock_provider: str = "wikimedia"  # "wikimedia" (no key), "pixabay", "unsplash", "pexels"
+    stock_key: str = ""
     aspect_ratio: str = "9:16"  # "9:16" or "16:9"
     duration_min: float = 4.0  # 3.0 to 5.0
     voice_model: str = "my-MM-ThihaNeural"
@@ -118,34 +120,121 @@ Generate about {scene_count} scenes, about {target_words} Burmese words of narra
     raise ValueError(f"Gemini did not return usable JSON ({last or 'no scenes'})")
 
 
+UA = {"User-Agent": "DramaFlowNews/1.0 (personal news video tool)"}
+MAX_BYTES = 80 * 1024 * 1024
+
+
+def _download(link: str, save: Path, headers: Optional[dict] = None) -> bool:
+    try:
+        total = 0
+        with requests.get(link, timeout=30, stream=True, headers=headers or UA) as v, open(save, "wb") as out:
+            if v.status_code != 200:
+                return False
+            for chunk in v.iter_content(1 << 16):
+                total += len(chunk)
+                if total > MAX_BYTES:
+                    return False
+                out.write(chunk)
+        return total > 1000
+    except Exception:
+        return False
+
+
 def fetch_pexels(keyword: str, key: str, ratio: str, save: Path) -> bool:
     if not key:
         return False
     orient = "portrait" if ratio == "9:16" else "landscape"
     try:
-        r = requests.get(
-            "https://api.pexels.com/videos/search",
-            headers={"Authorization": key},
-            params={"query": keyword, "orientation": orient, "per_page": 1},
-            timeout=15,
-        )
+        r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": key},
+                         params={"query": keyword, "orientation": orient, "per_page": 1}, timeout=15)
         videos = r.json().get("videos", [])
-        if not videos:
-            return False
-        files = videos[0].get("video_files", [])
+        files = videos[0].get("video_files", []) if videos else []
         if not files:
             return False
         link = next((f["link"] for f in files if f.get("quality") == "hd"), files[0]["link"])
-        total = 0
-        with requests.get(link, timeout=30, stream=True) as v, open(save, "wb") as out:
-            for chunk in v.iter_content(1 << 16):
-                total += len(chunk)
-                if total > 80 * 1024 * 1024:
-                    return False
-                out.write(chunk)
-        return True
+        return _download(link, save)
     except Exception:
         return False
+
+
+def fetch_pixabay_video(keyword: str, key: str, ratio: str, save: Path) -> bool:
+    if not key:
+        return False
+    try:
+        r = requests.get("https://pixabay.com/api/videos/", params={"key": key, "q": keyword, "per_page": 5, "safesearch": "true"}, timeout=15)
+        for hit in r.json().get("hits", []):
+            vids = hit.get("videos", {})
+            for size in ("medium", "large", "small"):  # medium is ~1280 wide: enough and light
+                link = (vids.get(size) or {}).get("url")
+                if link and _download(link, save):
+                    return True
+        return False
+    except Exception:
+        return False
+
+
+def fetch_unsplash_image(keyword: str, key: str, ratio: str, save: Path) -> bool:
+    if not key:
+        return False
+    orient = "portrait" if ratio == "9:16" else "landscape"
+    try:
+        r = requests.get("https://api.unsplash.com/search/photos", headers={"Authorization": f"Client-ID {key}", "Accept-Version": "v1"},
+                         params={"query": keyword, "orientation": orient, "per_page": 1}, timeout=15)
+        res = r.json().get("results", [])
+        if not res:
+            return False
+        ok = _download(res[0]["urls"]["regular"], save)
+        if ok:  # Unsplash asks apps to report the download
+            try:
+                requests.get(res[0]["links"]["download_location"], headers={"Authorization": f"Client-ID {key}"}, timeout=8)
+            except Exception:
+                pass
+        return ok
+    except Exception:
+        return False
+
+
+def fetch_wikimedia_image(keyword: str, key: str, ratio: str, save: Path) -> bool:
+    """No key. Pictures only. Licences differ per picture (many need credit)."""
+    try:
+        r = requests.get("https://commons.wikimedia.org/w/api.php", headers=UA, timeout=15, params={
+            "action": "query", "format": "json", "generator": "search", "gsrnamespace": 6,
+            "gsrsearch": f"{keyword} filetype:bitmap", "gsrlimit": 8, "prop": "imageinfo",
+            "iiprop": "url|mime|size", "iiurlwidth": 1600})
+        pages = (r.json().get("query") or {}).get("pages") or {}
+        for pg in sorted(pages.values(), key=lambda p: p.get("index", 99)):
+            ii = (pg.get("imageinfo") or [{}])[0]
+            if ii.get("mime") not in ("image/jpeg", "image/png") or ii.get("width", 0) < 900:
+                continue
+            if _download(ii.get("thumburl") or ii.get("url"), save):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+# provider -> (function, kind of file it saves, file extension)
+PROVIDERS = {
+    "pexels": (fetch_pexels, "video", ".mp4"),
+    "pixabay": (fetch_pixabay_video, "video", ".mp4"),
+    "unsplash": (fetch_unsplash_image, "image", ".jpg"),
+    "wikimedia": (fetch_wikimedia_image, "image", ".jpg"),
+}
+
+
+def fetch_media(keyword: str, req: "NewsRequest", base: Path):
+    """Tries the chosen provider, then Wikimedia (no key). Returns (path, kind) or (None, "")."""
+    chain = [req.stock_provider if req.stock_provider in PROVIDERS else "wikimedia"]
+    if chain[0] != "wikimedia":
+        chain.append("wikimedia")
+    key = req.stock_key or (req.pexels_key if chain[0] == "pexels" else "")
+    for name in chain:
+        fn, kind, ext = PROVIDERS[name]
+        save = base.with_suffix(ext)
+        if fn(keyword, key if name == chain[0] else "", req.aspect_ratio, save):
+            return save, kind
+        save.unlink(missing_ok=True)
+    return None, ""
 
 
 async def _tts(text: str, voice: str, out_mp3: Path):
@@ -165,13 +254,19 @@ def audio_seconds(path: Path) -> float:
     return max(2.0, float(out.strip()))
 
 
-def render_clip(video_in: Optional[Path], audio_in: Path, out_mp4: Path, ratio: str, dur: float):
+def render_clip(media: Optional[Path], kind: str, audio_in: Path, out_mp4: Path, ratio: str, dur: float):
     w, h = (720, 1280) if ratio == "9:16" else (1280, 720)
     enc = ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30",
            "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", "-t", f"{dur:.2f}"]
-    if video_in and video_in.exists():
-        _run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", str(video_in), "-i", str(audio_in),
+    if media and media.exists() and kind == "video":
+        _run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", str(media), "-i", str(audio_in),
               "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}", *enc, str(out_mp4)])
+    elif media and media.exists() and kind == "image":
+        # Ken Burns: a slow zoom-in on the still picture for the whole scene
+        frames = max(30, int(dur * 30) + 2)
+        vf = (f"scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},"
+              f"zoompan=z='1+0.25*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps=30")
+        _run(["ffmpeg", "-y", "-i", str(media), "-i", str(audio_in), "-vf", vf, *enc, str(out_mp4)])
     else:
         _run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=0x0f172a:s={w}x{h}:r=30", "-i", str(audio_in), *enc, str(out_mp4)])
 
@@ -194,17 +289,20 @@ def run_job(job_id: str, req: NewsRequest):
         data = generate_script(req)
         scenes = data["scenes"]
         n = len(scenes)
-        clips, out_scenes, t = [], [], 0.0
+        clips, out_scenes, t, stock_used = [], [], 0.0, {}
         for i, sc in enumerate(scenes):
             narr = str(sc.get("narration", "")).strip()
             if not narr:
                 continue
             _set(job_id, stage=f"Scene {i + 1}/{n}: အသံ၊ ဗီဒီယိုနောက်ခံ၊ render", progress=10 + int(80 * i / n))
-            mp3, raw, clip = work / f"s{i}.mp3", work / f"raw_{i}.mp4", work / f"clip_{i}.mp4"
+            mp3, raw, clip = work / f"s{i}.mp3", work / f"raw_{i}", work / f"clip_{i}.mp4"
             asyncio.run(_tts(narr, req.voice_model, mp3))
             dur = audio_seconds(mp3)
-            has = fetch_pexels(str(sc.get("keyword") or "news"), req.pexels_key, req.aspect_ratio, raw)
-            render_clip(raw if has else None, mp3, clip, req.aspect_ratio, dur)
+            media, kind = fetch_media(str(sc.get("keyword") or "news"), req, raw)
+            has = media is not None
+            render_clip(media, kind, mp3, clip, req.aspect_ratio, dur)
+            if has:
+                stock_used[kind] = stock_used.get(kind, 0) + 1
             clips.append(clip)
             out_scenes.append({"narration": narr, "keyword": sc.get("keyword", ""), "source": sc.get("source", ""),
                                "start": round(t, 2), "end": round(t + dur, 2), "stock": has})
@@ -219,8 +317,10 @@ def run_job(job_id: str, req: NewsRequest):
         warnings = []
         if not (180 <= t <= 300):
             warnings.append(f"အသံရှည်က {int(t // 60)}:{int(t % 60):02d} ဖြစ်နေတယ် (၃-၅ မိနစ် မဟုတ်ဘူး)")
-        if not req.pexels_key:
-            warnings.append("Pexels key မပါလို့ နောက်ခံ အရောင်ပြောင်းသက်သက်ပဲ ဖြစ်တယ်")
+        if not stock_used:
+            warnings.append("နောက်ခံ ဗီဒီယို/ပုံ တစ်ခုမှ မရဘူး (key မှန်လား၊ keyword ရှာမတွေ့လား) — အရောင်နောက်ခံပဲ ဖြစ်တယ်")
+        elif stock_used.get("image"):
+            warnings.append(f"ပုံ {stock_used['image']} ခု သုံးထားတယ် (Ken Burns zoom)။ Wikimedia/Unsplash ပုံတွေမှာ လိုင်စင်/credit လိုနိုင်တယ် — publish မလုပ်ခင် စစ်ပါ")
         _set(job_id, status="done", stage="ပြီးပြီ", progress=100, title=data.get("title", req.topic),
              scenes=out_scenes, seconds=round(t, 1), warnings=warnings, size=final.stat().st_size)
     except Exception as e:  # shown in the app
