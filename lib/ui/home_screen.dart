@@ -11,6 +11,7 @@ import 'fair_use_screen.dart';
 import 'subtitle_studio_screen.dart';
 import 'backup_screen.dart';
 import 'news_screen.dart';
+import 'news_video_screen.dart';
 import 'scene_recap_screen.dart';
 import 'stage_screen.dart';
 import 'video_recap_screen.dart';
@@ -18,7 +19,7 @@ import 'publish_screen.dart';
 import 'transformative_editor_screen.dart';
 import 'widgets.dart';
 
-enum _Action { none, stage, workflow, library, studio, fairUse, transformative, publish, backup, videoRecap, sceneRecap, news }
+enum _Action { none, newsVideo, stage, workflow, library, studio, fairUse, transformative, publish, backup, videoRecap, sceneRecap, news }
 
 class _Module {
   const _Module(this.code, this.title, this.sub, this.color, this.phase, [this.action = _Action.none]);
@@ -41,6 +42,7 @@ const _modules = <_Module>[
   _Module('FU', 'Copyright & Fair Use', 'Upload မတင်ခင် စစ်', Color(0xFFF2C94C), 8, _Action.fairUse),
   _Module('VR', 'Video Recap', 'Gemini က ဗီဒီယိုကြည့်ပြီး script', Color(0xFFB36BFF), 13, _Action.videoRecap),
   _Module('SR', 'Scene Studio', 'Scene ခွဲ + contact sheet → Gemini', Color(0xFFFF7A59), 14, _Action.sceneRecap),
+  _Module('NV', 'News Video', 'သတင်း → ဗီဒီယို (Colab)', Color(0xFF22D3EE), 15, _Action.newsVideo),
   _Module('NW', 'သတင်း (RSS)', 'သတင်းဖတ်၊ script ရေး', Color(0xFF2FA8FF), 14, _Action.news),
   _Module('BK', 'Backup / Restore', 'Project သိမ်း/ပြန်ယူ', Color(0xFF8E9AAF), 12, _Action.backup),
   _Module('UP', 'Upload & Thumbnail', 'ခေါင်းစဉ်၊ hashtag၊ ပုံ', Color(0xFFFF6B9D), 11, _Action.publish),
@@ -72,6 +74,7 @@ IconData _toolIcon(String code) => switch (code) {
       'VR' => Icons.smart_display_rounded,
       'SR' => Icons.grid_view_rounded,
       'NW' => Icons.newspaper_rounded,
+      'NV' => Icons.movie_creation_rounded,
       'BK' => Icons.cloud_sync_rounded,
       'UP' => Icons.cloud_upload_rounded,
       _ => Icons.apps_rounded,
@@ -531,6 +534,11 @@ void _openModule(BuildContext context, _Module module, VoidCallback onOpenWorkfl
     push(const NewsScreen());
     return;
   }
+  if (module.action == _Action.newsVideo) {
+    // Needs no project: the video comes from the user's own backend.
+    push(const NewsVideoScreen());
+    return;
+  }
   if (module.action == _Action.none) {
     messenger.showSnackBar(SnackBar(
       content: Text('${module.title} ကို Phase ${module.phase} မှာ ရေးမယ်။ အခု မရသေးပါဘူး။'),
@@ -564,6 +572,7 @@ void _openModule(BuildContext context, _Module module, VoidCallback onOpenWorkfl
       push(PublishScreen(project: target));
     case _Action.library:
     case _Action.news:
+    case _Action.newsVideo:
     case _Action.backup:
     case _Action.none:
       break;
