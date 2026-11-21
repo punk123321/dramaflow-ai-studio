@@ -132,6 +132,12 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       setState(() => _error = 'Gemini API key မထည့်ရသေးဘူး။ Settings မှာ ထည့်ပါ');
       return;
     }
+    // Use what is on screen now (provider and key), not only what was saved before.
+    final eff = _withStock(_s);
+    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey) {
+      await _repo.save(eff);
+      _s = eff;
+    }
     final client = NewsVideoClient(_s);
     _client = client;
     setState(() {

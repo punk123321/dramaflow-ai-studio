@@ -238,7 +238,9 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     if (job == null) return;
     final script = await _handoff.getDoc(widget.projectId, DocKind.script) ?? '';
     final chunks = splitScript(script);
-    final texts = {for (final p in job.parts) p.n: p.text};
+    // The script is made from every saved part, so match against those, then
+    // use the voice only for parts whose text is still what the backend voiced.
+    final texts = await _handoff.results(widget.projectId, widget.task);
     final keys = matchChunksToParts(chunks, texts);
     if (keys == null) {
       _say('Script နဲ့ အသံ အပိုင်း မကိုက်သေးဘူး။ အောက်က "Script အဖြစ် သိမ်း" ကို အရင်နှိပ်ပါ (ပြီးရင် ဒီခလုတ် ပြန်နှိပ်)။', error: true);
@@ -257,8 +259,9 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       var done = 0;
       for (var i = 0; i < keys.length; i++) {
         if (_canceled) throw const RecapCanceled();
-        final part = job.parts.firstWhere((p) => p.n == keys[i]);
-        if (part.audioUrl.isEmpty) continue;
+        final matches = job.parts.where((p) => p.n == keys[i] && p.text.trim() == (texts[keys[i]] ?? '').trim());
+        if (matches.isEmpty || matches.first.audioUrl.isEmpty) continue;
+        final part = matches.first;
         setState(() => _stage = 'အသံ ဒေါင်းနေတယ် ${i + 1}/${keys.length}');
         final bytes = await client.downloadAudio(part.audioUrl);
         final f = await AudioChannel.saveAudioBytes('p${widget.projectId}_c${i + 1}_r${DateTime.now().millisecondsSinceEpoch}', bytes);
@@ -282,7 +285,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         ));
         done++;
       }
-      _say(done == 0 ? 'အသံ မပါဘူး (အသံ switch ဖွင့်ပြီး ပြန် run ပါ)' : 'အသံ $done ခု အဆင့် ၃ (Audio) ထဲ သိမ်းပြီး။');
+      _say(done == 0 ? 'ဒီ job ရဲ့ အသံနဲ့ ကိုက်တဲ့ အပိုင်း မရှိဘူး (script ကို ပြင်ထားလား၊ အသံ switch ပိတ်ထားလား)' : 'အသံ $done ခု အဆင့် ၃ (Audio) ထဲ သိမ်းပြီး။');
     } on RecapCanceled {
       _say('ရပ်လိုက်ပြီ');
     } on HttpException catch (e) {
