@@ -37,9 +37,14 @@ import 'widgets.dart';
 /// This only writes an edit description. The original video is never changed;
 /// the next stage (Phase 7) renders the description into a new file.
 class EditorPanel extends StatefulWidget {
-  const EditorPanel({super.key, required this.project});
+  const EditorPanel({super.key, required this.project, this.pinned = false});
 
   final Project project;
+
+  /// True on the Video Editor page: preview, play bar and tools stay at the
+  /// top and only the part under them scrolls (like a phone video editor).
+  /// False in the workflow list, where the whole panel scrolls with the page.
+  final bool pinned;
 
   @override
   State<EditorPanel> createState() => _EditorPanelState();
@@ -463,20 +468,46 @@ class _EditorPanelState extends State<EditorPanel> {
       return '${m.toString().padLeft(2, '0')}:${(s - m * 60).toStringAsFixed(1).padLeft(4, '0')}';
     }
 
-    return Row(children: [
-      IconButton(tooltip: 'နောက်ပြန်', onPressed: _undo.isEmpty ? null : _undoOp, icon: const Icon(Icons.undo)),
-      IconButton(tooltip: 'ရှေ့ပြန်', onPressed: _redo.isEmpty ? null : _redoOp, icon: const Icon(Icons.redo)),
-      Expanded(
-        child: Center(
-          child: IconButton.filled(
-            iconSize: 28,
-            onPressed: _togglePlay,
-            icon: Icon(c != null && c.value.isPlaying ? Icons.pause : Icons.play_arrow),
-          ),
+    // Jump to the start of the next / previous effect (or the ends of the video).
+    final marks = <int>{0, if (dur > 0) dur, for (final o in _plan.ops) o.startMs}.toList()..sort();
+    void jump(bool next) {
+      if (next) {
+        final t = marks.where((m) => m > _posMs + 300).firstOrNull;
+        _seek(t ?? (dur > 0 ? dur : _posMs));
+      } else {
+        final t = marks.where((m) => m < _posMs - 300).lastOrNull;
+        _seek(t ?? 0);
+      }
+    }
+
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(children: [
+        IconButton(tooltip: 'နောက်ပြန်', onPressed: _undo.isEmpty ? null : _undoOp, icon: const Icon(Icons.undo)),
+        IconButton(tooltip: 'ရှေ့ပြန်', onPressed: _redo.isEmpty ? null : _redoOp, icon: const Icon(Icons.redo)),
+        Expanded(
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            IconButton.filledTonal(tooltip: 'ရှေ့အဆင့်', onPressed: () => jump(false), icon: const Icon(Icons.skip_previous_rounded)),
+            const SizedBox(width: 6),
+            IconButton.filled(
+              iconSize: 30,
+              onPressed: _togglePlay,
+              icon: Icon(c != null && c.value.isPlaying ? Icons.pause : Icons.play_arrow),
+            ),
+            const SizedBox(width: 6),
+            IconButton.filledTonal(tooltip: 'နောက်အဆင့်', onPressed: () => jump(true), icon: const Icon(Icons.skip_next_rounded)),
+          ]),
         ),
-      ),
-      Text('${clock(pos)} / ${clock(dur)}', style: const TextStyle(fontSize: 12.5, color: DfColors.muted)),
-      const SizedBox(width: 4),
+        IconButton(
+          tooltip: 'အပြည့်ကြည့်',
+          icon: const Icon(Icons.fullscreen_rounded),
+          onPressed: c == null
+              ? null
+              : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => TeFullscreenPage(controller: c, ops: _plan.ops, durMs: dur),
+                  )),
+        ),
+      ]),
+      Text('${clock(pos)} / ${clock(dur)}', style: const TextStyle(fontSize: 12, color: DfColors.muted)),
     ]);
   }
 
@@ -797,9 +828,7 @@ class _EditorPanelState extends State<EditorPanel> {
     final issues = checkTimeline(_tl, sourceMs: _sourceMs);
     final remapped = remapSubtitles(_subs, _tl.pieces, offsetMs: _tl.subtitleOffsetMs);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    final children = <Widget>[
         const InfoHint(
           'မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။ ဒီမှာ ရွေးထားတာတွေက "ဘယ်လိုထုတ်မလဲ" ဆိုတဲ့ စာရင်းပဲ။ တကယ်ထုတ်တာ အဆင့် ၅ (Render) မှာပါ။ '
           'Preview ကို လိုတဲ့နေရာ ရွှေ့ပြီး effect (ဖြတ်၊ zoom၊ freeze၊ စာသား၊ အသံ …) ထည့်၊ ချက်ချင်းကြည့်၊ ပြင်လို့ရတယ်။',
@@ -818,6 +847,7 @@ class _EditorPanelState extends State<EditorPanel> {
           ),
         _preview(),
         _toolRow(),
+        const _PinBreak(),
         TeTimeline(
           durMs: (_vc?.value.duration.inMilliseconds ?? 0) > 0 ? _vc!.value.duration.inMilliseconds : _sourceMs,
           posMs: _posMs,
@@ -998,9 +1028,34 @@ class _EditorPanelState extends State<EditorPanel> {
             ),
         const SizedBox(height: 10),
         FilledButton(onPressed: _markDone, child: const Text('Editor ပြီးပြီ')),
+    ];
+    if (!widget.pinned) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final w in children) if (w is! _PinBreak) w]);
+    }
+    // Pinned: the hint and the messages go below the break, the preview, play
+    // bar and tools stay on top.
+    final at = children.indexWhere((w) => w is _PinBreak);
+    final head = children.sublist(0, at);
+    final hint = head.take(2).toList();
+    final top = head.skip(2).toList();
+    final rest = children.sublist(at + 1);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...top,
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 28),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...rest, ...hint]),
+          ),
+        ),
       ],
     );
   }
+
+  Widget _stageBox(Widget stage) => widget.pinned
+      ? Center(child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.34), child: stage))
+      : stage;
 
   Widget _title(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
@@ -1049,7 +1104,7 @@ class _EditorPanelState extends State<EditorPanel> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        ClipRRect(
+        _stageBox(ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: AspectRatio(
             aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
@@ -1098,18 +1153,6 @@ class _EditorPanelState extends State<EditorPanel> {
                         ),
                       ),
                     ),
-                  Positioned(
-                    top: 2,
-                    right: 2,
-                    child: IconButton(
-                      visualDensity: VisualDensity.compact,
-                      tooltip: 'အပြည့်ကြည့်',
-                      icon: const Icon(Icons.fullscreen_rounded, color: Colors.white, shadows: [Shadow(blurRadius: 6, color: Colors.black)]),
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) => TeFullscreenPage(controller: c, ops: _plan.ops, durMs: dur),
-                      )),
-                    ),
-                  ),
                   if (badges.isNotEmpty)
                     Positioned(
                       top: 6,
@@ -1128,9 +1171,9 @@ class _EditorPanelState extends State<EditorPanel> {
               );
             }),
           ),
-        ),
+        )),
         _transport(pos, dur),
-        const Padding(
+        if (!widget.pinned) const Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(
             'Preview က နီးစပ်တဲ့ပုံ သက်သက် — တကယ့်ရလဒ်ကို Render မှာ ထုတ်မယ်။ Effect ကို ရွေးရင် အောက်မှာ တန်ဖိုးညှိလို့ရတယ်၊ Zoom ကို preview ပေါ်မှာ ညှပ်ချဲ့/ဆွဲရွှေ့၊ စာသား/မြား/ပုံကို ဆွဲရွှေ့။ အစိမ်း = ခွင့်ပြုပြီး၊ လိမ္မော် = စောင့်ဆိုင်း။',
@@ -1493,4 +1536,12 @@ class _CornerDialogState extends State<_CornerDialog> {
       ],
     );
   }
+}
+
+/// Marks where the pinned part of the editor ends (see [EditorPanel.pinned]).
+class _PinBreak extends StatelessWidget {
+  const _PinBreak();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
