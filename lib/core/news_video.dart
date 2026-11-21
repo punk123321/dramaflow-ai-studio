@@ -8,8 +8,12 @@ import 'srt.dart';
 
 /// Where the backend is and the key for the stock-footage site, kept on the
 /// phone only.
+/// Gemini model that writes the scripts. Google retires old names for new
+/// accounts, so the user can change it in the app.
+const defaultTextModel = 'gemini-3.8-flash';
+
 class NewsVideoSettings {
-  const NewsVideoSettings({this.url = '', this.token = '', this.provider = 'wikimedia', this.keys = const {}, this.imageCount = 20});
+  const NewsVideoSettings({this.url = '', this.token = '', this.provider = 'wikimedia', this.keys = const {}, this.imageCount = 20, this.model = defaultTextModel});
 
   final String url;
   final String token;
@@ -23,6 +27,9 @@ class NewsVideoSettings {
   /// Pictures for the whole video (picture sources only), 0 = one per scene.
   final int imageCount;
 
+  /// Gemini model for the script (text).
+  final String model;
+
   bool get ready => url.isNotEmpty && token.isNotEmpty;
 
   String get stockKey => keyOf(provider);
@@ -30,10 +37,10 @@ class NewsVideoSettings {
   /// The key for [p]. Pixabay pictures use the same key as Pixabay videos.
   String keyOf(String p) => keys[p] ?? (p == 'pixabay_photo' ? keys['pixabay'] ?? '' : '');
 
-  NewsVideoSettings copyWith({String? url, String? token, String? provider, Map<String, String>? keys, int? imageCount}) => NewsVideoSettings(
-      url: url ?? this.url, token: token ?? this.token, provider: provider ?? this.provider, keys: keys ?? this.keys, imageCount: imageCount ?? this.imageCount);
+  NewsVideoSettings copyWith({String? url, String? token, String? provider, Map<String, String>? keys, int? imageCount, String? model}) => NewsVideoSettings(
+      url: url ?? this.url, token: token ?? this.token, provider: provider ?? this.provider, keys: keys ?? this.keys, imageCount: imageCount ?? this.imageCount, model: model ?? this.model);
 
-  String encode() => jsonEncode({'url': url, 'token': token, 'provider': provider, 'keys': keys, 'images': imageCount});
+  String encode() => jsonEncode({'url': url, 'token': token, 'provider': provider, 'keys': keys, 'images': imageCount, 'model': model});
 
   static NewsVideoSettings decode(String? s) {
     if (s == null || s.trim().isEmpty) return const NewsVideoSettings();
@@ -57,6 +64,7 @@ class NewsVideoSettings {
         provider: stockProviders.containsKey(prov) ? prov : (keys.containsKey('pexels') ? 'pexels' : 'wikimedia'),
         keys: keys,
         imageCount: img is num ? img.toInt().clamp(0, maxNewsImages) : 20,
+        model: g('model').isEmpty ? defaultTextModel : g('model'),
       );
     } catch (_) {
       return const NewsVideoSettings();
@@ -156,6 +164,7 @@ Map<String, Object?> newsRequestJson({
   required String stockProvider,
   required String stockKey,
   int imageCount = 20,
+  String model = defaultTextModel,
   required String ratio,
   required double minutes,
   required String voice,
@@ -170,6 +179,7 @@ Map<String, Object?> newsRequestJson({
     'stock_provider': stockProviders.containsKey(stockProvider) ? stockProvider : 'wikimedia',
     'stock_key': stockKey.trim(),
     'image_count': imageCount.clamp(0, maxNewsImages),
+    if (model.trim().isNotEmpty) 'gemini_model': model.trim(),
     if (stockProvider == 'pexels') 'pexels_key': stockKey.trim(),
     'aspect_ratio': ratio == '16:9' ? '16:9' : '9:16',
     'duration_min': m,

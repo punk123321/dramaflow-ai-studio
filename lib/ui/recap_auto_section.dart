@@ -47,7 +47,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   final _repo = NewsVideoRepo();
   final _handoff = HandoffRepo();
   final _connectC = TextEditingController();
-  final _modelC = TextEditingController(text: 'gemini-2.5-flash');
+  final _modelC = TextEditingController(text: defaultTextModel);
 
   NewsVideoSettings _s = const NewsVideoSettings();
   String _geminiKey = '';

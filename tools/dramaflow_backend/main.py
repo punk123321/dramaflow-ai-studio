@@ -61,7 +61,7 @@ class Group(BaseModel):
 class RecapRequest(BaseModel):
     mode: str = "scenes"  # "scenes" (pictures + dialogue) or "video" (a file already in Gemini)
     gemini_key: str
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     voice: str = ""  # empty = script only, no voice
     file_uri: str = ""  # Gemini Files API address (video mode)
     file_mime: str = "video/mp4"

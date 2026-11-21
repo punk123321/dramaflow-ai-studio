@@ -36,6 +36,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
   final _repo = NewsVideoRepo();
   final _connectC = TextEditingController();
   final _stockC = TextEditingController();
+  final _modelC = TextEditingController(text: defaultTextModel);
   String _provider = 'wikimedia';
   int _imageCount = 20;
   final _topicC = TextEditingController();
@@ -77,6 +78,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _provider = s.provider;
       _stockC.text = s.keyOf(s.provider);
       _imageCount = s.imageCount;
+      _modelC.text = s.model;
       _loaded = true;
     });
   }
@@ -86,6 +88,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     _client?.cancel();
     _connectC.dispose();
     _stockC.dispose();
+    _modelC.dispose();
     _topicC.dispose();
     _promptC.dispose();
     super.dispose();
@@ -99,7 +102,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     } else {
       keys[_provider] = k;
     }
-    return base.copyWith(provider: _provider, keys: keys, imageCount: _imageCount);
+    return base.copyWith(provider: _provider, keys: keys, imageCount: _imageCount, model: _modelC.text.trim().isEmpty ? defaultTextModel : _modelC.text.trim());
   }
 
   Future<void> _saveBackend() async {
@@ -136,7 +139,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     }
     // Use what is on screen now (provider and key), not only what was saved before.
     final eff = _withStock(_s);
-    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey || eff.imageCount != _s.imageCount) {
+    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey || eff.imageCount != _s.imageCount || eff.model != _s.model) {
       await _repo.save(eff);
       _s = eff;
     }
@@ -157,6 +160,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
           stockProvider: _s.provider,
           stockKey: _s.stockKey,
           imageCount: stockProviders[_s.provider]!.images ? _s.imageCount : 0,
+          model: _s.model,
           ratio: _ratio,
           minutes: _minutes,
           voice: _voice,
@@ -300,6 +304,13 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
                         decoration: InputDecoration(labelText: '${stockProviders[_provider]!.title} API key'),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _modelC,
+                      autocorrect: false,
+                      enabled: !_running,
+                      decoration: const InputDecoration(labelText: 'Gemini model (script ရေးဖို့)', helperText: 'Error မှာ model မရှိတော့ဘူးပြောရင် ဒီနာမည်ကို ပြောင်းပါ'),
+                    ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(onPressed: _running ? null : _saveBackend, icon: const Icon(Icons.link_rounded), label: const Text('သိမ်း + စစ်')),
                     const SizedBox(height: 6),

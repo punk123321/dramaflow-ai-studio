@@ -58,6 +58,16 @@ void main() {
     expect(stockProviders['pexels']!.images, isFalse);
   });
 
+  test('Gemini model: default, saved, sent, empty falls back', () {
+    expect(const NewsVideoSettings().model, defaultTextModel);
+    final back = NewsVideoSettings.decode(const NewsVideoSettings(url: 'https://a.b', token: 't', model: 'gemini-x').encode());
+    expect(back.model, 'gemini-x');
+    expect(NewsVideoSettings.decode('{"url":"https://a.b","token":"t","model":" "}').model, defaultTextModel);
+    final j = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'wikimedia', stockKey: '', model: ' m ', ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(j['gemini_model'], 'm');
+  });
+
   test('request: duration kept between 3 and 5, ratio only 9:16 or 16:9', () {
     Map<String, Object?> r(double m, String ratio) => newsRequestJson(
           topic: ' t ', geminiKey: ' g ', stockProvider: 'wikimedia', stockKey: '', ratio: ratio, minutes: m, voice: 'v', sources: ['a'], strict: true, prompt: 'p');

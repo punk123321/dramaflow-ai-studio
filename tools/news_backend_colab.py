@@ -56,7 +56,7 @@ class NewsRequest(BaseModel):
     news_sources: List[str] = ["Reuters", "BBC Burmese"]
     strict_grounding: bool = True
     master_prompt: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
 
 
 def _auth(token: Optional[str]):
