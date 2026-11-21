@@ -68,6 +68,16 @@ void main() {
     expect(j['gemini_model'], 'm');
   });
 
+  test('Google Search switch: on by default, saved, sent', () {
+    expect(const NewsVideoSettings().search, isTrue);
+    expect(NewsVideoSettings.decode('{"url":"https://a.b","token":"t"}').search, isTrue);
+    final off = NewsVideoSettings.decode(const NewsVideoSettings(url: 'https://a.b', token: 't', search: false).encode());
+    expect(off.search, isFalse);
+    final j = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'wikimedia', stockKey: '', search: false, ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(j['use_search'], isFalse);
+  });
+
   test('request: duration kept between 3 and 5, ratio only 9:16 or 16:9', () {
     Map<String, Object?> r(double m, String ratio) => newsRequestJson(
           topic: ' t ', geminiKey: ' g ', stockProvider: 'wikimedia', stockKey: '', ratio: ratio, minutes: m, voice: 'v', sources: ['a'], strict: true, prompt: 'p');

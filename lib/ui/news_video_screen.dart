@@ -51,6 +51,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
   String _voice = 'my-MM-ThihaNeural';
   String _preset = 'anchor';
   bool _strict = true;
+  bool _search = true;
   final _sources = <String>{'Reuters', 'BBC News'};
 
   bool _running = false;
@@ -79,6 +80,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _stockC.text = s.keyOf(s.provider);
       _imageCount = s.imageCount;
       _modelC.text = s.model;
+      _search = s.search;
       _loaded = true;
     });
   }
@@ -102,7 +104,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     } else {
       keys[_provider] = k;
     }
-    return base.copyWith(provider: _provider, keys: keys, imageCount: _imageCount, model: _modelC.text.trim().isEmpty ? defaultTextModel : _modelC.text.trim());
+    return base.copyWith(provider: _provider, keys: keys, imageCount: _imageCount, model: _modelC.text.trim().isEmpty ? defaultTextModel : _modelC.text.trim(), search: _search);
   }
 
   Future<void> _saveBackend() async {
@@ -139,7 +141,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     }
     // Use what is on screen now (provider and key), not only what was saved before.
     final eff = _withStock(_s);
-    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey || eff.imageCount != _s.imageCount || eff.model != _s.model) {
+    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey || eff.imageCount != _s.imageCount || eff.model != _s.model || eff.search != _s.search) {
       await _repo.save(eff);
       _s = eff;
     }
@@ -161,6 +163,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
           stockKey: _s.stockKey,
           imageCount: stockProviders[_s.provider]!.images ? _s.imageCount : 0,
           model: _s.model,
+          search: _s.search,
           ratio: _ratio,
           minutes: _minutes,
           voice: _voice,
@@ -364,6 +367,18 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
                       ),
                   ]),
                 ],
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Google Search သုံး', style: TextStyle(fontSize: 14)),
+                  subtitle: Text(
+                    _search
+                        ? 'သတင်းအသစ်ကို Google ကနေ ရှာခိုင်းမယ်။ Free account မှာ quota (429) ကုန်နိုင်တယ်'
+                        : 'ပိတ်ထား: Gemini မှတ်ဉာဏ်ကပဲ ရေးမယ် — သတင်းအသစ်/ကိန်းဂဏန်း မမှန်နိုင်တာမို့ ကိုယ်တိုင်စစ်ပါ',
+                    style: TextStyle(fontSize: 12, color: _search ? null : DfColors.warn),
+                  ),
+                  value: _search,
+                  onChanged: _running ? null : (v) => setState(() => _search = v),
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Strict grounding', style: TextStyle(fontSize: 14)),

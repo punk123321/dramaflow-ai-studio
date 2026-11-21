@@ -652,6 +652,7 @@ Unproven: everything that talks to the network (Gemini video offsets via `video_
 | App: "Pixabay (ပုံ)" source; slider for the number of pictures (0 to 40, default 20, 0 = one per scene); the on-screen source, key and count are saved when a video is started; Pixabay pictures reuse the Pixabay key | Yes (CI green, run 44903753550) | **No** |
 APK artifact `dramaflow-apk-branch-221`. Not merged to main.
 Gemini model default changed to `gemini-3.8-flash` (the old `gemini-2.5-flash` answered 404 NOT_FOUND on the user's account, seen on the phone); the model name is editable in the News Video screen and the Recap Auto card.
+Phone result seen: with Google Search on, Gemini answered 429 RESOURCE_EXHAUSTED on the user's free account; a "Google Search" switch (default on) was added to the News Video screen; when off the backend writes without search and warns that facts are unchecked.
 Unproven: picture search quality (keywords may find unrelated pictures; the app does not show them before rendering), Wikimedia / Unsplash licences and credit, portrait crop of landscape pictures, Colab speed with many ffmpeg steps (each scene several encodes). Re-run Cell 2 of the notebook to get the new backend.
 
 ## TE-46: Stage 3 (Audio): Edge TTS through the user's backend

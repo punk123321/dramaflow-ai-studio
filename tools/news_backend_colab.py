@@ -55,6 +55,7 @@ class NewsRequest(BaseModel):
     voice_model: str = "my-MM-ThihaNeural"
     news_sources: List[str] = ["Reuters", "BBC Burmese"]
     strict_grounding: bool = True
+    use_search: bool = True  # Google Search tool; may need a paid quota
     master_prompt: str = ""
     gemini_model: str = "gemini-3.8-flash"
 
@@ -86,13 +87,20 @@ def generate_script(req: NewsRequest) -> dict:
         .replace("{{TARGET_WORDS}}", str(target_words))
         .replace("{{SCENE_COUNT}}", str(scene_count))
     )
-    grounding = (
-        "\nSTRICT GROUNDING: use only facts you found with Google Search in the listed sources. "
-        "If you are not sure of a fact, a number or a quote, leave it out. Never invent quotes or figures. "
-        "Say 'according to <source>' for important claims."
-        if req.strict_grounding
-        else ""
-    )
+    if req.use_search:
+        grounding = (
+            "\nSTRICT GROUNDING: use only facts you found with Google Search in the listed sources. "
+            "If you are not sure of a fact, a number or a quote, leave it out. Never invent quotes or figures. "
+            "Say 'according to <source>' for important claims."
+            if req.strict_grounding
+            else ""
+        )
+    else:
+        grounding = (
+            "\nNO WEB ACCESS: you cannot search. Use only well-known background you are sure about. "
+            "Do not state recent events, dates, numbers or quotes you are not sure of, and never invent a source. "
+            "Where the topic needs current facts, say plainly that the latest details should be checked."
+        )
     prompt = f"""{compiled}{grounding}
 
 Do not call the story 'breaking news' unless it really just happened.
@@ -105,7 +113,10 @@ IMPORTANT: Return ONLY valid JSON (no markdown fences) in this exact structure:
 }}
 Generate about {scene_count} scenes, about {target_words} Burmese words of narration in total.
 """
-    config = types.GenerateContentConfig(tools=[{"google_search": {}}], temperature=0.7)
+    if req.use_search:
+        config = types.GenerateContentConfig(tools=[{"google_search": {}}], temperature=0.7)
+    else:
+        config = types.GenerateContentConfig(temperature=0.7)
     last = None
     for _ in range(2):
         resp = client.models.generate_content(model=req.gemini_model, contents=prompt, config=config)
@@ -438,6 +449,8 @@ def run_job(job_id: str, req: NewsRequest):
         warnings = []
         if not (180 <= t <= 300):
             warnings.append(f"အသံရှည်က {int(t // 60)}:{int(t % 60):02d} ဖြစ်နေတယ် (၃-၅ မိနစ် မဟုတ်ဘူး)")
+        if not req.use_search:
+            warnings.append("Google Search မသုံးဘူး — သတင်းအချက်အလက်ကို Gemini ရဲ့ မှတ်ဉာဏ်ကပဲ ယူထားတယ်၊ မမှန်နိုင်ဘူး။ ထုတ်ဝေမလုပ်ခင် ကိုယ်တိုင် စစ်ပါ")
         if not stock_used:
             warnings.append("နောက်ခံ ဗီဒီယို/ပုံ တစ်ခုမှ မရဘူး (key မှန်လား၊ keyword ရှာမတွေ့လား) — အရောင်နောက်ခံပဲ ဖြစ်တယ်")
         elif stock_used.get("image"):
@@ -445,7 +458,11 @@ def run_job(job_id: str, req: NewsRequest):
         _set(job_id, status="done", stage="ပြီးပြီ", progress=100, title=data.get("title", req.topic),
              scenes=out_scenes, seconds=round(t, 1), warnings=warnings, size=final.stat().st_size)
     except Exception as e:  # shown in the app
-        _set(job_id, status="error", stage="မအောင်မြင်ဘူး", error=str(e)[:400])
+        msg = str(e).replace(req.gemini_key, "***") if req.gemini_key else str(e)
+        if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+            msg = ("Gemini quota ပြည့်နေ/မရှိဘူး (429)။ Google Search ကို ပိတ်ကြည့်ပါ၊ ဒါမှမဟုတ် Gemini model ပြောင်းပါ၊ "
+                   "ဒါမှမဟုတ် နောက်မှ ပြန်စမ်းပါ။ aistudio.google.com/rate-limit မှာ ကိုယ့် quota ကြည့်လို့ရတယ်။ အသေးစိတ်: " + msg[:200])
+        _set(job_id, status="error", stage="မအောင်မြင်ဘူး", error=msg[:400])
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
