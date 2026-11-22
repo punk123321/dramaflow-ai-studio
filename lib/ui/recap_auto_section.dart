@@ -330,6 +330,8 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         _skipStep(QStep.upload, 'Gemini ထဲ ရှိပြီးသား ဗီဒီယိုကို ပြန်သုံး');
       } else if (_video) {
         _enter(QStep.upload);
+        setState(() => _stage = 'Gemini ကို ကြိုစစ်နေတယ် (key နဲ့ တည်နေရာ)');
+        await GeminiFiles.preflight(_geminiKey);
         setState(() => _stage = 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
         tmp = await GeminiFiles.copyToCache(widget.videoUri!);
         final f = await GeminiFiles.upload(

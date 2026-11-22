@@ -107,7 +107,10 @@ class RecapEpisodeRunner {
     ctx.log('အပိုင်း ${segs.length} ခု (${fromIndex ? 'Video Index က' : '၁ မိနစ်စီ'})');
 
     // 2. upload to the user's own Gemini account
-    ctx.step(QStep.upload, 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
+    ctx.step(QStep.upload, 'Gemini ကို ကြိုစစ်နေတယ် (key နဲ့ တည်နေရာ)');
+    await GeminiFiles.preflight(s.geminiKey);
+    ctx.log('Gemini ကြိုစစ်ပြီး (key + တည်နေရာ ပြဿနာမတွေ့ဘူး)');
+    ctx.progress(0, 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
     File? tmp;
     late final GeminiFile file;
     try {

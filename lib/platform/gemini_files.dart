@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../core/video_type.dart';
+import '../core/gemini_errors.dart';
 
 class GeminiUploadException implements Exception {
   GeminiUploadException(this.message);
@@ -122,19 +123,36 @@ class GeminiFiles {
     }
   }
 
-  static String _explain(int code, String body, String key) {
+  static String _detailOf(String body, String key) {
     var detail = '';
     try {
       final m = jsonDecode(body);
       if (m is Map && m['error'] is Map) detail = ((m['error'] as Map)['message'] as String?) ?? '';
     } catch (_) {}
     if (key.length >= 8) detail = detail.replaceAll(key, '***');
-    final why = switch (code) {
-      400 => 'Gemini က ဗီဒီယိုကို လက်မခံဘူး (mp4/mov/webm/avi လို ပုံစံ လိုတယ်၊ mkv မရဘူး)',
-      401 || 403 => 'API key မမှန်ဘူး (သို့) ခွင့်မရှိဘူး',
-      429 => 'Gemini quota ပြည့်နေတယ် (နောက်မှ ပြန်စမ်း)',
-      _ => 'Gemini HTTP $code',
-    };
-    return detail.isEmpty ? why : '$why: ${detail.length > 160 ? detail.substring(0, 160) : detail}';
+    return detail;
+  }
+
+  static String _explain(int code, String body, String key) => geminiUploadHint(code, _detailOf(body, key));
+
+  /// A quick call before the (big) upload: stops at once, with the reason, when
+  /// Google refuses this place (VPN needed) or this key. Any other answer, or no
+  /// answer at all, lets the upload go on, so it can only help.
+  static Future<void> preflight(String apiKey) async {
+    final c = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    try {
+      final req = await c.getUrl(Uri.parse('$_base/v1beta/models?pageSize=1'));
+      req.headers.set('x-goog-api-key', apiKey.trim());
+      final r = await req.close().timeout(const Duration(seconds: 20));
+      final b = await r.transform(utf8.decoder).join();
+      final problem = geminiPreflightProblem(r.statusCode, _detailOf(b, apiKey));
+      if (problem != null) throw GeminiUploadException(problem);
+    } on GeminiUploadException {
+      rethrow;
+    } catch (_) {
+      // no answer (offline, timeout): the upload itself will say what is wrong
+    } finally {
+      c.close(force: true);
+    }
   }
 }
