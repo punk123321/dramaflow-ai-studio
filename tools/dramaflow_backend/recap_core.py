@@ -34,9 +34,75 @@ def mask_key(message: str, key: str) -> str:
     return message
 
 
+def part_targets(groups: List[dict]) -> Dict[int, int]:
+    """Part number -> how long its video part is (ms), from each group's
+    part_ms list (one entry per part, first..last). Missing or wrong-length
+    lists give no target for that group."""
+    out: Dict[int, int] = {}
+    for g in groups:
+        ms = g.get("part_ms") or []
+        first, last = int(g["first"]), int(g["last"])
+        if len(ms) != last - first + 1:
+            continue
+        for i, v in enumerate(ms):
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
+                out[first + i] = v
+    return out
+
+
 GeminiFn = Callable[[dict], str]
-TtsFn = Callable[[int, str], Tuple[int, str]]  # (part number, text) -> (milliseconds, file name)
+TtsFn = Callable[[int, str, int], Tuple[int, str]]  # (part number, text, target ms or 0) -> (milliseconds, file name)
 ProgressFn = Callable[[str, int], None]
+
+
+MAX_SPEEDUP = 1.15  # the voice is sped up at most this much to fit its video part
+LONG_WARN = 1.10  # still this much longer than the part after speeding up -> warn
+SHORT_WARN = 0.5  # less than this share of the part -> warn
+CONTEXT_CHARS = 300
+
+
+def fit_tempo(audio_ms: int, target_ms: int, max_speed: float = MAX_SPEEDUP) -> float:
+    """Speed factor (1.0 = unchanged) that makes a voice that is too long fit
+    its video part. Never slows the voice down and never goes above max_speed."""
+    if target_ms <= 0 or audio_ms <= 0 or audio_ms <= target_ms * 1.02:
+        return 1.0
+    return round(min(audio_ms / target_ms, max_speed), 3)
+
+
+def fit_warning(n: int, audio_ms: int, target_ms: int) -> str:
+    """A short Burmese note when the voice of part n does not fit its video
+    part, or an empty string."""
+    if target_ms <= 0 or audio_ms <= 0:
+        return ""
+    a, t = audio_ms / 1000, target_ms / 1000
+    if audio_ms > target_ms * LONG_WARN:
+        return f"အပိုင်း {n}: အသံ {a:.1f} စက္ကန့်၊ ဗီဒီယိုအပိုင်း {t:.1f} စက္ကန့် — အသံက ရှည်နေတယ် (script ကို တိုစေပါ)"
+    if audio_ms < target_ms * SHORT_WARN:
+        return f"အပိုင်း {n}: အသံ {a:.1f} စက္ကန့်၊ ဗီဒီယိုအပိုင်း {t:.1f} စက္ကန့် — အသံက တိုနေတယ် (အပိုင်းထဲ တိတ်နေမယ်)"
+    return ""
+
+
+def _tail(text: str, limit: int = CONTEXT_CHARS) -> str:
+    t = " ".join(text.split())
+    return t if len(t) <= limit else t[-limit:]
+
+
+def with_context(prompt: str, previous_text: str) -> str:
+    """Adds how the story stood at the end of the previous group, so names and
+    events stay consistent from one request to the next."""
+    if not previous_text.strip():
+        return prompt
+    return (
+        prompt.rstrip()
+        + "\n\nCONTEXT (the previous part of this recap ended like this. Do not repeat it; "
+        + "only keep names and events consistent with it):\n"
+        + _tail(previous_text)
+        + "\n"
+    )
 
 
 def run_recap(
@@ -56,6 +122,8 @@ def run_recap(
     for gi, g in enumerate(groups):
         first, last = int(g["first"]), int(g["last"])
         progress(f"Gemini က အပိုင်း {first}–{last} ရေးနေတယ်", 5 + int(55 * gi / total))
+        if texts:
+            g = dict(g, prompt=with_context(g["prompt"], texts[max(texts)]))
         try:
             reply = gemini(g)
         except Exception as e:  # reported, the next group still runs
@@ -74,15 +142,20 @@ def run_recap(
             sleep(gap_seconds)
     if not texts:
         raise ValueError("Gemini က script တစ်ပိုင်းမှ မပေးဘူး။ " + (warnings[0] if warnings else ""))
+    targets = part_targets(groups)
     parts = []
     order = sorted(texts)
     for idx, n in enumerate(order):
         audio_ms, audio_file = 0, ""
+        target = targets.get(n, 0)
         if tts is not None:
             progress(f"အသံ လုပ်နေတယ် {idx + 1}/{len(order)}", 62 + int(36 * idx / len(order)))
             try:
-                audio_ms, audio_file = tts(n, texts[n])
+                audio_ms, audio_file = tts(n, texts[n], target)
+                w = fit_warning(n, audio_ms, target)
+                if w:
+                    warnings.append(w)
             except Exception as e:
                 warnings.append(f"အပိုင်း {n} အသံ မရဘူး: {str(e)[:120]}")
-        parts.append({"n": n, "text": texts[n], "audio_ms": audio_ms, "audio_file": audio_file})
+        parts.append({"n": n, "text": texts[n], "audio_ms": audio_ms, "target_ms": target, "audio_file": audio_file})
     return {"parts": parts, "warnings": warnings}
