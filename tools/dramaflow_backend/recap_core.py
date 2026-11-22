@@ -27,6 +27,22 @@ def parse_reply(reply: str) -> Dict[int, str]:
     return out
 
 
+def gemini_hint(message: str) -> str:
+    """What to do next, in Burmese, for a Gemini error text (used by the self-test)."""
+    m, low = message, message.lower()
+    if "location is not supported" in low or "user location" in low:
+        return "Backend (Colab) ရှိတဲ့ နေရာကို Google က မခွင့်ပြုဘူး — Colab ရဲ့ Runtime > Disconnect and delete runtime လုပ်ပြီး အစကနေ ပြန် run ပါ"
+    if "404" in m or "NOT_FOUND" in m:
+        return "model နာမည် မရှိတော့ဘူး — model ကွက်မှာ gemini-3.8-flash လို နာမည်ပြောင်းပါ"
+    if "429" in m or "RESOURCE_EXHAUSTED" in m:
+        return "quota ပြည့်နေတယ် — ခဏစောင့်ပါ၊ aistudio.google.com/rate-limit မှာ စစ်ပါ"
+    if "503" in m or "UNAVAILABLE" in m:
+        return "Google ဘက် model လူသုံးများနေတယ် (ခဏဖြစ်တာ) — ခဏနေ ပြန်စမ်းပါ၊ အရန် model ထည့်ထားရင် Auto က အလိုအလျောက် ပြောင်းစမ်းမယ်"
+    if "api key" in low or "400" in m or "403" in m or "PERMISSION" in m:
+        return "key မှန်လား၊ Gemini API ဖွင့်ထားလား စစ်ပါ"
+    return "မသိတဲ့ အမှား"
+
+
 def mask_key(message: str, key: str) -> str:
     """Never send the user's API key back in an error text."""
     if key and len(key) >= 8:

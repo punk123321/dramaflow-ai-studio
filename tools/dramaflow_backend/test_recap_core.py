@@ -1,7 +1,7 @@
 """Run:  python3 -m unittest test_recap_core   (no packages needed)"""
 import unittest
 
-from recap_core import fit_tempo, fit_warning, part_targets, with_context, mask_key, parse_reply, run_recap
+from recap_core import gemini_hint, fit_tempo, fit_warning, part_targets, with_context, mask_key, parse_reply, run_recap
 
 
 class ParseTests(unittest.TestCase):
@@ -114,6 +114,16 @@ class FitTests(unittest.TestCase):
 
     def test_with_context_empty(self):
         self.assertEqual(with_context("P", "  "), "P")
+
+
+class HintTests(unittest.TestCase):
+    def test_hints(self):
+        self.assertIn("model", gemini_hint("404 NOT_FOUND no such model"))
+        self.assertIn("quota", gemini_hint("429 RESOURCE_EXHAUSTED"))
+        self.assertIn("လူသုံးများ", gemini_hint("503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand.'}}"))
+        self.assertIn("key", gemini_hint("API key not valid"))
+        self.assertIn("နေရာ", gemini_hint("400 FAILED_PRECONDITION. User location is not supported for the API use."))
+        self.assertEqual(gemini_hint("???"), "မသိတဲ့ အမှား")
 
 
 if __name__ == "__main__":

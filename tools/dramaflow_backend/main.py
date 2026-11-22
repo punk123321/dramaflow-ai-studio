@@ -34,7 +34,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
-from recap_core import fit_tempo, mask_key, run_recap
+from recap_core import fit_tempo, gemini_hint, mask_key, run_recap
 from tts_text import normalize_for_tts
 
 app = FastAPI(title="DramaFlow Recap Backend")
@@ -362,13 +362,6 @@ def selftest(req: SelfTestRequest, x_app_token: Optional[str] = Header(default=N
             add("gemini", True, f"{req.gemini_model} ဖြေတယ်: {(r.text or '').strip()[:20]}")
         except Exception as e:
             msg = mask_key(str(e), req.gemini_key)
-            if "404" in msg or "NOT_FOUND" in msg:
-                hint = "model နာမည် မရှိတော့ဘူး — model ကွက်မှာ gemini-3.8-flash လို နာမည်ပြောင်းပါ"
-            elif "429" in msg or "RESOURCE_EXHAUSTED" in msg:
-                hint = "quota ပြည့်နေတယ် — ခဏစောင့်ပါ၊ aistudio.google.com/rate-limit မှာ စစ်ပါ"
-            elif "API key" in msg or "400" in msg or "403" in msg or "PERMISSION" in msg:
-                hint = "key မှန်လား၊ Gemini API ဖွင့်ထားလား စစ်ပါ"
-            else:
-                hint = "မသိတဲ့ အမှား"
+            hint = gemini_hint(msg)
             add("gemini", False, hint + " · " + msg[:120])
     return {"checks": checks}
