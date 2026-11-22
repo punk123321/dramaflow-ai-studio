@@ -715,7 +715,7 @@ CI (run 45029307868, commit b9b0ff2): `flutter analyze` 101 infos (one more than
 Note: Auto Recap's "ဆက်သွယ်" loop was refactored (start and resume now share one polling function), so the normal Auto run is also affected: re-test it first.
 Not done on purpose: a multi-episode queue (it needs each episode's video, subtitles and Gemini upload handled in the background; I cannot make that safe without the phone), and a new backup feature (Backup/Restore already exists; the keys and these usage counters are not in it).
 
-## TE-53: Recap Queue + step bar (CI result below once run)
+## TE-53: Recap Queue + step bar
 | Feature | Tested here | Compiles on CI | Phone-tested |
 |---|---|---|---|
 | `lib/core/recap_queue.dart`: queue bookkeeping (sequence, a failed episode is recorded with step + reason and the next goes on, cancel, retry unfinished, step done/skipped, copyable log) | 8 unit tests | see CI | **No** |
@@ -723,3 +723,5 @@ Not done on purpose: a multi-episode queue (it needs each episode's video, subti
 | `lib/ui/recap_queue_screen.dart` + Home > Tools "Recap Queue": pick episodes, settings, per-episode step bar, error with step, log, retry, stop | 3 widget tests for the step bar only | see CI | **No** |
 | Auto card: step bar (same widget) and "Log ကူး" button | widget test of the bar | see CI | **No** |
 Limits, on purpose: Video Recap only (Scene Recap needs contact sheets made on the phone); the app must stay open and the screen on (no background service); leaving the queue page stops the queue; the queue does not replace an existing script. The Auto card's code was refactored (steps are tracked in `_start/_applyJob/_saveAudio/_resume`), so re-test the normal Auto run first.
+
+CI (run 45032250142, commit c4722ac): `flutter analyze` 104 infos (no warnings/errors; the new ones are lint hints), `flutter test` 367 passed, release APK built (artifact `dramaflow-apk-branch-237`). TE-53 compiles on CI and its tests pass. Phone-tested: **No**. Not merged into main.

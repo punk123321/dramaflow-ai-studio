@@ -1,7 +1,7 @@
-/// A queue of episodes for Auto Video Recap. This file is only the bookkeeping:
-/// which episode is on which step, what went wrong where, and the log. It has
-/// no network, no database and no Flutter, so it is tested on its own. What
-/// each step really does is in lib/platform/recap_episode_runner.dart.
+// A queue of episodes for Auto Video Recap. This file is only the bookkeeping:
+// which episode is on which step, what went wrong where, and the log. It has
+// no network, no database and no Flutter, so it is tested on its own. What
+// each step really does is in lib/platform/recap_episode_runner.dart.
 
 /// The steps one episode goes through, in order.
 enum QStep { subtitles, upload, ask, save, audio }
