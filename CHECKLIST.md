@@ -677,10 +677,21 @@ Unproven on a phone: the extra row (about 34 px) in the pinned top part on small
 | Backends: Edge TTS tried 3 times (it sometimes drops a request); Gemini script call retried on 503 / overloaded (not on 429 quota). Not run (Python, only syntax-checked) | n/a (Python) | **No** |
 Unproven: the retry waits in Colab, and MKV (the check cannot tell it from WebM; Gemini may refuse it and the message says so). APK artifact `dramaflow-apk-branch-230`. Branch `claude/te-48-hardening`, not merged.
 
-## TE-49: AssemblyAI inside Video Recap / Scene Recap (local commit, not pushed, no APK yet)
+## TE-49: AssemblyAI inside Video Recap / Scene Recap
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
 | Both recap screens: "အသံကနေ စာတန်းထုတ် (AssemblyAI)" button when the project has no subtitles (uses the existing AssemblyAI key and dialog; saved as the project's source subtitles) | not built yet (user asked for no APK for now) | **No** |
 | Auto card: switch "စာတန်းမရှိရင် AssemblyAI နဲ့ ထုတ်" (on by default when a key exists): when the project has no subtitles, the video's sound is sent to AssemblyAI first, the SRT is saved and read, then the scenes/parts get their dialogue, then Gemini and Edge TTS run. The consent box names AssemblyAI when it will run | not built yet | **No** |
 | Video Recap prompts (manual and Auto) now include each part's subtitle lines (cut to 600 characters) with a warning that speech-recognition text may be wrong; tests added | not built yet | **No** |
 Unproven: everything (not even compiled: no Flutter here and no push so no CI). The AssemblyAI request itself has also never run with a real key. Branch `claude/te-48-hardening` plus local commit only.
+
+## TE-50: Recap upgrades (backend + app). CI result goes below once the run is done.
+| Feature | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Backend: text cleaned before the voice (emoji, `*`/`#` marks and (stage directions) removed; whole numbers 0–99 spelled in Burmese; times, decimals, years left alone) | Python unit tests pass. Whether Edge TTS reads the result better is **unknown** | n/a (Python) | **No** |
+| Backend: voice up to 15% too long for its video part is sped up (ffmpeg atempo, pitch kept); remaining mismatch is a warning. App sends each part's video length (`part_ms`) | Python tests with a stand-in voice and real ffmpeg | Dart part: see CI | **No** |
+| Backend: each Gemini request after the first gets the last 300 characters of the story so far, to keep names/events consistent | Python test | n/a | **No**. Whether it makes scripts better is unproven |
+| Backend: finished job is kept in a file, so the app can still fetch it after the web process restarted (not after a machine restart) | Python test | n/a | **No** |
+| Backend `/selftest` + app **Self-test** button (ffmpeg, Edge TTS, Gemini key/model; Burmese hint for 404/429/key errors) | Python test with stand-ins; Dart parser test | see CI | **No** |
+| App: "မရတဲ့ အပိုင်း ပြန်လုပ်" button: asks only the groups that miss parts, reuses the Gemini video upload, merges with parts already saved | Dart helper tests (`missingParts`, `groupsFor`) | see CI | **No** |
+Not real: the backend was tested only with stand-ins for fastapi, edge-tts and Gemini (no network, no package installs here). Real FastAPI routing, real Edge TTS and real Gemini replies are untested. The Colab notebook `tools/dramaflow_recap_colab.ipynb` clones branch `claude/te-40-upgrades`, which does NOT contain these backend changes (they are on `claude/te-48-hardening`); until this is merged and the notebook points at the merged branch, Colab runs the old backend and the app's Self-test button will say the backend does not know it. Altare deploys from whichever branch is chosen.

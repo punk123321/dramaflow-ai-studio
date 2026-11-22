@@ -52,6 +52,17 @@ Tick each line on the phone. Anything that fails: send a screenshot and the line
 33. Wrong key shows "Key မမှန်ဘူး"; stop button works.
 34. Note how long it took and how much data it used.
 
+## 7b. Auto Recap with your own backend (Colab/Altare) — Video Recap and Scene Recap
+a. Backend is running (Colab cell 2 or Altare). In the Auto card, paste `URL#TOKEN`, tap "သိမ်း + စမ်းချိတ်": "ချိတ်မိပြီ ✓".
+b. Tap **Self-test**: ffmpeg, Edge TTS, Gemini should be green. A red line shows what to fix; send me a screenshot of it.
+c. Project WITHOUT subtitles + AssemblyAI key: "Auto လုပ်မယ်" asks about AssemblyAI in the box; stages show the sound being cut, AssemblyAI waiting, then Gemini. Note the minutes used.
+d. Project WITH subtitles: AssemblyAI does NOT run (box does not mention it).
+e. Result: parts saved; "Script အဖြစ် သိမ်း", then "အသံကို project ထဲ သိမ်း": Audio stage 3 shows the voices.
+f. Warnings: a part whose voice is much longer/shorter than its video part is listed ("အသံက ရှည်နေတယ်"). Voices up to 15% too long are sped up by the backend.
+g. Switch the Gemini model field to a wrong name (e.g. `x`), run Auto: error is readable. Put the right one back, tap "မရတဲ့ အပိုင်း … ပြန်လုပ်": only the missing parts run and the video is NOT uploaded again.
+h. Listen: numbers under 100 and emoji in the script are read sensibly (the backend spells small numbers in Burmese and removes emoji and * marks).
+i. Note: time per part, data used, anything that sounds wrong.
+
 ## 8. Data safety
 35. Backup > Restore on a fresh install keeps projects.
 36. Keys (Gemini, AssemblyAI) are NOT in the backup file.

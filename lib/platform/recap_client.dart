@@ -158,6 +158,22 @@ class RecapClient {
     }
   }
 
+  /// Asks the backend to check ffmpeg, Edge TTS and the Gemini key/model.
+  /// Throws [HttpException] when the backend itself cannot be reached.
+  Future<List<SelfCheck>> selfTest(String geminiKey, String model) async {
+    try {
+      final r = await _call('POST', '/selftest', json: jsonEncode({'gemini_key': geminiKey.trim(), if (model.trim().isNotEmpty) 'gemini_model': model.trim()}));
+      if (r.$1 != 200) throw HttpException(httpError(r.$1, r.$2));
+      final out = parseSelfTest(r.$2);
+      if (out.isEmpty) throw const HttpException('Backend က Self-test မသိဘူး (Backend ကို version အသစ် ပြောင်းပြီး ပြန်စပါ)');
+      return out;
+    } on SocketException {
+      throw const HttpException('Backend နဲ့ ဆက်သွယ်လို့မရဘူး (Colab/Altare ပွင့်နေလား၊ URL မှန်လား)');
+    } on TimeoutException {
+      throw const HttpException('Backend ပြန်မဖြေဘူး (အချိန်ကြာလွန်းတယ်)');
+    }
+  }
+
   void dispose() {
     _http?.close(force: true);
     _http = null;

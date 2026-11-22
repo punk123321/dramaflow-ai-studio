@@ -72,6 +72,12 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   String _stage = '';
   int _progress = 0;
   RecapJob? _result;
+  // What a retry needs: the groups of the last run and the video already in Gemini.
+  List<RecapGroup> _lastGroups = const [];
+  String _lastFileUri = '';
+  String _lastMime = 'video/mp4';
+  List<SelfCheck>? _checks;
+  bool _testing = false;
   String? _msg;
   bool _err = false;
   RecapClient? _client;
@@ -189,7 +195,9 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     }
   }
 
-  Future<void> _start() async {
+  /// [retry]: ask again only for the parts that did not come out, reusing the
+  /// video that is already in Gemini and the parts that were already saved.
+  Future<void> _start({bool retry = false}) async {
     if (!_s.ready) {
       _say('Backend လိပ်စာ + token ကို အရင်သိမ်းပါ', error: true);
       return;
@@ -202,8 +210,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _say('ဗီဒီယို မရွေးရသေးဘူး', error: true);
       return;
     }
-    final needAsr = _useAsr && _asr.hasKey && widget.videoUri != null && !await _hasSrt();
-    if (!mounted || !await _confirm(needAsr) || !mounted) return;
+    final needAsr = !retry && _useAsr && _asr.hasKey && widget.videoUri != null && !await _hasSrt();
+    if (!mounted) return;
+    if (!retry && !await _confirm(needAsr)) return;
+    if (!mounted) return;
     final client = RecapClient(_s);
     _client = client;
     File? tmp;
@@ -212,7 +222,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _canceled = false;
       _msg = null;
       _err = false;
-      _result = null;
+      if (!retry) _result = null;
       _progress = 0;
       _stage = 'ပြင်ဆင်နေတယ်';
     });
@@ -221,7 +231,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       if (_canceled) throw const RecapCanceled();
       var fileUri = '';
       String? mime;
-      if (_video) {
+      if (_video && retry && _lastFileUri.isNotEmpty) {
+        fileUri = _lastFileUri;
+        mime = _lastMime;
+      } else if (_video) {
         setState(() => _stage = 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
         tmp = await GeminiFiles.copyToCache(widget.videoUri!);
         final f = await GeminiFiles.upload(
@@ -234,16 +247,21 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         );
         fileUri = f.uri;
         mime = f.mime;
+        _lastFileUri = f.uri;
+        _lastMime = f.mime;
         try {
           tmp.deleteSync();
           tmp = null;
         } catch (_) {}
       }
-      final groups = await widget.buildGroups((s) {
+      final built = await widget.buildGroups((s) {
         if (mounted) setState(() => _stage = s);
       });
       if (_canceled) throw const RecapCanceled();
-      if (groups.isEmpty) throw const HttpException('ပို့စရာ အပိုင်း မရှိဘူး');
+      if (built.isEmpty) throw const HttpException('ပို့စရာ အပိုင်း မရှိဘူး');
+      if (mounted) setState(() => _lastGroups = built);
+      final groups = retry ? groupsFor(built, missingParts(built, _result?.parts.map((p) => p.n) ?? const <int>[])) : built;
+      if (groups.isEmpty) throw const HttpException('ပြန်လုပ်စရာ အပိုင်း မရှိတော့ဘူး');
       final job = await client.run(
         recapRequestJson(
           mode: widget.mode,
@@ -268,9 +286,17 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       }
       await widget.onTextsSaved();
       if (!mounted) return;
-      setState(() => _result = job);
+      final prev = retry ? _result : null;
+      final merged = <int, RecapPart>{
+        if (prev != null) for (final p in prev.parts) p.n: p,
+        for (final p in job.parts) p.n: p,
+      };
+      final all = RecapJob(state: JobState.done, parts: [for (final k in (merged.keys.toList()..sort())) merged[k]!], warnings: job.warnings);
+      setState(() => _result = all);
       final w = job.warnings.isEmpty ? '' : '\n⚠ ${job.warnings.join('\n⚠ ')}';
-      _say('အပိုင်း ${job.parts.length} ခု ရပြီး သိမ်းပြီး။ အောက်က "Script အဖြစ် သိမ်း" ကို နှိပ်ပါ၊ ပြီးမှ အသံကို project ထဲ သိမ်းပါ။$w');
+      final miss = missingParts(_lastGroups, all.parts.map((p) => p.n));
+      final m = miss.isEmpty ? '' : '\n⚠ မရသေးတဲ့ အပိုင်း: ${miss.join(', ')} — "ပြန်လုပ်" ခလုတ်ကို နှိပ်ပါ';
+      _say('အပိုင်း ${job.parts.length} ခု ရပြီး သိမ်းပြီး။ အောက်က "Script အဖြစ် သိမ်း" ကို နှိပ်ပါ၊ ပြီးမှ အသံကို project ထဲ သိမ်းပါ။$w$m');
     } on RecapCanceled {
       _say('ရပ်လိုက်ပြီ (Backend မှာ job က ဆက်လုပ်နေနိုင်တယ်)');
     } on GeminiUploadException catch (e) {
@@ -355,6 +381,32 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     }
   }
 
+  /// Backend check: ffmpeg, Edge TTS and the Gemini key/model, with a Burmese
+  /// hint for each thing that fails.
+  Future<void> _selfTest() async {
+    if (!_s.ready) {
+      _say('Backend လိပ်စာ + token ကို အရင်သိမ်းပါ', error: true);
+      return;
+    }
+    setState(() {
+      _testing = true;
+      _checks = null;
+      _msg = null;
+    });
+    final client = RecapClient(_s);
+    try {
+      final c = await client.selfTest(_geminiKey, _modelC.text);
+      if (mounted) setState(() => _checks = c);
+    } on HttpException catch (e) {
+      _say(e.message, error: true);
+    } catch (e) {
+      _say('$e', error: true);
+    } finally {
+      client.dispose();
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
   void _cancel() {
     setState(() => _canceled = true);
     _client?.cancel();
@@ -365,6 +417,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   Widget build(BuildContext context) {
     if (!_loaded) return const SizedBox.shrink();
     final hasAudio = _result?.parts.any((p) => p.audioUrl.isNotEmpty) ?? false;
+    final missing = _lastGroups.isEmpty ? const <int>[] : missingParts(_lastGroups, _result?.parts.map((p) => p.n) ?? const <int>[]);
     return DfCard(
       title: '🤖 Auto (Backend နဲ့ တစ်ချက်တည်း)',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -426,9 +479,26 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         ] else
           Wrap(spacing: 8, runSpacing: 6, children: [
             FilledButton.icon(onPressed: _start, icon: const Icon(Icons.auto_awesome, size: 18), label: const Text('Auto လုပ်မယ်')),
+            if (missing.isNotEmpty) OutlinedButton.icon(onPressed: () => _start(retry: true), icon: const Icon(Icons.refresh, size: 18), label: Text('မရတဲ့ အပိုင်း ${missing.length} ခု ပြန်လုပ်')),
             if (hasAudio) OutlinedButton.icon(onPressed: _saveAudio, icon: const Icon(Icons.graphic_eq, size: 18), label: const Text('အသံကို project ထဲ သိမ်း')),
+            OutlinedButton.icon(onPressed: _testing ? null : _selfTest, icon: const Icon(Icons.fact_check_outlined, size: 18), label: Text(_testing ? 'စစ်နေတယ် …' : 'Self-test')),
           ]),
         if (_msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13))),
+        if (_checks != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final c in _checks!)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(c.ok ? Icons.check_circle : Icons.error, size: 16, color: c.ok ? DfColors.ok : DfColors.danger),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text('${c.label} — ${c.note}', style: const TextStyle(fontSize: 12.5))),
+                  ]),
+                ),
+            ]),
+          ),
       ]),
     );
   }
