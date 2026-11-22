@@ -685,7 +685,7 @@ Unproven: the retry waits in Colab, and MKV (the check cannot tell it from WebM;
 | Video Recap prompts (manual and Auto) now include each part's subtitle lines (cut to 600 characters) with a warning that speech-recognition text may be wrong; tests added | not built yet | **No** |
 Unproven: everything (not even compiled: no Flutter here and no push so no CI). The AssemblyAI request itself has also never run with a real key. Branch `claude/te-48-hardening` plus local commit only.
 
-## TE-50: Recap upgrades (backend + app). CI result goes below once the run is done.
+## TE-50: Recap upgrades (backend + app) — also holds TE-49 (AssemblyAI in the recap screens)
 | Feature | Tested here | Compiles on CI | Phone-tested |
 |---|---|---|---|
 | Backend: text cleaned before the voice (emoji, `*`/`#` marks and (stage directions) removed; whole numbers 0–99 spelled in Burmese; times, decimals, years left alone) | Python unit tests pass. Whether Edge TTS reads the result better is **unknown** | n/a (Python) | **No** |
@@ -695,3 +695,5 @@ Unproven: everything (not even compiled: no Flutter here and no push so no CI). 
 | Backend `/selftest` + app **Self-test** button (ffmpeg, Edge TTS, Gemini key/model; Burmese hint for 404/429/key errors) | Python test with stand-ins; Dart parser test | see CI | **No** |
 | App: "မရတဲ့ အပိုင်း ပြန်လုပ်" button: asks only the groups that miss parts, reuses the Gemini video upload, merges with parts already saved | Dart helper tests (`missingParts`, `groupsFor`) | see CI | **No** |
 Not real: the backend was tested only with stand-ins for fastapi, edge-tts and Gemini (no network, no package installs here). Real FastAPI routing, real Edge TTS and real Gemini replies are untested. The Colab notebook `tools/dramaflow_recap_colab.ipynb` clones branch `claude/te-40-upgrades`, which does NOT contain these backend changes (they are on `claude/te-48-hardening`); until this is merged and the notebook points at the merged branch, Colab runs the old backend and the app's Self-test button will say the backend does not know it. Altare deploys from whichever branch is chosen.
+
+CI (run 45003681194, commit 7a6dbc4, branch `claude/te-48-hardening`): `flutter analyze` 100 infos (same 100 as before: the deprecated `material.dart` import; no warnings or errors), `flutter test` 351 passed, release APK built (artifact `dramaflow-apk-branch-232`). So TE-49 and TE-50 **compile on CI and their tests pass**. Phone-tested: **No**. Not merged into main.
