@@ -214,6 +214,7 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
               if (mounted) setState(() => _texts = r);
             },
             onSrtReady: _loadSrt,
+            durationMs: widget.project.videoDurationMs ?? 0,
           ),
           if (_srt.isEmpty)
             Padding(

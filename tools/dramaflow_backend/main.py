@@ -65,6 +65,7 @@ class RecapRequest(BaseModel):
     mode: str = "scenes"  # "scenes" (pictures + dialogue) or "video" (a file already in Gemini)
     gemini_key: str
     gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback: str = ""  # optional second model, tried when the first is gone (404) or over its quota
     voice: str = ""  # empty = script only, no voice
     file_uri: str = ""  # Gemini Files API address (video mode)
     file_mime: str = "video/mp4"
@@ -90,8 +91,25 @@ def _ffmpeg() -> str:
         return shutil.which("ffmpeg") or "ffmpeg"
 
 
+FALLBACK_WHEN = ("404", "NOT_FOUND", "429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")
+
+
 def _gemini_fn(req: RecapRequest):
     client = genai.Client(api_key=req.gemini_key)
+
+    def ask(model: str, contents: list) -> str:
+        for attempt in range(3):
+            try:
+                r = client.models.generate_content(model=model, contents=contents, config=types.GenerateContentConfig(temperature=0.5))
+                return r.text or ""
+            except Exception as e:
+                msg = str(e)
+                busy = any(k in msg for k in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE"))
+                if busy and attempt < 2:
+                    time.sleep(25 * (attempt + 1))
+                    continue
+                raise RuntimeError(mask_key(msg, req.gemini_key))
+        return ""
 
     def call(g: dict) -> str:
         contents: list = []
@@ -110,20 +128,14 @@ def _gemini_fn(req: RecapRequest):
                 )
             )
         contents.append(g["prompt"])
-        for attempt in range(3):
-            try:
-                r = client.models.generate_content(
-                    model=req.gemini_model, contents=contents, config=types.GenerateContentConfig(temperature=0.5)
-                )
-                return r.text or ""
-            except Exception as e:
-                msg = str(e)
-                busy = any(k in msg for k in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE"))
-                if busy and attempt < 2:
-                    time.sleep(25 * (attempt + 1))
-                    continue
-                raise RuntimeError(mask_key(msg, req.gemini_key))
-        return ""
+        try:
+            return ask(req.gemini_model, contents)
+        except RuntimeError as e:
+            fb = req.gemini_fallback.strip()
+            if fb and fb != req.gemini_model and any(k in str(e) for k in FALLBACK_WHEN):
+                print(f"model {req.gemini_model} failed, trying {fb}", flush=True)
+                return ask(fb, contents)
+            raise
 
     return call
 

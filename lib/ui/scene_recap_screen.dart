@@ -370,6 +370,7 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
                 if (mounted) setState(() => _texts = r);
               },
               onSrtReady: _loadSrt,
+            durationMs: widget.project.videoDurationMs ?? 0,
             ),
             const SectionTitle('၃။ Gemini ကို ပို့ (လက်နဲ့)'),
             const InfoHint('အုပ်စုတစ်ခုချင်း (scene ၁၂ ခုစီ) ပို့ပါ။ ပုံနဲ့ prompt ကို Gemini ဆီ တစ်ခါတည်း ပို့မယ်၊ prompt ကိုလည်း ကူးထားမယ်။'),

@@ -229,6 +229,47 @@ class MainTests(unittest.TestCase):
         with self.assertRaises(main.HTTPException):
             main.job_status("recap_1_ffff", x_app_token=main.TOKEN)
 
+    def test_fallback_model(self):
+        used = []
+
+        def reply(model, contents):
+            used.append(model)
+            if model == "old-model":
+                return RuntimeError("404 NOT_FOUND no such model")
+            return "=== PART 1 ===\nစာ"
+
+        GEMINI["reply"] = reply
+        gs = [main.Group(first=1, last=1, prompt="P")]
+        jid = main.create_job(_req(groups=gs, voice="", gemini_model="old-model", gemini_fallback="new-model"), x_app_token=main.TOKEN)["job_id"]
+        j = _wait(jid)
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(used, ["old-model", "new-model"])
+        # without a fallback the 404 is reported and nothing is retried
+        used.clear()
+        main.JOBS.clear()
+        jid = main.create_job(_req(groups=gs, voice="", gemini_model="old-model"), x_app_token=main.TOKEN)["job_id"]
+        self.assertEqual(_wait(jid)["status"], "error")
+        self.assertEqual(used, ["old-model"])
+
+    def test_quota_waits_then_falls_back(self):
+        used, slept = [], []
+
+        def reply(model, contents):
+            used.append(model)
+            return RuntimeError("429 RESOURCE_EXHAUSTED") if model == "a" else "=== PART 1 ===\nစာ"
+
+        GEMINI["reply"] = reply
+        real = main.time.sleep
+        main.time.sleep = lambda s: slept.append(s)
+        try:
+            jid = main.create_job(_req(groups=[main.Group(first=1, last=1, prompt="P")], voice="", gemini_model="a", gemini_fallback="b"), x_app_token=main.TOKEN)["job_id"]
+            j = _wait(jid)
+        finally:
+            main.time.sleep = real
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(used, ["a", "a", "a", "b"])  # three tries on a, then b
+        self.assertEqual([x for x in slept if x >= 1][:2], [25, 50])
+
     def test_tts_once(self):
         r = main.tts_once(main.TtsRequest(text="မင်္ဂလာပါ 😀 3 ယောက်"), x_app_token=main.TOKEN)
         self.assertEqual(r.media_type, "audio/wav")

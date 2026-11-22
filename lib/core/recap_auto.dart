@@ -101,11 +101,13 @@ Map<String, Object?> recapRequestJson({
   required List<RecapGroup> groups,
   String fileUri = '',
   String fileMime = 'video/mp4',
+  String fallbackModel = '',
 }) =>
     {
       'mode': mode == 'video' ? 'video' : 'scenes',
       'gemini_key': geminiKey.trim(),
       if (model.trim().isNotEmpty) 'gemini_model': model.trim(),
+      if (fallbackModel.trim().isNotEmpty) 'gemini_fallback': fallbackModel.trim(),
       'voice': voice,
       'file_uri': fileUri,
       'file_mime': fileMime,

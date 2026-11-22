@@ -8,11 +8,13 @@ import '../core/recap_auto.dart';
 import '../core/script.dart';
 import '../core/srt.dart';
 import '../core/theme.dart';
+import '../core/usage_log.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/assembly_settings_repo.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
 import '../data/news_video_repo.dart';
+import '../data/usage_repo.dart';
 import '../platform/assembly_client.dart';
 import '../platform/audio_channel.dart';
 import '../platform/gemini_files.dart';
@@ -33,6 +35,7 @@ class RecapAutoSection extends StatefulWidget {
     required this.buildGroups,
     required this.onTextsSaved,
     required this.onSrtReady,
+    this.durationMs = 0,
   });
 
   final int projectId;
@@ -48,6 +51,10 @@ class RecapAutoSection extends StatefulWidget {
   /// screen can read them again before the groups are built.
   final Future<void> Function() onSrtReady;
 
+  /// Length of the video (0 = not known), to say how many minutes of sound
+  /// AssemblyAI will get.
+  final int durationMs;
+
   @override
   State<RecapAutoSection> createState() => _RecapAutoSectionState();
 }
@@ -57,6 +64,9 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   final _handoff = HandoffRepo();
   final _connectC = TextEditingController();
   final _modelC = TextEditingController(text: defaultTextModel);
+  final _fallbackC = TextEditingController();
+  final _usageRepo = UsageRepo();
+  UsageLog _usage = const UsageLog();
 
   NewsVideoSettings _s = const NewsVideoSettings();
   String _geminiKey = '';
@@ -94,9 +104,13 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     final s = await _repo.load();
     final g = await AiSettingsRepo().load();
     final a = await AssemblySettingsRepo().load();
+    final fb = await _usageRepo.fallbackModel();
+    final u = await _usageRepo.today();
     if (!mounted) return;
     setState(() {
       _asr = a;
+      _usage = u;
+      _fallbackC.text = fb;
       _s = s;
       _geminiKey = g.apiKey.trim();
       _connectC.text = s.ready ? '${s.url}#${s.token}' : '';
@@ -111,6 +125,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     _asrClient?.cancel();
     _connectC.dispose();
     _modelC.dispose();
+    _fallbackC.dispose();
     super.dispose();
   }
 
@@ -142,7 +157,8 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         ? 'ဗီဒီယိုတစ်ခုလုံးကို သင့် Gemini account (Google) ဆီ upload လုပ်မယ်။ Gemini key ကို သင့် Backend ဆီ ပို့မယ်။ '
             'မူရင်းဗီဒီယိုကို မပြင်ဘူး၊ ဖုန်း cache ထဲ ယာယီကူးပြီး ပြီးရင် ဖျက်မယ်။ (ဗီဒီယိုကြီးရင် data အများကြီး သုံးမယ် — Wi-Fi သုံးပါ)'
         : 'Scene ပုံတွေ (contact sheet) နဲ့ စာတန်းစာသားကို သင့် Backend နဲ့ Google (Gemini) ဆီ ပို့မယ်။ Gemini key ကိုလည်း Backend ဆီ ပို့မယ်။';
-    final extra = asr ? '\n\nစာတန်း မရှိသေးလို့ ဗီဒီယိုထဲက အသံကို AssemblyAI ဆီ ပို့မယ် (ပုံမပို့ဘူး၊ credit ကုန်နိုင်တယ်)။' : '';
+    final mins = asrMinutesFor(widget.durationMs);
+    final extra = asr ? '\n\nစာတန်း မရှိသေးလို့ ဗီဒီယိုထဲက အသံကို AssemblyAI ဆီ ပို့မယ် (ပုံမပို့ဘူး၊ credit ကုန်နိုင်တယ်)။${mins > 0 ? ' အသံ ခန့်မှန်း $mins မိနစ်။' : ''}' : '';
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -155,6 +171,15 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       ),
     );
     return ok == true;
+  }
+
+  /// The count is a convenience: a failure here must never spoil a finished job.
+  Future<void> _logUsage({int gemini = 0, int asrSeconds = 0, int voices = 0, bool saveFallback = false}) async {
+    try {
+      if (saveFallback) await _usageRepo.saveFallbackModel(_fallbackC.text);
+      final u = await _usageRepo.add(gemini: gemini, asrSeconds: asrSeconds, voices: voices);
+      if (mounted) setState(() => _usage = u);
+    } catch (_) {}
   }
 
   Future<bool> _hasSrt() async {
@@ -182,6 +207,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       if (parsed.entries.isEmpty) throw const HttpException('အသံထဲက စာ မတွေ့ပါ (Settings မှာ ဘာသာစကား code မှန်လား စစ်ပါ)');
       await _handoff.setDoc(widget.projectId, DocKind.sourceSrt, serializeSrt(parsed.entries));
       await widget.onSrtReady();
+      await _logUsage(asrSeconds: widget.durationMs ~/ 1000);
     } on AsrCanceled {
       throw const RecapCanceled();
     } on HttpException catch (e) {
@@ -271,6 +297,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
           groups: groups,
           fileUri: fileUri,
           fileMime: mime ?? 'video/mp4',
+          fallbackModel: _fallbackC.text,
         ),
         (j) {
           if (mounted) {
@@ -284,6 +311,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       for (final p in job.parts) {
         await _handoff.saveResult(widget.projectId, widget.task, p.n, p.text);
       }
+      await _logUsage(gemini: groups.length, voices: job.parts.where((p) => p.audioUrl.isNotEmpty).length, saveFallback: true);
       await widget.onTextsSaved();
       if (!mounted) return;
       final prev = retry ? _result : null;
@@ -443,6 +471,12 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
             Align(alignment: Alignment.centerLeft, child: OutlinedButton(onPressed: _running ? null : _saveBackend, child: const Text('သိမ်း + စမ်းချိတ်'))),
             const SizedBox(height: 6),
             TextField(controller: _modelC, autocorrect: false, decoration: const InputDecoration(labelText: 'Gemini model (စာရေးဖို့)')),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _fallbackC,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'အရန် model (မထည့်လည်းရ)', helperText: 'ပထမ model မရှိတော့ရင် / quota ပြည့်ရင် ဒီ model နဲ့ ပြန်စမ်းမယ်', helperMaxLines: 2),
+            ),
           ],
         ),
         SwitchListTile(
@@ -484,6 +518,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
             OutlinedButton.icon(onPressed: _testing ? null : _selfTest, icon: const Icon(Icons.fact_check_outlined, size: 18), label: Text(_testing ? 'စစ်နေတယ် …' : 'Self-test')),
           ]),
         if (_msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13))),
+        if (!_usage.isEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_usage.summary(), style: const TextStyle(color: DfColors.muted, fontSize: 12))),
         if (_checks != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),

@@ -147,4 +147,12 @@ void main() {
     expect(parseSelfTest('nope'), isEmpty);
     expect(parseSelfTest('{"x":1}'), isEmpty);
   });
+
+  test('request json carries the optional fallback model only when given', () {
+    const g = [RecapGroup(first: 1, last: 1, prompt: 'p')];
+    final a = recapRequestJson(mode: 'scenes', geminiKey: 'k', model: 'm', voice: '', groups: g);
+    expect(a.containsKey('gemini_fallback'), isFalse);
+    final b = recapRequestJson(mode: 'scenes', geminiKey: 'k', model: 'm', voice: '', groups: g, fallbackModel: ' f2 ');
+    expect(b['gemini_fallback'], 'f2');
+  });
 }
