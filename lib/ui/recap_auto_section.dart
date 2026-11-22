@@ -2,14 +2,18 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../core/assembly.dart';
 import '../core/news_video.dart';
 import '../core/recap_auto.dart';
 import '../core/script.dart';
+import '../core/srt.dart';
 import '../core/theme.dart';
 import '../data/ai_settings_repo.dart';
+import '../data/assembly_settings_repo.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
 import '../data/news_video_repo.dart';
+import '../platform/assembly_client.dart';
 import '../platform/audio_channel.dart';
 import '../platform/gemini_files.dart';
 import '../platform/news_video_client.dart';
@@ -28,6 +32,7 @@ class RecapAutoSection extends StatefulWidget {
     required this.videoUri,
     required this.buildGroups,
     required this.onTextsSaved,
+    required this.onSrtReady,
   });
 
   final int projectId;
@@ -38,6 +43,10 @@ class RecapAutoSection extends StatefulWidget {
   final String? videoUri;
   final Future<List<RecapGroup>> Function(void Function(String) status) buildGroups;
   final Future<void> Function() onTextsSaved;
+
+  /// Called after the subtitles were made from the sound and saved, so the
+  /// screen can read them again before the groups are built.
+  final Future<void> Function() onSrtReady;
 
   @override
   State<RecapAutoSection> createState() => _RecapAutoSectionState();
@@ -52,6 +61,9 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   NewsVideoSettings _s = const NewsVideoSettings();
   String _geminiKey = '';
   bool _loaded = false;
+  AssemblySettings _asr = const AssemblySettings();
+  bool _useAsr = true;
+  AssemblyClient? _asrClient;
   bool _makeVoice = true;
   String _voice = 'my-MM-ThihaNeural';
 
@@ -75,8 +87,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   Future<void> _init() async {
     final s = await _repo.load();
     final g = await AiSettingsRepo().load();
+    final a = await AssemblySettingsRepo().load();
     if (!mounted) return;
     setState(() {
+      _asr = a;
       _s = s;
       _geminiKey = g.apiKey.trim();
       _connectC.text = s.ready ? '${s.url}#${s.token}' : '';
@@ -88,6 +102,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   void dispose() {
     _canceled = true;
     _client?.cancel();
+    _asrClient?.cancel();
     _connectC.dispose();
     _modelC.dispose();
     super.dispose();
@@ -116,16 +131,17 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     _say(ok ? 'Backend နဲ့ ချိတ်မိပြီ ✓' : 'သိမ်းပြီး၊ ဒါပေမဲ့ Backend မဖြေဘူး (deploy ပြီးလား၊ URL မှန်လား စစ်ပါ)', error: !ok);
   }
 
-  Future<bool> _confirm() async {
+  Future<bool> _confirm(bool asr) async {
     final what = _video
         ? 'ဗီဒီယိုတစ်ခုလုံးကို သင့် Gemini account (Google) ဆီ upload လုပ်မယ်။ Gemini key ကို သင့် Backend ဆီ ပို့မယ်။ '
             'မူရင်းဗီဒီယိုကို မပြင်ဘူး၊ ဖုန်း cache ထဲ ယာယီကူးပြီး ပြီးရင် ဖျက်မယ်။ (ဗီဒီယိုကြီးရင် data အများကြီး သုံးမယ် — Wi-Fi သုံးပါ)'
         : 'Scene ပုံတွေ (contact sheet) နဲ့ စာတန်းစာသားကို သင့် Backend နဲ့ Google (Gemini) ဆီ ပို့မယ်။ Gemini key ကိုလည်း Backend ဆီ ပို့မယ်။';
+    final extra = asr ? '\n\nစာတန်း မရှိသေးလို့ ဗီဒီယိုထဲက အသံကို AssemblyAI ဆီ ပို့မယ် (ပုံမပို့ဘူး၊ credit ကုန်နိုင်တယ်)။' : '';
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Auto စတင်မလား?'),
-        content: Text(what),
+        content: Text('$what$extra'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('မလုပ်ဘူး')),
           FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('စမယ်')),
@@ -133,6 +149,44 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       ),
     );
     return ok == true;
+  }
+
+  Future<bool> _hasSrt() async {
+    for (final kind in [DocKind.studioSrt, DocKind.sourceSrt]) {
+      final t = await _handoff.getDoc(widget.projectId, kind);
+      if (t != null && t.trim().isNotEmpty && parseSrt(t).entries.isNotEmpty) return true;
+    }
+    return false;
+  }
+
+  /// Subtitles from the video's sound (AssemblyAI) when the project has none.
+  /// Saved as the project's source subtitles; the video is only read.
+  Future<void> _runAsr() async {
+    final client = AssemblyClient(_asr.apiKey.trim());
+    _asrClient = client;
+    File? tmp;
+    try {
+      setState(() => _stage = 'အသံကို ဗီဒီယိုထဲကနေ ထုတ်နေတယ်');
+      final audio = await AssemblyClient.extractAudio(widget.videoUri!);
+      tmp = File(audio.path);
+      final text = await client.transcribe(tmp, _asr.language, (s) {
+        if (mounted) setState(() => _stage = 'AssemblyAI: $s');
+      });
+      final parsed = parseSrt(text);
+      if (parsed.entries.isEmpty) throw const HttpException('အသံထဲက စာ မတွေ့ပါ (Settings မှာ ဘာသာစကား code မှန်လား စစ်ပါ)');
+      await _handoff.setDoc(widget.projectId, DocKind.sourceSrt, serializeSrt(parsed.entries));
+      await widget.onSrtReady();
+    } on AsrCanceled {
+      throw const RecapCanceled();
+    } on HttpException catch (e) {
+      if (client.canceled) throw const RecapCanceled();
+      throw HttpException('AssemblyAI မအောင်မြင်ဘူး: ${e.message} (စာတန်းမလိုဘဲ လုပ်ချင်ရင် "AssemblyAI နဲ့ စာတန်းထုတ်" switch ကို ပိတ်ပါ)');
+    } finally {
+      try {
+        await tmp?.delete();
+      } catch (_) {}
+      _asrClient = null;
+    }
   }
 
   Future<void> _start() async {
@@ -148,7 +202,8 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _say('ဗီဒီယို မရွေးရသေးဘူး', error: true);
       return;
     }
-    if (!await _confirm() || !mounted) return;
+    final needAsr = _useAsr && _asr.hasKey && widget.videoUri != null && !await _hasSrt();
+    if (!mounted || !await _confirm(needAsr) || !mounted) return;
     final client = RecapClient(_s);
     _client = client;
     File? tmp;
@@ -162,8 +217,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _stage = 'ပြင်ဆင်နေတယ်';
     });
     try {
+      if (needAsr) await _runAsr();
+      if (_canceled) throw const RecapCanceled();
       var fileUri = '';
-      var mime = 'video/mp4';
+      String? mime;
       if (_video) {
         setState(() => _stage = 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
         tmp = await GeminiFiles.copyToCache(widget.videoUri!);
@@ -195,7 +252,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
           voice: _makeVoice ? _voice : '',
           groups: groups,
           fileUri: fileUri,
-          fileMime: mime,
+          fileMime: mime ?? 'video/mp4',
         ),
         (j) {
           if (mounted) {
@@ -301,6 +358,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   void _cancel() {
     setState(() => _canceled = true);
     _client?.cancel();
+    _asrClient?.cancel();
   }
 
   @override
@@ -333,6 +391,17 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
             const SizedBox(height: 6),
             TextField(controller: _modelC, autocorrect: false, decoration: const InputDecoration(labelText: 'Gemini model (စာရေးဖို့)')),
           ],
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('စာတန်းမရှိရင် AssemblyAI နဲ့ ထုတ်'),
+          subtitle: Text(
+            _asr.hasKey ? 'ဗီဒီယိုထဲက အသံကိုပဲ ပို့မယ်၊ project မှာ စာတန်း ရှိပြီးသားဆိုရင် မထုတ်ဘူး' : 'AssemblyAI key မရှိသေးဘူး (Settings › AssemblyAI)',
+            style: const TextStyle(fontSize: 12),
+          ),
+          value: _useAsr && _asr.hasKey,
+          onChanged: (_running || !_asr.hasKey) ? null : (v) => setState(() => _useAsr = v),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,

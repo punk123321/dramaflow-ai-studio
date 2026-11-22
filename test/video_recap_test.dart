@@ -39,4 +39,27 @@ void main() {
   test('script without the break marker still joins as before', () {
     expect(splitScript('က။ ခ။'), ['က။ ခ။']);
   });
+
+  test('prompt carries the dialogue of each part when given, and warns it may be wrong', () {
+    final withD = buildVideoRecapPrompt(
+      dramaTitle: 'T',
+      episode: 1,
+      parts: const [SegmentSpec(0, 60000), SegmentSpec(60000, 120000)],
+      from: 1,
+      to: 2,
+      dialogue: const ['မင်္ဂလာပါ / နေကောင်းလား', ''],
+    );
+    expect(withD, contains('Dialogue (subtitles): မင်္ဂလာပါ / နေကောင်းလား'));
+    expect(withD, contains('speech recognition'));
+    expect('Dialogue (subtitles):'.allMatches(withD).length, 1); // the empty part has no line
+    final without = buildVideoRecapPrompt(
+      dramaTitle: 'T',
+      episode: 1,
+      parts: const [SegmentSpec(0, 60000)],
+      from: 1,
+      to: 1,
+    );
+    expect(without, isNot(contains('Dialogue')));
+    expect(without, isNot(contains('speech recognition')));
+  });
 }

@@ -42,6 +42,7 @@ List<RecapGroup> videoRecapGroups({
   required List<SegmentSpec> parts,
   required String notes,
   int perBatch = 5,
+  List<String>? dialogue,
 }) {
   final out = <RecapGroup>[];
   for (var from = 1; from <= parts.length; from += perBatch) {
@@ -49,7 +50,7 @@ List<RecapGroup> videoRecapGroups({
     out.add(RecapGroup(
       first: from,
       last: to,
-      prompt: buildVideoRecapPrompt(dramaTitle: dramaTitle, episode: episode, parts: parts, from: from, to: to, notes: notes),
+      prompt: buildVideoRecapPrompt(dramaTitle: dramaTitle, episode: episode, parts: parts, from: from, to: to, notes: notes, dialogue: dialogue),
       startMs: parts[from - 1].startMs,
       endMs: parts[to - 1].endMs,
     ));

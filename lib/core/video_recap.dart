@@ -22,6 +22,7 @@ String buildVideoRecapPrompt({
   required int from,
   required int to,
   String notes = '',
+  List<String>? dialogue,
 }) {
   final b = StringBuffer();
   b.writeln('You are writing narration for a drama recap video. The video of "$dramaTitle", episode $episode, is attached to this chat. Watch it and listen to it.');
@@ -31,10 +32,14 @@ String buildVideoRecapPrompt({
   for (var i = from; i <= to && i <= parts.length; i++) {
     final p = parts[i - 1];
     b.writeln('Part $i: ${formatTime(p.startMs)} - ${formatTime(p.endMs)} (about ${targetChars(p.lengthMs)} Burmese characters)');
+    final d = dialogue != null && i - 1 < dialogue.length ? dialogue[i - 1] : '';
+    if (d.isNotEmpty) b.writeln('  Dialogue (subtitles): $d');
   }
+  final hasDialogue = dialogue != null && dialogue.any((d) => d.isNotEmpty);
   b.writeln();
   b.writeln('RULES:');
   b.writeln('1. Use only what really happens in the video in that time range. Do not invent events, characters or dialogue. If you cannot tell, say less instead of guessing.');
+  if (hasDialogue) b.writeln('   The dialogue lines may come from automatic speech recognition and can contain mistakes: where they disagree with the video, trust the video.');
   b.writeln('2. Keep character names consistent.');
   b.writeln('3. Plain spoken text only: no headings inside a part, no bullet points, no emoji, no brackets, no timestamps. Short sentences ending with "။".');
   b.writeln('4. Start every part with exactly this line, with the part number: === PART n ===');

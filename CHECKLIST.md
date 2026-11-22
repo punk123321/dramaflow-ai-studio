@@ -676,3 +676,11 @@ Unproven on a phone: the extra row (about 34 px) in the pinned top part on small
 | Video Recap upload: the video type is found from the file's first bytes (mp4, mov, 3gp, webm, avi, flv, wmv, mpeg) instead of always saying mp4; a refusal by Gemini now says which types work. Unit tests for the detection | Yes (CI green, run 45000512970) | **No** |
 | Backends: Edge TTS tried 3 times (it sometimes drops a request); Gemini script call retried on 503 / overloaded (not on 429 quota). Not run (Python, only syntax-checked) | n/a (Python) | **No** |
 Unproven: the retry waits in Colab, and MKV (the check cannot tell it from WebM; Gemini may refuse it and the message says so). APK artifact `dramaflow-apk-branch-230`. Branch `claude/te-48-hardening`, not merged.
+
+## TE-49: AssemblyAI inside Video Recap / Scene Recap (local commit, not pushed, no APK yet)
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Both recap screens: "အသံကနေ စာတန်းထုတ် (AssemblyAI)" button when the project has no subtitles (uses the existing AssemblyAI key and dialog; saved as the project's source subtitles) | not built yet (user asked for no APK for now) | **No** |
+| Auto card: switch "စာတန်းမရှိရင် AssemblyAI နဲ့ ထုတ်" (on by default when a key exists): when the project has no subtitles, the video's sound is sent to AssemblyAI first, the SRT is saved and read, then the scenes/parts get their dialogue, then Gemini and Edge TTS run. The consent box names AssemblyAI when it will run | not built yet | **No** |
+| Video Recap prompts (manual and Auto) now include each part's subtitle lines (cut to 600 characters) with a warning that speech-recognition text may be wrong; tests added | not built yet | **No** |
+Unproven: everything (not even compiled: no Flutter here and no push so no CI). The AssemblyAI request itself has also never run with a real key. Branch `claude/te-48-hardening` plus local commit only.

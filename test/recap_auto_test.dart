@@ -79,4 +79,13 @@ void main() {
     expect(matchChunksToParts(['ဒုတိယ အပိုင်း စာသား ရှည်ရှည်'], texts), isNull); // fewer chunks
     expect(matchChunksToParts(['ပဉ္စမ အပိုင်း စာသား ရှည်ရှည်', 'ဒုတိယ အပိုင်း စာသား ရှည်ရှည်'], texts), isNull); // wrong order
   });
+
+  test('video groups put each part\'s dialogue into the prompt', () {
+    final parts = buildSegments(6 * 60000, 60000);
+    final g = videoRecapGroups(dramaTitle: 'D', episode: 1, parts: parts, notes: '', dialogue: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6']);
+    expect(g[0].prompt, contains('Dialogue (subtitles): a1'));
+    expect(g[0].prompt, contains('Dialogue (subtitles): a5'));
+    expect(g[0].prompt, isNot(contains('a6')));
+    expect(g[1].prompt, contains('Dialogue (subtitles): a6'));
+  });
 }

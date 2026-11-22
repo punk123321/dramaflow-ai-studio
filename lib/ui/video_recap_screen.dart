@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/recap_auto.dart';
+import '../core/scenes.dart' show SceneSpan, dialogueFor;
 import '../core/segments.dart';
+import '../core/srt.dart';
 import '../core/theme.dart';
 import '../core/video_recap.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../data/segment_repo.dart';
 import '../platform/gemini_open.dart';
+import 'asr_dialog.dart';
 import 'recap_auto_section.dart';
 import 'widgets.dart';
 
@@ -33,6 +36,7 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
   List<SegmentSpec> _parts = [];
   bool _fromIndex = false;
   Map<int, String> _texts = {};
+  List<SrtEntry> _srt = [];
   int _batch = 0; // 0-based batch number
   static const _perBatch = 5;
   bool _loading = true;
@@ -60,10 +64,29 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
         _err = error;
       });
 
+  Future<void> _loadSrt() async {
+    final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
+    final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
+    final entries = src == null ? <SrtEntry>[] : parseSrt(src).entries;
+    if (mounted) setState(() => _srt = entries);
+  }
+
+  /// The subtitle lines of each part (empty strings when there are none).
+  List<String> get _dialogue => [for (final p in _parts) dialogueFor(_srt, SceneSpan(p.startMs, p.endMs), maxChars: 600)];
+
+  Future<void> _asrNow() async {
+    final text = await showAsrDialog(context, widget.project);
+    if (text == null || !mounted) return;
+    await _repo.setDoc(_pid, DocKind.sourceSrt, text);
+    await _loadSrt();
+    _say('စာတန်း ${_srt.length} ကြောင်း ထည့်ပြီး။ Gemini ကို ပို့တဲ့ prompt ထဲ အပိုင်းတစ်ခုချင်းရဲ့ စကားပြော ပါသွားမယ်။');
+  }
+
   Future<void> _load() async {
     var segs = await _segRepo.load(_pid);
     _fromIndex = segs.isNotEmpty;
     if (segs.isEmpty) segs = buildSegments(widget.project.videoDurationMs ?? 0, 60000);
+    await _loadSrt();
     _texts = await _repo.results(_pid, _task);
     _notes.text = await _repo.getDoc(_pid, DocKind.notes) ?? '';
     if (mounted) {
@@ -84,6 +107,7 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
       from: from,
       to: to > _parts.length ? _parts.length : to,
       notes: _notes.text,
+      dialogue: _dialogue,
     );
   }
 
@@ -183,12 +207,27 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
               episode: widget.project.episode,
               parts: _parts,
               notes: _notes.text,
+              dialogue: _dialogue,
             ),
             onTextsSaved: () async {
               final r = await _repo.results(_pid, _task);
               if (mounted) setState(() => _texts = r);
             },
+            onSrtReady: _loadSrt,
           ),
+          if (_srt.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(onPressed: _asrNow, icon: const Icon(Icons.graphic_eq_rounded, size: 18), label: const Text('အသံကနေ စာတန်းထုတ် (AssemblyAI)')),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text('စာတန်း ${_srt.length} ကြောင်း ရှိပြီး — အပိုင်းတစ်ခုချင်းရဲ့ စကားပြောကို prompt ထဲ ထည့်ပေးမယ်', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
+            ),
           TextField(
             controller: _notes,
             minLines: 1,
