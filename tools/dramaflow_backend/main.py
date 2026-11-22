@@ -13,6 +13,7 @@ The Gemini key arrives with the request, is used for the job and is not stored.
 """
 import asyncio
 import base64
+import json
 import os
 import re
 import secrets
@@ -33,7 +34,8 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
-from recap_core import mask_key, run_recap
+from recap_core import fit_tempo, gemini_hint, mask_key, run_recap
+from tts_text import normalize_for_tts
 
 app = FastAPI(title="DramaFlow Recap Backend")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -56,12 +58,14 @@ class Group(BaseModel):
     jpeg_b64: str = ""  # Scene Recap: the numbered contact sheet
     start_ms: int = 0  # Video Recap: look only at this time range
     end_ms: int = 0
+    part_ms: List[int] = []  # how long each part's video is (first..last), to fit the voice
 
 
 class RecapRequest(BaseModel):
     mode: str = "scenes"  # "scenes" (pictures + dialogue) or "video" (a file already in Gemini)
     gemini_key: str
     gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback: str = ""  # optional second model, tried when the first is gone (404) or over its quota
     voice: str = ""  # empty = script only, no voice
     file_uri: str = ""  # Gemini Files API address (video mode)
     file_mime: str = "video/mp4"
@@ -87,8 +91,25 @@ def _ffmpeg() -> str:
         return shutil.which("ffmpeg") or "ffmpeg"
 
 
+FALLBACK_WHEN = ("404", "NOT_FOUND", "429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")
+
+
 def _gemini_fn(req: RecapRequest):
     client = genai.Client(api_key=req.gemini_key)
+
+    def ask(model: str, contents: list) -> str:
+        for attempt in range(3):
+            try:
+                r = client.models.generate_content(model=model, contents=contents, config=types.GenerateContentConfig(temperature=0.5))
+                return r.text or ""
+            except Exception as e:
+                msg = str(e)
+                busy = any(k in msg for k in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE"))
+                if busy and attempt < 2:
+                    time.sleep(25 * (attempt + 1))
+                    continue
+                raise RuntimeError(mask_key(msg, req.gemini_key))
+        return ""
 
     def call(g: dict) -> str:
         contents: list = []
@@ -107,40 +128,63 @@ def _gemini_fn(req: RecapRequest):
                 )
             )
         contents.append(g["prompt"])
-        for attempt in range(3):
-            try:
-                r = client.models.generate_content(
-                    model=req.gemini_model, contents=contents, config=types.GenerateContentConfig(temperature=0.5)
-                )
-                return r.text or ""
-            except Exception as e:
-                msg = str(e)
-                busy = any(k in msg for k in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE"))
-                if busy and attempt < 2:
-                    time.sleep(25 * (attempt + 1))
-                    continue
-                raise RuntimeError(mask_key(msg, req.gemini_key))
-        return ""
+        try:
+            return ask(req.gemini_model, contents)
+        except RuntimeError as e:
+            fb = req.gemini_fallback.strip()
+            if fb and fb != req.gemini_model and any(k in str(e) for k in FALLBACK_WHEN):
+                print(f"model {req.gemini_model} failed, trying {fb}", flush=True)
+                return ask(fb, contents)
+            raise
 
     return call
+
+
+def _speak(text: str, voice: str, mp3: Path, rate: str = "+0%"):
+    """Edge TTS to an mp3 file, three tries."""
+    for attempt in range(3):
+        try:
+            asyncio.run(edge_tts.Communicate(text, voice, rate=rate).save(str(mp3)))
+            return
+        except Exception:
+            if attempt == 2:
+                raise
+            time.sleep(2 * (attempt + 1))
+
+
+def _to_wav(src: Path, dst: Path, tempo: float = 1.0):
+    """24 kHz mono WAV; tempo above 1.0 speeds the voice up (pitch is kept)."""
+    cmd = [_ffmpeg(), "-y", "-i", str(src), "-ar", "24000", "-ac", "1"]
+    if tempo > 1.001:
+        cmd += ["-filter:a", f"atempo={tempo}"]
+    cmd += ["-c:a", "pcm_s16le", str(dst)]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0 or not dst.exists():
+        raise RuntimeError("ffmpeg: " + (p.stderr or "")[-200:])
+
+
+def _wav_ms(wav: Path) -> int:
+    with wave.open(str(wav), "rb") as w:
+        return int(w.getnframes() * 1000 / w.getframerate())
 
 
 def _tts_fn(job_dir: Path, voice: str):
     use = voice if voice.startswith("my-MM-") else DEFAULT_VOICE
 
-    def make(n: int, text: str):
+    def make(n: int, text: str, target_ms: int = 0):
         mp3, wav = job_dir / f"p{n}.mp3", job_dir / f"p{n}.wav"
-        asyncio.run(edge_tts.Communicate(text, use).save(str(mp3)))
-        p = subprocess.run(
-            [_ffmpeg(), "-y", "-i", str(mp3), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)],
-            capture_output=True,
-            text=True,
-        )
-        mp3.unlink(missing_ok=True)
-        if p.returncode != 0 or not wav.exists():
-            raise RuntimeError("ffmpeg: " + (p.stderr or "")[-200:])
-        with wave.open(str(wav), "rb") as w:
-            ms = int(w.getnframes() * 1000 / w.getframerate())
+        try:
+            _speak(normalize_for_tts(text), use, mp3)
+            _to_wav(mp3, wav)
+            ms = _wav_ms(wav)
+            tempo = fit_tempo(ms, target_ms)
+            if tempo > 1.0:  # a little too long: speed it up, never more than 15%
+                fast = job_dir / f"p{n}_fast.wav"
+                _to_wav(mp3, fast, tempo)
+                fast.replace(wav)
+                ms = _wav_ms(wav)
+        finally:
+            mp3.unlink(missing_ok=True)
         return ms, wav.name
 
     return make
@@ -153,6 +197,32 @@ def clean_old():
             if j["status"] in ("done", "error") and now - j["created"] > KEEP_SECONDS:
                 shutil.rmtree(OUT_DIR / jid, ignore_errors=True)
                 del JOBS[jid]
+
+
+def _save_job(job_id: str):
+    """The finished job (text, warnings, audio addresses) is kept next to its
+    audio files, so the app can fetch it again after the web process restarted."""
+    try:
+        with LOCK:
+            data = dict(JOBS[job_id])
+        (OUT_DIR / job_id / "job.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _load_job(job_id: str):
+    if not re.fullmatch(r"recap_\d+_[0-9a-f]{4}", job_id):
+        return None
+    f = OUT_DIR / job_id / "job.json"
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if data.get("status") != "done" or time.time() - float(data.get("created", 0)) > KEEP_SECONDS:
+        return None
+    with LOCK:
+        JOBS[job_id] = data
+    return data
 
 
 def run_job(job_id: str, req: RecapRequest):
@@ -171,6 +241,7 @@ def run_job(job_id: str, req: RecapRequest):
                 p["audio_url"] = f"/recap/jobs/{job_id}/audio/{p['n']}.wav"
             p.pop("audio_file")
         _set(job_id, status="done", stage="ပြီးပြီ", progress=100, parts=result["parts"], warnings=result["warnings"])
+        _save_job(job_id)
     except Exception as e:  # shown in the app, with the key hidden
         _set(job_id, status="error", stage="မအောင်မြင်ဘူး", error=mask_key(str(e), req.gemini_key)[:400])
         shutil.rmtree(job_dir, ignore_errors=True)
@@ -202,8 +273,11 @@ def job_status(job_id: str, x_app_token: Optional[str] = Header(default=None)):
     _auth(x_app_token)
     with LOCK:
         j = JOBS.get(job_id)
-        if j is None:
-            raise HTTPException(status_code=404, detail="Job မတွေ့ပါ")
+    if j is None:
+        j = _load_job(job_id)
+    if j is None:
+        raise HTTPException(status_code=404, detail="Job မတွေ့ပါ")
+    with LOCK:
         return {k: v for k, v in j.items() if k != "created"}
 
 
@@ -237,13 +311,57 @@ def tts_once(req: TtsRequest, x_app_token: Optional[str] = Header(default=None))
     try:
         d.mkdir(parents=True, exist_ok=True)
         mp3, wav = d / "a.mp3", d / "a.wav"
-        asyncio.run(edge_tts.Communicate(text, voice, rate=rate).save(str(mp3)))
-        p = subprocess.run([_ffmpeg(), "-y", "-i", str(mp3), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)],
-                           capture_output=True, text=True)
-        if p.returncode != 0 or not wav.exists():
-            raise RuntimeError("ffmpeg: " + (p.stderr or "")[-150:])
+        _speak(normalize_for_tts(text), voice, mp3, rate)
+        _to_wav(mp3, wav)
         return Response(content=wav.read_bytes(), media_type="audio/wav")
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e)[:200])
     finally:
         shutil.rmtree(d, ignore_errors=True)
+
+
+class SelfTestRequest(BaseModel):
+    gemini_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
+
+
+@app.post("/selftest")
+def selftest(req: SelfTestRequest, x_app_token: Optional[str] = Header(default=None)):
+    """Checks what the recap needs, one by one, and says in Burmese what to do
+    when something fails. Every check is [{id, ok, note}]; nothing is stored."""
+    _auth(x_app_token)
+    checks = []
+
+    def add(cid: str, ok: bool, note: str):
+        checks.append({"id": cid, "ok": ok, "note": note})
+
+    ff = _ffmpeg()
+    try:
+        p = subprocess.run([ff, "-version"], capture_output=True, text=True, timeout=20)
+        add("ffmpeg", p.returncode == 0, "ရတယ်" if p.returncode == 0 else "ffmpeg မပွင့်ဘူး (requirements ထဲ imageio-ffmpeg ပါလား)")
+    except Exception as e:
+        add("ffmpeg", False, "ffmpeg မရှိဘူး: " + str(e)[:80])
+
+    d = OUT_DIR / f"selftest_{secrets.token_hex(3)}"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        _speak("မင်္ဂလာပါ", DEFAULT_VOICE, d / "t.mp3")
+        _to_wav(d / "t.mp3", d / "t.wav")
+        add("edge_tts", True, f"မြန်မာအသံ လုပ်လို့ရတယ် ({_wav_ms(d / 't.wav')} ms)")
+    except Exception as e:
+        add("edge_tts", False, "Edge TTS မရဘူး (backend က အင်တာနက်ထွက်လို့ရလား၊ ခဏနေ ပြန်စမ်း): " + str(e)[:100])
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+    if not req.gemini_key.strip():
+        add("gemini", False, "Gemini key မပါဘူး (Settings မှာ ထည့်ပါ)")
+    else:
+        try:
+            client = genai.Client(api_key=req.gemini_key.strip())
+            r = client.models.generate_content(model=req.gemini_model, contents="Reply with the single word OK.")
+            add("gemini", True, f"{req.gemini_model} ဖြေတယ်: {(r.text or '').strip()[:20]}")
+        except Exception as e:
+            msg = mask_key(str(e), req.gemini_key)
+            hint = gemini_hint(msg)
+            add("gemini", False, hint + " · " + msg[:120])
+    return {"checks": checks}

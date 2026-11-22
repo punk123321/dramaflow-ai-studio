@@ -46,12 +46,35 @@ class NewsVideoClient {
     } catch (_) {}
     final why = switch (code) {
       401 => 'Token မမှန်ဘူး (Colab ကို ပြန် run ထားရင် token အသစ် ယူပါ)',
-      404 => 'မတွေ့ပါ',
+      404 => 'မတွေ့ပါ — ဒီ URL က News Video backend မဟုတ်ဘူးနိုင်တယ် (Recap backend URL ကို ထည့်ထားလား၊ News notebook run ထားလား စစ်ပါ)',
       409 => 'Backend မှာ တခြား job လုပ်နေတုန်း',
       502 || 503 || 504 || 524 => 'Backend မရောက်ဘူး (Colab ပိတ်နေလား၊ tunnel ပြတ်နေလား)',
       _ => 'HTTP $code',
     };
     return detail == null ? why : '$why ($detail)';
+  }
+
+  /// The "service" name the backend gives at /health ("" when it gives none),
+  /// or null when it does not answer.
+  Future<String?> healthService() async {
+    final c = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final req = await c.getUrl(_uri('/health'));
+      final resp = await req.close().timeout(const Duration(seconds: 15));
+      final body = await resp.transform(utf8.decoder).join();
+      if (resp.statusCode != 200) return null;
+      try {
+        final m = jsonDecode(body);
+        final sv = m is Map ? m['service'] : null;
+        return sv is String ? sv : '';
+      } catch (_) {
+        return '';
+      }
+    } catch (_) {
+      return null;
+    } finally {
+      c.close(force: true);
+    }
   }
 
   /// True when the backend answers /health.

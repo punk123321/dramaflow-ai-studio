@@ -669,3 +669,72 @@ Unproven: Edge TTS Burmese voices through the unofficial library (Microsoft may 
 | The editor's tool row (24 tools in one long strip) is split into 4 tabs like a phone video editor: စာ / ပုံ (Text, Arrow, Box, Circle, Spot, Frame, Sticker), Edit (Zoom, Speed, Flip, Freeze, Cut), Effect (Filter, Blur, Censor, Fade in/out, Flash, Tint, Vignette, Bars, Shade), Layer / အသံ (Picture, Sound). The same tools and actions as before; only the grouping changed. No widget test (the editor needs a video player) | Yes (CI green, run 44980733356) | **No** |
 APK artifact `dramaflow-apk-branch-227`. Not merged to main.
 Unproven on a phone: the extra row (about 34 px) in the pinned top part on small screens. Not built: a "+" add button and Canvas / Audio tabs (there is no Canvas feature).
+
+## TE-48: Hardening after the first phone results
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Video Recap upload: the video type is found from the file's first bytes (mp4, mov, 3gp, webm, avi, flv, wmv, mpeg) instead of always saying mp4; a refusal by Gemini now says which types work. Unit tests for the detection | Yes (CI green, run 45000512970) | **No** |
+| Backends: Edge TTS tried 3 times (it sometimes drops a request); Gemini script call retried on 503 / overloaded (not on 429 quota). Not run (Python, only syntax-checked) | n/a (Python) | **No** |
+Unproven: the retry waits in Colab, and MKV (the check cannot tell it from WebM; Gemini may refuse it and the message says so). APK artifact `dramaflow-apk-branch-230`. Branch `claude/te-48-hardening`, not merged.
+
+## TE-49: AssemblyAI inside Video Recap / Scene Recap
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Both recap screens: "အသံကနေ စာတန်းထုတ် (AssemblyAI)" button when the project has no subtitles (uses the existing AssemblyAI key and dialog; saved as the project's source subtitles) | not built yet (user asked for no APK for now) | **No** |
+| Auto card: switch "စာတန်းမရှိရင် AssemblyAI နဲ့ ထုတ်" (on by default when a key exists): when the project has no subtitles, the video's sound is sent to AssemblyAI first, the SRT is saved and read, then the scenes/parts get their dialogue, then Gemini and Edge TTS run. The consent box names AssemblyAI when it will run | not built yet | **No** |
+| Video Recap prompts (manual and Auto) now include each part's subtitle lines (cut to 600 characters) with a warning that speech-recognition text may be wrong; tests added | not built yet | **No** |
+Unproven: everything (not even compiled: no Flutter here and no push so no CI). The AssemblyAI request itself has also never run with a real key. Branch `claude/te-48-hardening` plus local commit only.
+
+## TE-50: Recap upgrades (backend + app) — also holds TE-49 (AssemblyAI in the recap screens)
+| Feature | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Backend: text cleaned before the voice (emoji, `*`/`#` marks and (stage directions) removed; whole numbers 0–99 spelled in Burmese; times, decimals, years left alone) | Python unit tests pass. Whether Edge TTS reads the result better is **unknown** | n/a (Python) | **No** |
+| Backend: voice up to 15% too long for its video part is sped up (ffmpeg atempo, pitch kept); remaining mismatch is a warning. App sends each part's video length (`part_ms`) | Python tests with a stand-in voice and real ffmpeg | Dart part: see CI | **No** |
+| Backend: each Gemini request after the first gets the last 300 characters of the story so far, to keep names/events consistent | Python test | n/a | **No**. Whether it makes scripts better is unproven |
+| Backend: finished job is kept in a file, so the app can still fetch it after the web process restarted (not after a machine restart) | Python test | n/a | **No** |
+| Backend `/selftest` + app **Self-test** button (ffmpeg, Edge TTS, Gemini key/model; Burmese hint for 404/429/key errors) | Python test with stand-ins; Dart parser test | see CI | **No** |
+| App: "မရတဲ့ အပိုင်း ပြန်လုပ်" button: asks only the groups that miss parts, reuses the Gemini video upload, merges with parts already saved | Dart helper tests (`missingParts`, `groupsFor`) | see CI | **No** |
+Not real: the backend was tested only with stand-ins for fastapi, edge-tts and Gemini (no network, no package installs here). Real FastAPI routing, real Edge TTS and real Gemini replies are untested. The Colab notebook `tools/dramaflow_recap_colab.ipynb` clones branch `claude/te-40-upgrades`, which does NOT contain these backend changes (they are on `claude/te-48-hardening`); until this is merged and the notebook points at the merged branch, Colab runs the old backend and the app's Self-test button will say the backend does not know it. Altare deploys from whichever branch is chosen.
+
+CI (run 45003681194, commit 7a6dbc4, branch `claude/te-48-hardening`): `flutter analyze` 100 infos (same 100 as before: the deprecated `material.dart` import; no warnings or errors), `flutter test` 351 passed, release APK built (artifact `dramaflow-apk-branch-232`). So TE-49 and TE-50 **compile on CI and their tests pass**. Phone-tested: **No**. Not merged into main.
+
+## TE-51: more recap upgrades
+| Feature | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Optional "အရန် model" field (Auto card): if the main Gemini model is gone (404) or over quota after 3 tries, the backend asks the second model; saved on the phone | Python tests with stand-in Gemini (404 -> fallback, 429 x3 -> fallback, no fallback -> error) | see CI | **No**. The right second model name is yours to type; I cannot check which names exist |
+| Confirmation box says how many minutes of sound go to AssemblyAI (from the project's video length) | Dart helper test | see CI | **No** |
+| "ဒီနေ့ ဒီဖုန်းက ပို့ခဲ့တာ (ခန့်မှန်း)" line: Gemini requests (one per group), AssemblyAI minutes, voice parts, stored on the phone, reset each day | Dart tests of the counter | see CI | **No**. It is the app's own estimate, not the service's real quota |
+Already covered, not new work: an AssemblyAI result is saved as the project's subtitles and Auto does not run it again when subtitles exist, so a second Auto run does not spend credit twice; language auto-detect (empty code) already exists in Settings.
+
+CI (run 45029307868, commit b9b0ff2): `flutter analyze` 101 infos (one more than before: a `prefer_const_declarations` hint in the new test, fixed afterwards; no warnings/errors), `flutter test` 356 passed, release APK built (artifact `dramaflow-apk-branch-234`). TE-51 compiles on CI and its tests pass. Phone-tested: **No**. Not merged into main.
+
+## TE-52: pick a recap job up again
+| Feature | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The backend job id is kept per project; if the screen/app is closed while the backend works, "နောက်ဆုံး job ကို ပြန်ယူ" fetches the job (finished parts come in at once, a running job is waited for). A job the backend no longer has says so and the button goes away | Nothing automated for the network loop (it is the same polling loop as before, now shared); backend keeps finished jobs 2 h and in a file (tested in Python) | see CI | **No** |
+Note: Auto Recap's "ဆက်သွယ်" loop was refactored (start and resume now share one polling function), so the normal Auto run is also affected: re-test it first.
+Not done on purpose: a multi-episode queue (it needs each episode's video, subtitles and Gemini upload handled in the background; I cannot make that safe without the phone), and a new backup feature (Backup/Restore already exists; the keys and these usage counters are not in it).
+
+## TE-53: Recap Queue + step bar
+| Feature | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| `lib/core/recap_queue.dart`: queue bookkeeping (sequence, a failed episode is recorded with step + reason and the next goes on, cancel, retry unfinished, step done/skipped, copyable log) | 8 unit tests | see CI | **No** |
+| `lib/platform/recap_episode_runner.dart`: one episode = subtitles (AssemblyAI only when none) → upload to the user's Gemini → backend job (Gemini + Edge TTS) → save parts (script only if the project has none) → voice into Audio (only for a script it wrote). Same pieces as the Auto card | Not testable here (network, phone channels) | see CI | **No** |
+| `lib/ui/recap_queue_screen.dart` + Home > Tools "Recap Queue": pick episodes, settings, per-episode step bar, error with step, log, retry, stop | 3 widget tests for the step bar only | see CI | **No** |
+| Auto card: step bar (same widget) and "Log ကူး" button | widget test of the bar | see CI | **No** |
+Limits, on purpose: Video Recap only (Scene Recap needs contact sheets made on the phone); the app must stay open and the screen on (no background service); leaving the queue page stops the queue; the queue does not replace an existing script. The Auto card's code was refactored (steps are tracked in `_start/_applyJob/_saveAudio/_resume`), so re-test the normal Auto run first.
+
+CI (run 45032250142, commit c4722ac): `flutter analyze` 104 infos (no warnings/errors; the new ones are lint hints), `flutter test` 367 passed, release APK built (artifact `dramaflow-apk-branch-237`). TE-53 compiles on CI and its tests pass. Phone-tested: **No**. Not merged into main.
+
+## Phone test report from the user (2026-11-23)
+The user reported, in one line and without screenshots or logs, that steps 1–6 of the list he was given all worked: (1) backup, (2) install the APK, (3) run the Colab backend and connect, (4) Self-test, (5) Scene Recap Auto on a short video with voice in Audio, (6) the rest of TESTPLAN 7b (AssemblyAI, Video Recap, News Video, retry missing parts, pick a job up again). This is the user's word only: which APK number was installed, what the Self-test showed, how the voice sounded and the time/data used were NOT reported. Treat TE-40…TE-52 as "phone-tested: yes, by the user's report" only for those flows, and still **No** for the Recap Queue (TE-53, APK built after that list) and anything not on that list.
+
+## TE-54: fixes from the user's phone screenshots (2026-11-23)
+What the screenshots showed: (1) Queue/Video Recap upload failed with "User location is not supported for the API use" (Gemini refuses the phone's IP; the old text wrongly blamed the video format); the user then turned on a VPN and reports everything works except News Video. (2) News Video said "Not Found" because News Video and Recap shared ONE backend address slot, so the Recap Colab URL was used for News. (3) Self-test showed Gemini 503 "high demand" with a useless "unknown error" hint. Also seen working on the phone: Queue runs, AssemblyAI subtitles (29 lines), per-step error + log + retry, the usage line, Self-test ffmpeg/Edge TTS green.
+| Fix | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Upload errors: a location refusal says "use a VPN" (not the format); a quick check before the upload stops at once for place/key problems | Dart tests of the hint functions | yes (run 45057201438) | **No** |
+| Separate address slot for the Recap backend (also used by the voice in Audio and the queue); the old shared address is copied once. News Video keeps its own slot | Dart test for the service names; the repo is not unit-tested | yes | **No** |
+| Connecting checks the backend's /health name and says "this is the News/Recap backend" when mixed up; 404 text mentions it | Python /health names checked; Dart test | yes | **No** |
+| Self-test hint for 503 and for a location refusal on the backend | Python tests | n/a | **No** |
+Still open: News Video itself was not tested working. It needs the NEWS Colab notebook (`dramaflow_news_backend`) running and its own URL#TOKEN pasted on the News Video page. The Colab recap notebook was regenerated (re-upload it to get the new hints). CI: run 45057201438, `flutter analyze` 104 infos (no warnings/errors), `flutter test` 372 passed, APK artifact `dramaflow-apk-branch-240`. Not merged into main.

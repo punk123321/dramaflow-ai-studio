@@ -4,6 +4,9 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../core/video_type.dart';
+import '../core/gemini_errors.dart';
+
 class GeminiUploadException implements Exception {
   GeminiUploadException(this.message);
   final String message;
@@ -36,13 +39,22 @@ class GeminiFiles {
   static Future<GeminiFile> upload(
     String apiKey,
     File file, {
-    String mime = 'video/mp4',
+    String? mime,
     required void Function(String stage, double? fraction) onStage,
     bool Function()? canceled,
   }) async {
     final c = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
       final size = await file.length();
+      if (mime == null) {
+        final raf = await file.open();
+        try {
+          mime = sniffVideoKind(await raf.read(16)).mime;
+        } finally {
+          await raf.close();
+        }
+      }
+      final videoMime = mime;
       onStage('Gemini ဆီ upload စတင်နေတယ်', null);
       final start = await c.postUrl(Uri.parse('$_base/upload/v1beta/files'));
       start.headers
@@ -50,7 +62,7 @@ class GeminiFiles {
         ..set('X-Goog-Upload-Protocol', 'resumable')
         ..set('X-Goog-Upload-Command', 'start')
         ..set('X-Goog-Upload-Header-Content-Length', '$size')
-        ..set('X-Goog-Upload-Header-Content-Type', mime)
+        ..set('X-Goog-Upload-Header-Content-Type', videoMime)
         ..contentType = ContentType.json;
       final meta = utf8.encode(jsonEncode({'file': {'display_name': 'dramaflow_recap'}}));
       start.contentLength = meta.length;
@@ -99,7 +111,7 @@ class GeminiFiles {
         state = ((jsonDecode(gb) as Map)['state'] as String?) ?? 'PROCESSING';
       }
       if (state != 'ACTIVE') throw GeminiUploadException('Gemini က ဗီဒီယိုကို လက်မခံဘူး ($state)');
-      return GeminiFile(uri, mime);
+      return GeminiFile(uri, videoMime);
     } on SocketException {
       throw GeminiUploadException('Internet ချိတ်ဆက်မှု ပြတ်သွားတယ်');
     } on TimeoutException {
@@ -111,19 +123,36 @@ class GeminiFiles {
     }
   }
 
-  static String _explain(int code, String body, String key) {
+  static String _detailOf(String body, String key) {
     var detail = '';
     try {
       final m = jsonDecode(body);
       if (m is Map && m['error'] is Map) detail = ((m['error'] as Map)['message'] as String?) ?? '';
     } catch (_) {}
     if (key.length >= 8) detail = detail.replaceAll(key, '***');
-    final why = switch (code) {
-      400 => 'Gemini က ဗီဒီယိုကို လက်မခံဘူး',
-      401 || 403 => 'API key မမှန်ဘူး (သို့) ခွင့်မရှိဘူး',
-      429 => 'Gemini quota ပြည့်နေတယ် (နောက်မှ ပြန်စမ်း)',
-      _ => 'Gemini HTTP $code',
-    };
-    return detail.isEmpty ? why : '$why: ${detail.length > 160 ? detail.substring(0, 160) : detail}';
+    return detail;
+  }
+
+  static String _explain(int code, String body, String key) => geminiUploadHint(code, _detailOf(body, key));
+
+  /// A quick call before the (big) upload: stops at once, with the reason, when
+  /// Google refuses this place (VPN needed) or this key. Any other answer, or no
+  /// answer at all, lets the upload go on, so it can only help.
+  static Future<void> preflight(String apiKey) async {
+    final c = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+    try {
+      final req = await c.getUrl(Uri.parse('$_base/v1beta/models?pageSize=1'));
+      req.headers.set('x-goog-api-key', apiKey.trim());
+      final r = await req.close().timeout(const Duration(seconds: 20));
+      final b = await r.transform(utf8.decoder).join();
+      final problem = geminiPreflightProblem(r.statusCode, _detailOf(b, apiKey));
+      if (problem != null) throw GeminiUploadException(problem);
+    } on GeminiUploadException {
+      rethrow;
+    } catch (_) {
+      // no answer (offline, timeout): the upload itself will say what is wrong
+    } finally {
+      c.close(force: true);
+    }
   }
 }

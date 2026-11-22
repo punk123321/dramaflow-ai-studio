@@ -49,7 +49,7 @@ class RecapClient {
     } catch (_) {}
     final why = switch (code) {
       401 => 'Token မမှန်ဘူး (APP_TOKEN ကို စစ်ပါ)',
-      404 => 'မတွေ့ပါ (Backend က Recap version အသစ် မဟုတ်ဘူးနိုင်တယ်)',
+      404 => 'မတွေ့ပါ (ဒီ URL က Recap backend မဟုတ်ဘူးနိုင်တယ် — News Video backend နဲ့ ရောထည့်ထားလား၊ (သို့) Backend က version အဟောင်း)',
       409 => 'Backend မှာ တခြား job လုပ်နေတုန်း',
       413 => 'ပို့တဲ့ အရွယ်အစား ကြီးလွန်းတယ်',
       502 || 503 || 504 || 524 => 'Backend မရောက်ဘူး (ပိတ်နေလား၊ ပြတ်နေလား)',
@@ -59,41 +59,64 @@ class RecapClient {
   }
 
   /// Starts the job and waits for it. Throws [HttpException] (Burmese reason)
-  /// or [RecapCanceled].
-  Future<RecapJob> run(Map<String, Object?> request, void Function(RecapJob) onUpdate) async {
+  /// or [RecapCanceled]. [onJobId] is called as soon as the backend has the
+  /// job, so the app can pick the job up again if it is closed meanwhile.
+  Future<RecapJob> run(Map<String, Object?> request, void Function(RecapJob) onUpdate, {void Function(String id)? onJobId}) async {
     try {
-      var r = await _call('POST', '/recap/jobs', json: jsonEncode(request));
+      final r = await _call('POST', '/recap/jobs', json: jsonEncode(request));
       if (_canceled) throw const RecapCanceled();
       if (r.$1 != 200) throw HttpException(httpError(r.$1, r.$2));
       final id = (jsonDecode(r.$2) as Map)['job_id'];
       if (id is! String) throw const HttpException('Job id မရ');
-      final started = DateTime.now();
-      var failures = 0;
-      while (true) {
-        await Future<void>.delayed(const Duration(seconds: 3));
-        if (_canceled) throw const RecapCanceled();
-        try {
-          r = await _call('GET', '/recap/jobs/$id');
-          failures = 0;
-        } on SocketException {
-          if (++failures >= 5) throw const HttpException('Backend နဲ့ ဆက်သွယ်လို့မရတော့ဘူး');
-          continue;
-        } on TimeoutException {
-          if (++failures >= 5) throw const HttpException('Backend ပြန်မဖြေတော့ဘူး');
-          continue;
-        }
-        if (r.$1 != 200) throw HttpException(httpError(r.$1, r.$2));
-        final job = parseRecapJob(r.$2);
-        onUpdate(job);
-        if (job.state == JobState.error) throw HttpException(job.error);
-        if (job.state == JobState.done) return job;
-        if (DateTime.now().difference(started).inMinutes > 60) throw const HttpException('အချိန်ကြာလွန်းလို့ ရပ်လိုက်တယ်');
-      }
+      onJobId?.call(id);
+      return await _wait(id, onUpdate, resuming: false);
     } on RecapCanceled {
       rethrow;
     } catch (e) {
       if (_canceled) throw const RecapCanceled();
       rethrow;
+    }
+  }
+
+  /// Waits for a job the backend already has (started before, maybe by an
+  /// earlier open of the screen). A finished job is returned at once.
+  Future<RecapJob> resume(String id, void Function(RecapJob) onUpdate) async {
+    try {
+      return await _wait(id, onUpdate, resuming: true);
+    } on RecapCanceled {
+      rethrow;
+    } catch (e) {
+      if (_canceled) throw const RecapCanceled();
+      rethrow;
+    }
+  }
+
+  Future<RecapJob> _wait(String id, void Function(RecapJob) onUpdate, {required bool resuming}) async {
+    final started = DateTime.now();
+    var failures = 0;
+    var first = true;
+    while (true) {
+      if (!first || !resuming) await Future<void>.delayed(const Duration(seconds: 3));
+      first = false;
+      if (_canceled) throw const RecapCanceled();
+      (int, String) r;
+      try {
+        r = await _call('GET', '/recap/jobs/$id');
+        failures = 0;
+      } on SocketException {
+        if (++failures >= 5) throw const HttpException('Backend နဲ့ ဆက်သွယ်လို့မရတော့ဘူး');
+        continue;
+      } on TimeoutException {
+        if (++failures >= 5) throw const HttpException('Backend ပြန်မဖြေတော့ဘူး');
+        continue;
+      }
+      if (r.$1 == 404 && resuming) throw const HttpException('ဒီ job ကို Backend မှာ မတွေ့တော့ဘူး (Backend ပြန်စထားလား၊ ၂ နာရီကျော်သွားလား)');
+      if (r.$1 != 200) throw HttpException(httpError(r.$1, r.$2));
+      final job = parseRecapJob(r.$2);
+      onUpdate(job);
+      if (job.state == JobState.error) throw HttpException(job.error);
+      if (job.state == JobState.done) return job;
+      if (DateTime.now().difference(started).inMinutes > 60) throw const HttpException('အချိန်ကြာလွန်းလို့ ရပ်လိုက်တယ်');
     }
   }
 
@@ -155,6 +178,22 @@ class RecapClient {
     } finally {
       c.close(force: true);
       _http = null;
+    }
+  }
+
+  /// Asks the backend to check ffmpeg, Edge TTS and the Gemini key/model.
+  /// Throws [HttpException] when the backend itself cannot be reached.
+  Future<List<SelfCheck>> selfTest(String geminiKey, String model) async {
+    try {
+      final r = await _call('POST', '/selftest', json: jsonEncode({'gemini_key': geminiKey.trim(), if (model.trim().isNotEmpty) 'gemini_model': model.trim()}));
+      if (r.$1 != 200) throw HttpException(httpError(r.$1, r.$2));
+      final out = parseSelfTest(r.$2);
+      if (out.isEmpty) throw const HttpException('Backend က Self-test မသိဘူး (Backend ကို version အသစ် ပြောင်းပြီး ပြန်စပါ)');
+      return out;
+    } on SocketException {
+      throw const HttpException('Backend နဲ့ ဆက်သွယ်လို့မရဘူး (Colab/Altare ပွင့်နေလား၊ URL မှန်လား)');
+    } on TimeoutException {
+      throw const HttpException('Backend ပြန်မဖြေဘူး (အချိန်ကြာလွန်းတယ်)');
     }
   }
 

@@ -12,7 +12,7 @@ import 'video_recap.dart';
 
 /// One request to Gemini: the parts [first]..[last] with their prompt.
 class RecapGroup {
-  const RecapGroup({required this.first, required this.last, required this.prompt, this.jpegBase64 = '', this.startMs = 0, this.endMs = 0});
+  const RecapGroup({required this.first, required this.last, required this.prompt, this.jpegBase64 = '', this.startMs = 0, this.endMs = 0, this.partMs = const []});
 
   final int first;
   final int last;
@@ -25,6 +25,10 @@ class RecapGroup {
   final int startMs;
   final int endMs;
 
+  /// How long the video of each part [first]..[last] is, so the backend can
+  /// fit the voice to it. Sent only when there is one entry per part.
+  final List<int> partMs;
+
   Map<String, Object?> toJson() => {
         'first': first,
         'last': last,
@@ -32,6 +36,7 @@ class RecapGroup {
         if (jpegBase64.isNotEmpty) 'jpeg_b64': jpegBase64,
         if (endMs > startMs) 'start_ms': startMs,
         if (endMs > startMs) 'end_ms': endMs,
+        if (partMs.length == last - first + 1 && partMs.any((v) => v > 0)) 'part_ms': partMs,
       };
 }
 
@@ -42,6 +47,7 @@ List<RecapGroup> videoRecapGroups({
   required List<SegmentSpec> parts,
   required String notes,
   int perBatch = 5,
+  List<String>? dialogue,
 }) {
   final out = <RecapGroup>[];
   for (var from = 1; from <= parts.length; from += perBatch) {
@@ -49,9 +55,10 @@ List<RecapGroup> videoRecapGroups({
     out.add(RecapGroup(
       first: from,
       last: to,
-      prompt: buildVideoRecapPrompt(dramaTitle: dramaTitle, episode: episode, parts: parts, from: from, to: to, notes: notes),
+      prompt: buildVideoRecapPrompt(dramaTitle: dramaTitle, episode: episode, parts: parts, from: from, to: to, notes: notes, dialogue: dialogue),
       startMs: parts[from - 1].startMs,
       endMs: parts[to - 1].endMs,
+      partMs: [for (var i = from; i <= to; i++) parts[i - 1].lengthMs],
     ));
   }
   return out;
@@ -74,6 +81,7 @@ List<RecapGroup> sceneRecapGroups({
       last: g.$2,
       prompt: buildSceneRecapPrompt(dramaTitle: dramaTitle, episode: episode, scenes: scenes, dialogue: dialogue, from: g.$1, to: g.$2, notes: notes),
       jpegBase64: sheets[g.$1] ?? '',
+      partMs: [for (var i = g.$1; i <= g.$2; i++) scenes[i - 1].lengthMs],
     ));
   }
   return out;
@@ -93,11 +101,13 @@ Map<String, Object?> recapRequestJson({
   required List<RecapGroup> groups,
   String fileUri = '',
   String fileMime = 'video/mp4',
+  String fallbackModel = '',
 }) =>
     {
       'mode': mode == 'video' ? 'video' : 'scenes',
       'gemini_key': geminiKey.trim(),
       if (model.trim().isNotEmpty) 'gemini_model': model.trim(),
+      if (fallbackModel.trim().isNotEmpty) 'gemini_fallback': fallbackModel.trim(),
       'voice': voice,
       'file_uri': fileUri,
       'file_mime': fileMime,
@@ -105,12 +115,15 @@ Map<String, Object?> recapRequestJson({
     };
 
 class RecapPart {
-  const RecapPart(this.n, this.text, this.audioMs, this.audioUrl);
+  const RecapPart(this.n, this.text, this.audioMs, this.audioUrl, [this.targetMs = 0]);
 
   final int n;
   final String text;
   final int audioMs;
   final String audioUrl;
+
+  /// How long the video of this part is (0 = not known).
+  final int targetMs;
 }
 
 class RecapJob {
@@ -152,7 +165,8 @@ RecapJob parseRecapJob(String body) {
         final t = p['text'];
         if (n is! num || t is! String || t.trim().isEmpty) continue;
         final ms = p['audio_ms'];
-        parts.add(RecapPart(n.toInt(), t.trim(), ms is num ? ms.toInt() : 0, p['audio_url'] is String ? p['audio_url'] as String : ''));
+        final tg = p['target_ms'];
+        parts.add(RecapPart(n.toInt(), t.trim(), ms is num ? ms.toInt() : 0, p['audio_url'] is String ? p['audio_url'] as String : '', tg is num ? tg.toInt() : 0));
       }
       parts.sort((a, b) => a.n.compareTo(b.n));
     }
@@ -168,6 +182,54 @@ RecapJob parseRecapJob(String body) {
     );
   } catch (_) {
     return bad;
+  }
+}
+
+/// Part numbers that [groups] ask for but [have] does not hold, ascending.
+List<int> missingParts(List<RecapGroup> groups, Iterable<int> have) {
+  final h = have.toSet();
+  final all = <int>{for (final g in groups) for (var n = g.first; n <= g.last; n++) n};
+  return [for (final n in (all.toList()..sort())) if (!h.contains(n)) n];
+}
+
+/// The groups that still contain at least one of the [missing] parts. A group
+/// is asked again as a whole, because Gemini answers a group in one piece.
+List<RecapGroup> groupsFor(List<RecapGroup> groups, Iterable<int> missing) {
+  final m = missing.toSet();
+  return [
+    for (final g in groups)
+      if (m.any((n) => n >= g.first && n <= g.last)) g,
+  ];
+}
+
+/// One line of the backend's self-test.
+class SelfCheck {
+  const SelfCheck(this.id, this.ok, this.note);
+
+  final String id;
+  final bool ok;
+  final String note;
+
+  String get label => switch (id) {
+        'ffmpeg' => 'ffmpeg (အသံပြောင်း)',
+        'edge_tts' => 'Edge TTS (မြန်မာအသံ)',
+        'gemini' => 'Gemini (key + model)',
+        _ => id,
+      };
+}
+
+/// The body of "self-test". Unreadable or empty means no checks.
+List<SelfCheck> parseSelfTest(String body) {
+  try {
+    final m = jsonDecode(body);
+    final raw = m is Map ? m['checks'] : null;
+    if (raw is! List) return const [];
+    return [
+      for (final c in raw)
+        if (c is Map && c['id'] is String) SelfCheck(c['id'] as String, c['ok'] == true, c['note'] is String ? c['note'] as String : ''),
+    ];
+  } catch (_) {
+    return const [];
   }
 }
 

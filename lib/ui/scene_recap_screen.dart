@@ -16,6 +16,7 @@ import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../data/segment_repo.dart';
 import '../platform/scene_channel.dart';
+import 'asr_dialog.dart';
 import 'recap_auto_section.dart';
 import 'widgets.dart';
 
@@ -79,10 +80,24 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
     });
   }
 
-  Future<void> _load() async {
+  Future<void> _loadSrt() async {
     final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
     final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
-    _srt = src == null ? [] : parseSrt(src).entries;
+    final entries = src == null ? <SrtEntry>[] : parseSrt(src).entries;
+    if (mounted) setState(() => _srt = entries);
+  }
+
+  /// Subtitles from the video's sound (AssemblyAI) when the project has none.
+  Future<void> _asrNow() async {
+    final text = await showAsrDialog(context, widget.project);
+    if (text == null || !mounted) return;
+    await _repo.setDoc(_pid, DocKind.sourceSrt, text);
+    await _loadSrt();
+    _say('စာတန်း ${_srt.length} ကြောင်း ထည့်ပြီး (အမှားပါနိုင်လို့ Subtitle Studio မှာ စစ်ပါ)။ Scene ကို ပြန်ခွဲရင် scene တစ်ခုချင်းမှာ စာတန်း ပါလာမယ်။');
+  }
+
+  Future<void> _load() async {
+    await _loadSrt();
     _notes.text = await _repo.getDoc(_pid, DocKind.notes) ?? '';
     _texts = await _repo.results(_pid, _task);
     final plan = await _repo.getDoc(_pid, DocKind.scenePlan);
@@ -293,6 +308,14 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
         if (!has) const Padding(padding: EdgeInsets.only(top: 12), child: Text('ဗီဒီယို မရွေးရသေးဘူး (Stage 1)။', style: TextStyle(color: DfColors.danger))),
         if (has) ...[
           SectionTitle(_srt.isEmpty ? '၁။ Scene ခွဲ (စာတန်း မရှိသေး: ပုံကိုပဲ အားကိုးရမယ်)' : '၁။ Scene ခွဲ (စာတန်း ${_srt.length} ကြောင်းနဲ့ တွဲမယ်)'),
+          if (_srt.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(onPressed: _analyzing ? null : _asrNow, icon: const Icon(Icons.graphic_eq_rounded, size: 18), label: const Text('အသံကနေ စာတန်းထုတ် (AssemblyAI)')),
+              ),
+            ),
           Row(children: [
             Expanded(child: TextField(controller: _from, enabled: !_analyzing, decoration: const InputDecoration(labelText: 'စ (m:ss)'))),
             const SizedBox(width: 12),
@@ -346,6 +369,8 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
                 final r = await _repo.results(_pid, _task);
                 if (mounted) setState(() => _texts = r);
               },
+              onSrtReady: _loadSrt,
+            durationMs: widget.project.videoDurationMs ?? 0,
             ),
             const SectionTitle('၃။ Gemini ကို ပို့ (လက်နဲ့)'),
             const InfoHint('အုပ်စုတစ်ခုချင်း (scene ၁၂ ခုစီ) ပို့ပါ။ ပုံနဲ့ prompt ကို Gemini ဆီ တစ်ခါတည်း ပို့မယ်၊ prompt ကိုလည်း ကူးထားမယ်။'),
