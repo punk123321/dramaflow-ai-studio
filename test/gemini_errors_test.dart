@@ -31,13 +31,4 @@ void main() {
     expect(geminiPreflightProblem(503, 'overloaded'), isNull);
     expect(geminiPreflightProblem(400, 'something else'), isNull);
   });
-
-  test('backend hint names the next step', () {
-    expect(geminiBackendHint("404 NOT_FOUND model"), contains('model'));
-    expect(geminiBackendHint('429 RESOURCE_EXHAUSTED'), contains('quota'));
-    expect(geminiBackendHint("503 UNAVAILABLE. {'error': {'code': 503}}"), contains('လူသုံးများ'));
-    expect(geminiBackendHint('API key not valid'), contains('key'));
-    expect(geminiBackendHint(loc), contains('Colab'));
-    expect(geminiBackendHint('???'), 'မသိတဲ့ အမှား');
-  });
 }

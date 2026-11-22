@@ -36,16 +36,3 @@ String? geminiPreflightProblem(int code, String detail) {
   }
   return null;
 }
-
-/// Short Burmese hint for a Gemini error text seen on the backend
-/// (the self-test): what to do next.
-String geminiBackendHint(String message) {
-  final m = message;
-  final d = m.toLowerCase();
-  if (_isLocation(m)) return 'Backend (Colab) ရှိတဲ့ နေရာကို Google က မခွင့်ပြုဘူး — Colab runtime ကို ပြန်စပြီး ပြန်စမ်းပါ';
-  if (m.contains('404') || m.contains('NOT_FOUND')) return 'model နာမည် မရှိတော့ဘူး — model ကွက်မှာ gemini-3.8-flash လို နာမည်ပြောင်းပါ';
-  if (m.contains('429') || m.contains('RESOURCE_EXHAUSTED')) return 'quota ပြည့်နေတယ် — ခဏစောင့်ပါ၊ aistudio.google.com/rate-limit မှာ စစ်ပါ';
-  if (m.contains('503') || m.contains('UNAVAILABLE')) return 'Google ဘက် model လူသုံးများနေတယ် — ခဏနေ ပြန်စမ်းပါ (အရန် model ထည့်ထားရင် အလိုအလျောက် ပြောင်းမယ်)';
-  if (d.contains('api key') || m.contains('400') || m.contains('403') || m.contains('PERMISSION')) return 'key မှန်လား၊ Gemini API ဖွင့်ထားလား စစ်ပါ';
-  return 'မသိတဲ့ အမှား';
-}
