@@ -673,6 +673,6 @@ Unproven on a phone: the extra row (about 34 px) in the pinned top part on small
 ## TE-48: Hardening after the first phone results
 | Feature | Compiles on CI | Phone-tested |
 |---|---|---|
-| Video Recap upload: the video type is found from the file's first bytes (mp4, mov, 3gp, webm, avi, flv, wmv, mpeg) instead of always saying mp4; a refusal by Gemini now says which types work. Unit tests for the detection | see run below | **No** |
+| Video Recap upload: the video type is found from the file's first bytes (mp4, mov, 3gp, webm, avi, flv, wmv, mpeg) instead of always saying mp4; a refusal by Gemini now says which types work. Unit tests for the detection | Yes (CI green, run 45000512970) | **No** |
 | Backends: Edge TTS tried 3 times (it sometimes drops a request); Gemini script call retried on 503 / overloaded (not on 429 quota). Not run (Python, only syntax-checked) | n/a (Python) | **No** |
-Unproven: the retry waits in Colab, and MKV (the check cannot tell it from WebM; Gemini may refuse it and the message says so). Branch `claude/te-48-hardening`, not merged.
+Unproven: the retry waits in Colab, and MKV (the check cannot tell it from WebM; Gemini may refuse it and the message says so). APK artifact `dramaflow-apk-branch-230`. Branch `claude/te-48-hardening`, not merged.
