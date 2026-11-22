@@ -707,3 +707,10 @@ CI (run 45003681194, commit 7a6dbc4, branch `claude/te-48-hardening`): `flutter 
 Already covered, not new work: an AssemblyAI result is saved as the project's subtitles and Auto does not run it again when subtitles exist, so a second Auto run does not spend credit twice; language auto-detect (empty code) already exists in Settings.
 
 CI (run 45029307868, commit b9b0ff2): `flutter analyze` 101 infos (one more than before: a `prefer_const_declarations` hint in the new test, fixed afterwards; no warnings/errors), `flutter test` 356 passed, release APK built (artifact `dramaflow-apk-branch-234`). TE-51 compiles on CI and its tests pass. Phone-tested: **No**. Not merged into main.
+
+## TE-52: pick a recap job up again
+| Feature | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The backend job id is kept per project; if the screen/app is closed while the backend works, "နောက်ဆုံး job ကို ပြန်ယူ" fetches the job (finished parts come in at once, a running job is waited for). A job the backend no longer has says so and the button goes away | Nothing automated for the network loop (it is the same polling loop as before, now shared); backend keeps finished jobs 2 h and in a file (tested in Python) | see CI | **No** |
+Note: Auto Recap's "ဆက်သွယ်" loop was refactored (start and resume now share one polling function), so the normal Auto run is also affected: re-test it first.
+Not done on purpose: a multi-episode queue (it needs each episode's video, subtitles and Gemini upload handled in the background; I cannot make that safe without the phone), and a new backup feature (Backup/Restore already exists; the keys and these usage counters are not in it).

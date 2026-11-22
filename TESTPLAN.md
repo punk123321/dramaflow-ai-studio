@@ -62,6 +62,7 @@ f. Warnings: a part whose voice is much longer/shorter than its video part is li
 g. Switch the Gemini model field to a wrong name (e.g. `x`), run Auto: error is readable. Put the right one back, tap "မရတဲ့ အပိုင်း … ပြန်လုပ်": only the missing parts run and the video is NOT uploaded again.
 h. Listen: numbers under 100 and emoji in the script are read sensibly (the backend spells small numbers in Burmese and removes emoji and * marks).
 i. Note: time per part, data used, anything that sounds wrong.
+j. Start Auto, then close the screen (or kill the app) while the stage says Gemini/voice. Reopen the same project's Recap page: "နောက်ဆုံး job ကို ပြန်ယူ" appears; tap it: the finished parts come in. (If Colab was restarted meanwhile it says the job is gone: that is expected.)
 
 ## 8. Data safety
 35. Backup > Restore on a fresh install keeps projects.

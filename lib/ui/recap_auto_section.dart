@@ -86,6 +86,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   List<RecapGroup> _lastGroups = const [];
   String _lastFileUri = '';
   String _lastMime = 'video/mp4';
+  String _savedJob = '';
   List<SelfCheck>? _checks;
   bool _testing = false;
   String? _msg;
@@ -106,8 +107,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     final a = await AssemblySettingsRepo().load();
     final fb = await _usageRepo.fallbackModel();
     final u = await _usageRepo.today();
+    final job = (await _handoff.getDoc(widget.projectId, _jobKind) ?? '').trim();
     if (!mounted) return;
     setState(() {
+      _savedJob = job;
       _asr = a;
       _usage = u;
       _fallbackC.text = fb;
@@ -299,32 +302,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
           fileMime: mime ?? 'video/mp4',
           fallbackModel: _fallbackC.text,
         ),
-        (j) {
-          if (mounted) {
-            setState(() {
-              _stage = j.stage;
-              _progress = j.progress;
-            });
-          }
-        },
+        _onJobUpdate,
+        onJobId: _rememberJob,
       );
-      for (final p in job.parts) {
-        await _handoff.saveResult(widget.projectId, widget.task, p.n, p.text);
-      }
-      await _logUsage(gemini: groups.length, voices: job.parts.where((p) => p.audioUrl.isNotEmpty).length, saveFallback: true);
-      await widget.onTextsSaved();
-      if (!mounted) return;
-      final prev = retry ? _result : null;
-      final merged = <int, RecapPart>{
-        if (prev != null) for (final p in prev.parts) p.n: p,
-        for (final p in job.parts) p.n: p,
-      };
-      final all = RecapJob(state: JobState.done, parts: [for (final k in (merged.keys.toList()..sort())) merged[k]!], warnings: job.warnings);
-      setState(() => _result = all);
-      final w = job.warnings.isEmpty ? '' : '\n⚠ ${job.warnings.join('\n⚠ ')}';
-      final miss = missingParts(_lastGroups, all.parts.map((p) => p.n));
-      final m = miss.isEmpty ? '' : '\n⚠ မရသေးတဲ့ အပိုင်း: ${miss.join(', ')} — "ပြန်လုပ်" ခလုတ်ကို နှိပ်ပါ';
-      _say('အပိုင်း ${job.parts.length} ခု ရပြီး သိမ်းပြီး။ အောက်က "Script အဖြစ် သိမ်း" ကို နှိပ်ပါ၊ ပြီးမှ အသံကို project ထဲ သိမ်းပါ။$w$m');
+      await _applyJob(job, retry: retry, groupCount: groups.length);
     } on RecapCanceled {
       _say('ရပ်လိုက်ပြီ (Backend မှာ job က ဆက်လုပ်နေနိုင်တယ်)');
     } on GeminiUploadException catch (e) {
@@ -400,6 +381,89 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     } on RecapCanceled {
       _say('ရပ်လိုက်ပြီ');
     } on HttpException catch (e) {
+      _say(e.message, error: true);
+    } catch (e) {
+      _say('$e', error: true);
+    } finally {
+      _client = null;
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  void _onJobUpdate(RecapJob j) {
+    if (mounted) {
+      setState(() {
+        _stage = j.stage;
+        _progress = j.progress;
+      });
+    }
+  }
+
+  String get _jobKind => 'recap_job_${widget.task}';
+
+  /// The backend's job id is kept, so a job that was running when the screen
+  /// or the app was closed can be picked up again.
+  Future<void> _rememberJob(String id) async {
+    try {
+      await _handoff.setDoc(widget.projectId, _jobKind, id);
+    } catch (_) {}
+    if (mounted) setState(() => _savedJob = id);
+  }
+
+  Future<void> _forgetJob() async {
+    try {
+      await _handoff.setDoc(widget.projectId, _jobKind, '');
+    } catch (_) {}
+    if (mounted) setState(() => _savedJob = '');
+  }
+
+  /// Saves the parts of a finished job like pasted answers and shows them.
+  /// [groupCount] is how many Gemini requests this app run made (0 when a job
+  /// is picked up again).
+  Future<void> _applyJob(RecapJob job, {required bool retry, required int groupCount}) async {
+    for (final p in job.parts) {
+      await _handoff.saveResult(widget.projectId, widget.task, p.n, p.text);
+    }
+    await _logUsage(gemini: groupCount, voices: job.parts.where((p) => p.audioUrl.isNotEmpty).length, saveFallback: groupCount > 0);
+    await widget.onTextsSaved();
+    await _forgetJob();
+    if (!mounted) return;
+    final prev = retry ? _result : null;
+    final merged = <int, RecapPart>{
+      if (prev != null) for (final p in prev.parts) p.n: p,
+      for (final p in job.parts) p.n: p,
+    };
+    final all = RecapJob(state: JobState.done, parts: [for (final k in (merged.keys.toList()..sort())) merged[k]!], warnings: job.warnings);
+    setState(() => _result = all);
+    final w = job.warnings.isEmpty ? '' : '\n⚠ ${job.warnings.join('\n⚠ ')}';
+    final miss = missingParts(_lastGroups, all.parts.map((p) => p.n));
+    final m = miss.isEmpty ? '' : '\n⚠ မရသေးတဲ့ အပိုင်း: ${miss.join(', ')} — "ပြန်လုပ်" ခလုတ်ကို နှိပ်ပါ';
+    _say('အပိုင်း ${job.parts.length} ခု ရပြီး သိမ်းပြီး။ အောက်က "Script အဖြစ် သိမ်း" ကို နှိပ်ပါ၊ ပြီးမှ အသံကို project ထဲ သိမ်းပါ။$w$m');
+  }
+
+  /// Picks up the job that was started earlier on this project (the screen or
+  /// the app was closed while the backend worked).
+  Future<void> _resume() async {
+    final id = _savedJob;
+    if (id.isEmpty || !_s.ready) return;
+    final client = RecapClient(_s);
+    _client = client;
+    setState(() {
+      _running = true;
+      _canceled = false;
+      _msg = null;
+      _err = false;
+      _progress = 0;
+      _stage = 'Backend ကို မေးနေတယ်';
+    });
+    try {
+      final job = await client.resume(id, _onJobUpdate);
+      await _applyJob(job, retry: false, groupCount: 0);
+    } on RecapCanceled {
+      _say('ရပ်လိုက်ပြီ (job က Backend မှာ ဆက်ရှိနေနိုင်တယ်)');
+    } on HttpException catch (e) {
+      // A job that is gone cannot be picked up again; one that failed is over too.
+      if (e.message.contains('မတွေ့တော့ဘူး')) await _forgetJob();
       _say(e.message, error: true);
     } catch (e) {
       _say('$e', error: true);
@@ -513,6 +577,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         ] else
           Wrap(spacing: 8, runSpacing: 6, children: [
             FilledButton.icon(onPressed: _start, icon: const Icon(Icons.auto_awesome, size: 18), label: const Text('Auto လုပ်မယ်')),
+            if (_savedJob.isNotEmpty && _s.ready) OutlinedButton.icon(onPressed: _resume, icon: const Icon(Icons.history, size: 18), label: const Text('နောက်ဆုံး job ကို ပြန်ယူ')),
             if (missing.isNotEmpty) OutlinedButton.icon(onPressed: () => _start(retry: true), icon: const Icon(Icons.refresh, size: 18), label: Text('မရတဲ့ အပိုင်း ${missing.length} ခု ပြန်လုပ်')),
             if (hasAudio) OutlinedButton.icon(onPressed: _saveAudio, icon: const Icon(Icons.graphic_eq, size: 18), label: const Text('အသံကို project ထဲ သိမ်း')),
             OutlinedButton.icon(onPressed: _testing ? null : _selfTest, icon: const Icon(Icons.fact_check_outlined, size: 18), label: Text(_testing ? 'စစ်နေတယ် …' : 'Self-test')),
