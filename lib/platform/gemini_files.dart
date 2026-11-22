@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../core/video_type.dart';
+
 class GeminiUploadException implements Exception {
   GeminiUploadException(this.message);
   final String message;
@@ -36,13 +38,22 @@ class GeminiFiles {
   static Future<GeminiFile> upload(
     String apiKey,
     File file, {
-    String mime = 'video/mp4',
+    String? mime,
     required void Function(String stage, double? fraction) onStage,
     bool Function()? canceled,
   }) async {
     final c = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
       final size = await file.length();
+      if (mime == null) {
+        final raf = await file.open();
+        try {
+          mime = sniffVideoKind(await raf.read(16)).mime;
+        } finally {
+          await raf.close();
+        }
+      }
+      final videoMime = mime;
       onStage('Gemini ဆီ upload စတင်နေတယ်', null);
       final start = await c.postUrl(Uri.parse('$_base/upload/v1beta/files'));
       start.headers
@@ -50,7 +61,7 @@ class GeminiFiles {
         ..set('X-Goog-Upload-Protocol', 'resumable')
         ..set('X-Goog-Upload-Command', 'start')
         ..set('X-Goog-Upload-Header-Content-Length', '$size')
-        ..set('X-Goog-Upload-Header-Content-Type', mime)
+        ..set('X-Goog-Upload-Header-Content-Type', videoMime)
         ..contentType = ContentType.json;
       final meta = utf8.encode(jsonEncode({'file': {'display_name': 'dramaflow_recap'}}));
       start.contentLength = meta.length;
@@ -99,7 +110,7 @@ class GeminiFiles {
         state = ((jsonDecode(gb) as Map)['state'] as String?) ?? 'PROCESSING';
       }
       if (state != 'ACTIVE') throw GeminiUploadException('Gemini က ဗီဒီယိုကို လက်မခံဘူး ($state)');
-      return GeminiFile(uri, mime);
+      return GeminiFile(uri, videoMime);
     } on SocketException {
       throw GeminiUploadException('Internet ချိတ်ဆက်မှု ပြတ်သွားတယ်');
     } on TimeoutException {
@@ -119,7 +130,7 @@ class GeminiFiles {
     } catch (_) {}
     if (key.length >= 8) detail = detail.replaceAll(key, '***');
     final why = switch (code) {
-      400 => 'Gemini က ဗီဒီယိုကို လက်မခံဘူး',
+      400 => 'Gemini က ဗီဒီယိုကို လက်မခံဘူး (mp4/mov/webm/avi လို ပုံစံ လိုတယ်၊ mkv မရဘူး)',
       401 || 403 => 'API key မမှန်ဘူး (သို့) ခွင့်မရှိဘူး',
       429 => 'Gemini quota ပြည့်နေတယ် (နောက်မှ ပြန်စမ်း)',
       _ => 'Gemini HTTP $code',

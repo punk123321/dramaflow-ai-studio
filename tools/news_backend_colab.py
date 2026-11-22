@@ -119,7 +119,17 @@ Generate about {scene_count} scenes, about {target_words} Burmese words of narra
         config = types.GenerateContentConfig(temperature=0.7)
     last = None
     for _ in range(2):
-        resp = client.models.generate_content(model=req.gemini_model, contents=prompt, config=config)
+        resp = None
+        for attempt in range(3):  # a busy server (503) is worth a retry; a quota error (429) is not
+            try:
+                resp = client.models.generate_content(model=req.gemini_model, contents=prompt, config=config)
+                break
+            except Exception as e:
+                msg = str(e)
+                if attempt < 2 and ("503" in msg or "UNAVAILABLE" in msg or "overloaded" in msg.lower()):
+                    time.sleep(10 * (attempt + 1))
+                    continue
+                raise
         raw = (resp.text or "").strip()
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
@@ -416,7 +426,14 @@ def run_job(job_id: str, req: NewsRequest):
                 continue
             _set(job_id, stage=f"Scene {i + 1}/{n}: အသံ၊ ဗီဒီယိုနောက်ခံ၊ render", progress=10 + int(80 * i / n))
             mp3, raw, clip = work / f"s{i}.mp3", work / f"raw_{i}", work / f"clip_{i}.mp4"
-            asyncio.run(_tts(narr, req.voice_model, mp3))
+            for attempt in range(3):  # Edge TTS is an online service that sometimes drops a request
+                try:
+                    asyncio.run(_tts(narr, req.voice_model, mp3))
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    time.sleep(3 * (attempt + 1))
             dur = audio_seconds(mp3)
             raw_kw = sc.get("keywords") or []
             raw_kw = [raw_kw] if isinstance(raw_kw, str) else raw_kw
@@ -528,7 +545,14 @@ def tts_once(req: TtsRequest, x_app_token: Optional[str] = Header(default=None))
     try:
         d.mkdir(parents=True, exist_ok=True)
         mp3, wav = d / "a.mp3", d / "a.wav"
-        asyncio.run(_tts(text, req.voice, mp3, rate))
+        for attempt in range(3):
+            try:
+                asyncio.run(_tts(text, req.voice, mp3, rate))
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                time.sleep(2 * (attempt + 1))
         _run(["ffmpeg", "-y", "-i", str(mp3), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)])
         return Response(content=wav.read_bytes(), media_type="audio/wav")
     except Exception as e:

@@ -669,3 +669,10 @@ Unproven: Edge TTS Burmese voices through the unofficial library (Microsoft may 
 | The editor's tool row (24 tools in one long strip) is split into 4 tabs like a phone video editor: စာ / ပုံ (Text, Arrow, Box, Circle, Spot, Frame, Sticker), Edit (Zoom, Speed, Flip, Freeze, Cut), Effect (Filter, Blur, Censor, Fade in/out, Flash, Tint, Vignette, Bars, Shade), Layer / အသံ (Picture, Sound). The same tools and actions as before; only the grouping changed. No widget test (the editor needs a video player) | Yes (CI green, run 44980733356) | **No** |
 APK artifact `dramaflow-apk-branch-227`. Not merged to main.
 Unproven on a phone: the extra row (about 34 px) in the pinned top part on small screens. Not built: a "+" add button and Canvas / Audio tabs (there is no Canvas feature).
+
+## TE-48: Hardening after the first phone results
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Video Recap upload: the video type is found from the file's first bytes (mp4, mov, 3gp, webm, avi, flv, wmv, mpeg) instead of always saying mp4; a refusal by Gemini now says which types work. Unit tests for the detection | see run below | **No** |
+| Backends: Edge TTS tried 3 times (it sometimes drops a request); Gemini script call retried on 503 / overloaded (not on 429 quota). Not run (Python, only syntax-checked) | n/a (Python) | **No** |
+Unproven: the retry waits in Colab, and MKV (the check cannot tell it from WebM; Gemini may refuse it and the message says so). Branch `claude/te-48-hardening`, not merged.

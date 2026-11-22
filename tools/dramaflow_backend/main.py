@@ -130,7 +130,14 @@ def _tts_fn(job_dir: Path, voice: str):
 
     def make(n: int, text: str):
         mp3, wav = job_dir / f"p{n}.mp3", job_dir / f"p{n}.wav"
-        asyncio.run(edge_tts.Communicate(text, use).save(str(mp3)))
+        for attempt in range(3):
+            try:
+                asyncio.run(edge_tts.Communicate(text, use).save(str(mp3)))
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                time.sleep(2 * (attempt + 1))
         p = subprocess.run(
             [_ffmpeg(), "-y", "-i", str(mp3), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)],
             capture_output=True,
@@ -237,7 +244,14 @@ def tts_once(req: TtsRequest, x_app_token: Optional[str] = Header(default=None))
     try:
         d.mkdir(parents=True, exist_ok=True)
         mp3, wav = d / "a.mp3", d / "a.wav"
-        asyncio.run(edge_tts.Communicate(text, voice, rate=rate).save(str(mp3)))
+        for attempt in range(3):
+            try:
+                asyncio.run(edge_tts.Communicate(text, voice, rate=rate).save(str(mp3)))
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                time.sleep(2 * (attempt + 1))
         p = subprocess.run([_ffmpeg(), "-y", "-i", str(mp3), "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(wav)],
                            capture_output=True, text=True)
         if p.returncode != 0 or not wav.exists():
