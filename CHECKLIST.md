@@ -714,3 +714,12 @@ CI (run 45029307868, commit b9b0ff2): `flutter analyze` 101 infos (one more than
 | The backend job id is kept per project; if the screen/app is closed while the backend works, "နောက်ဆုံး job ကို ပြန်ယူ" fetches the job (finished parts come in at once, a running job is waited for). A job the backend no longer has says so and the button goes away | Nothing automated for the network loop (it is the same polling loop as before, now shared); backend keeps finished jobs 2 h and in a file (tested in Python) | see CI | **No** |
 Note: Auto Recap's "ဆက်သွယ်" loop was refactored (start and resume now share one polling function), so the normal Auto run is also affected: re-test it first.
 Not done on purpose: a multi-episode queue (it needs each episode's video, subtitles and Gemini upload handled in the background; I cannot make that safe without the phone), and a new backup feature (Backup/Restore already exists; the keys and these usage counters are not in it).
+
+## TE-53: Recap Queue + step bar (CI result below once run)
+| Feature | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| `lib/core/recap_queue.dart`: queue bookkeeping (sequence, a failed episode is recorded with step + reason and the next goes on, cancel, retry unfinished, step done/skipped, copyable log) | 8 unit tests | see CI | **No** |
+| `lib/platform/recap_episode_runner.dart`: one episode = subtitles (AssemblyAI only when none) → upload to the user's Gemini → backend job (Gemini + Edge TTS) → save parts (script only if the project has none) → voice into Audio (only for a script it wrote). Same pieces as the Auto card | Not testable here (network, phone channels) | see CI | **No** |
+| `lib/ui/recap_queue_screen.dart` + Home > Tools "Recap Queue": pick episodes, settings, per-episode step bar, error with step, log, retry, stop | 3 widget tests for the step bar only | see CI | **No** |
+| Auto card: step bar (same widget) and "Log ကူး" button | widget test of the bar | see CI | **No** |
+Limits, on purpose: Video Recap only (Scene Recap needs contact sheets made on the phone); the app must stay open and the screen on (no background service); leaving the queue page stops the queue; the queue does not replace an existing script. The Auto card's code was refactored (steps are tracked in `_start/_applyJob/_saveAudio/_resume`), so re-test the normal Auto run first.

@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/assembly.dart';
 import '../core/news_video.dart';
 import '../core/recap_auto.dart';
+import '../core/recap_queue.dart' show QStep, qStepLabels;
 import '../core/script.dart';
 import '../core/srt.dart';
 import '../core/theme.dart';
@@ -20,6 +22,7 @@ import '../platform/audio_channel.dart';
 import '../platform/gemini_files.dart';
 import '../platform/news_video_client.dart';
 import '../platform/recap_client.dart';
+import 'recap_step_bar.dart';
 import 'widgets.dart';
 
 /// The "Auto" card of Video Recap and Scene Recap. One tap: the user's own
@@ -87,6 +90,13 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   String _lastFileUri = '';
   String _lastMime = 'video/mp4';
   String _savedJob = '';
+
+  // Where the run is, for the step bar, and a log to copy when something fails.
+  QStep? _qs;
+  QStep? _qfail;
+  final Set<QStep> _qdone = {};
+  final Set<QStep> _qskip = {};
+  final List<String> _log = [];
   List<SelfCheck>? _checks;
   bool _testing = false;
   String? _msg;
@@ -134,10 +144,53 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
 
   void _say(String m, {bool error = false}) {
     if (!mounted) return;
+    _note('${error ? '✗ ' : ''}$m');
     setState(() {
       _msg = m;
       _err = error;
+      if (error && _running) _qfail = _qs;
     });
+  }
+
+  void _note(String m) {
+    final t = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    _log.add('${two(t.hour)}:${two(t.minute)}:${two(t.second)} ${m.replaceAll('\n', ' | ')}');
+    if (_log.length > 200) _log.removeAt(0);
+  }
+
+  void _stepReset() {
+    _qs = null;
+    _qfail = null;
+    _qdone.clear();
+    _qskip.clear();
+  }
+
+  /// Enters [s]; the step before it counts as done unless it was skipped.
+  void _enter(QStep s) {
+    final p = _qs;
+    if (p != null && p != s && !_qskip.contains(p)) _qdone.add(p);
+    _qs = s;
+    _qfail = null;
+    _note('▶ ${qStepLabels[s]}');
+    if (mounted) setState(() {});
+  }
+
+  void _skipStep(QStep s, String why) {
+    _qskip.add(s);
+    _note('– ${qStepLabels[s]} ကျော်: $why');
+    if (mounted) setState(() {});
+  }
+
+  void _finishSteps() {
+    final p = _qs;
+    if (p != null && !_qskip.contains(p)) _qdone.add(p);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _copyLog() async {
+    await Clipboard.setData(ClipboardData(text: _log.join('\n')));
+    _say('Log ကူးပြီး — error ပေါ်ရင် paste လုပ်ပြီး ပို့ပါ');
   }
 
   Future<void> _saveBackend() async {
@@ -255,15 +308,28 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _progress = 0;
       _stage = 'ပြင်ဆင်နေတယ်';
     });
+    if (!retry) _stepReset();
     try {
-      if (needAsr) await _runAsr();
+      if (retry) {
+        _enter(QStep.subtitles);
+        _skipStep(QStep.subtitles, 'ပြန်လုပ်တာမို့ ကျော်');
+      } else if (needAsr) {
+        _enter(QStep.subtitles);
+        await _runAsr();
+      } else {
+        _enter(QStep.subtitles);
+        _skipStep(QStep.subtitles, 'စာတန်း ရှိပြီးသား / AssemblyAI မသုံးဘူး');
+      }
       if (_canceled) throw const RecapCanceled();
       var fileUri = '';
       String? mime;
       if (_video && retry && _lastFileUri.isNotEmpty) {
         fileUri = _lastFileUri;
         mime = _lastMime;
+        _enter(QStep.upload);
+        _skipStep(QStep.upload, 'Gemini ထဲ ရှိပြီးသား ဗီဒီယိုကို ပြန်သုံး');
       } else if (_video) {
+        _enter(QStep.upload);
         setState(() => _stage = 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
         tmp = await GeminiFiles.copyToCache(widget.videoUri!);
         final f = await GeminiFiles.upload(
@@ -291,6 +357,11 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       if (mounted) setState(() => _lastGroups = built);
       final groups = retry ? groupsFor(built, missingParts(built, _result?.parts.map((p) => p.n) ?? const <int>[])) : built;
       if (groups.isEmpty) throw const HttpException('ပြန်လုပ်စရာ အပိုင်း မရှိတော့ဘူး');
+      if (!_video) {
+        _enter(QStep.upload);
+        _skipStep(QStep.upload, 'Scene mode — ပုံတွေပဲ ပို့တယ်');
+      }
+      _enter(QStep.ask);
       final job = await client.run(
         recapRequestJson(
           mode: widget.mode,
@@ -345,6 +416,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _canceled = false;
       _msg = null;
     });
+    _enter(QStep.audio);
     try {
       final repo = AudioRepo();
       final old = await repo.forProject(widget.projectId);
@@ -377,6 +449,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         ));
         done++;
       }
+      if (done > 0) _finishSteps();
       _say(done == 0 ? 'ဒီ job ရဲ့ အသံနဲ့ ကိုက်တဲ့ အပိုင်း မရှိဘူး (script ကို ပြင်ထားလား၊ အသံ switch ပိတ်ထားလား)' : 'အသံ $done ခု အဆင့် ၃ (Audio) ထဲ သိမ်းပြီး။');
     } on RecapCanceled {
       _say('ရပ်လိုက်ပြီ');
@@ -421,6 +494,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   /// [groupCount] is how many Gemini requests this app run made (0 when a job
   /// is picked up again).
   Future<void> _applyJob(RecapJob job, {required bool retry, required int groupCount}) async {
+    _enter(QStep.save);
     for (final p in job.parts) {
       await _handoff.saveResult(widget.projectId, widget.task, p.n, p.text);
     }
@@ -435,6 +509,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     };
     final all = RecapJob(state: JobState.done, parts: [for (final k in (merged.keys.toList()..sort())) merged[k]!], warnings: job.warnings);
     setState(() => _result = all);
+    _finishSteps();
     final w = job.warnings.isEmpty ? '' : '\n⚠ ${job.warnings.join('\n⚠ ')}';
     final miss = missingParts(_lastGroups, all.parts.map((p) => p.n));
     final m = miss.isEmpty ? '' : '\n⚠ မရသေးတဲ့ အပိုင်း: ${miss.join(', ')} — "ပြန်လုပ်" ခလုတ်ကို နှိပ်ပါ';
@@ -456,6 +531,8 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _progress = 0;
       _stage = 'Backend ကို မေးနေတယ်';
     });
+    _stepReset();
+    _enter(QStep.ask);
     try {
       final job = await client.resume(id, _onJobUpdate);
       await _applyJob(job, retry: false, groupCount: 0);
@@ -519,6 +596,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
               : 'Scene ပုံ + စာတန်းကို Backend က Gemini ကို ပို့ပြီး scene တစ်ခုချင်း script ရေး၊ မြန်မာအသံပါ ထုတ်ပေးမယ်။ Gemini key (Settings) လိုတယ်။',
           style: const TextStyle(color: DfColors.muted, fontSize: 13),
         ),
+        if (_qs != null) ...[
+          const SizedBox(height: 10),
+          RecapStepBar(current: _qs, done: _qdone, skipped: _qskip, failed: _qfail, running: _running),
+        ],
         const SizedBox(height: 8),
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
@@ -580,6 +661,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
             if (_savedJob.isNotEmpty && _s.ready) OutlinedButton.icon(onPressed: _resume, icon: const Icon(Icons.history, size: 18), label: const Text('နောက်ဆုံး job ကို ပြန်ယူ')),
             if (missing.isNotEmpty) OutlinedButton.icon(onPressed: () => _start(retry: true), icon: const Icon(Icons.refresh, size: 18), label: Text('မရတဲ့ အပိုင်း ${missing.length} ခု ပြန်လုပ်')),
             if (hasAudio) OutlinedButton.icon(onPressed: _saveAudio, icon: const Icon(Icons.graphic_eq, size: 18), label: const Text('အသံကို project ထဲ သိမ်း')),
+            if (_log.isNotEmpty) OutlinedButton.icon(onPressed: _copyLog, icon: const Icon(Icons.copy_rounded, size: 18), label: const Text('Log ကူး')),
             OutlinedButton.icon(onPressed: _testing ? null : _selfTest, icon: const Icon(Icons.fact_check_outlined, size: 18), label: Text(_testing ? 'စစ်နေတယ် …' : 'Self-test')),
           ]),
         if (_msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13))),

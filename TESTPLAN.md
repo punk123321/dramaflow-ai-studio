@@ -64,6 +64,16 @@ h. Listen: numbers under 100 and emoji in the script are read sensibly (the back
 i. Note: time per part, data used, anything that sounds wrong.
 j. Start Auto, then close the screen (or kill the app) while the stage says Gemini/voice. Reopen the same project's Recap page: "နောက်ဆုံး job ကို ပြန်ယူ" appears; tap it: the finished parts come in. (If Colab was restarted meanwhile it says the job is gone: that is expected.)
 
+## 7c. Recap Queue (Home > Tools > Recap Queue) — only after 7b works for ONE episode
+a. Open it: Backend ✓, Gemini key ✓ shown (else it says what is missing).
+b. Pick 2 short episodes (1–2 min videos, one with subtitles, one without), tap "Queue စမယ်": the box warns about Wi-Fi/data.
+c. Each episode shows a row of steps: စာတန်း → Upload → Gemini + အသံ → သိမ်း → အသံ သိမ်း. The running step has a spinner, finished ✓, skipped –.
+d. The episode with subtitles shows "စာတန်း … ရှိပြီးသား" (skipped); the other one runs AssemblyAI.
+e. When done: open each project's Video Recap page: the parts are there. A project that had NO script got a new script and its voice in Audio (stage 3); one that already had a script keeps it (the log says so).
+f. Make one fail on purpose (turn off the Colab cell, or a wrong Gemini model): that episode shows ✗ with the step and the reason, the next one still runs. Tap "မအောင်တာ/ကျန်တာ ပြန်လုပ်" after fixing.
+g. "Log အကုန် ကူး" copies the whole log: paste it to me with any error.
+h. The Auto card (Video/Scene Recap) now also shows the step row and a "Log ကူး" button.
+
 ## 8. Data safety
 35. Backup > Restore on a fresh install keeps projects.
 36. Keys (Gemini, AssemblyAI) are NOT in the backup file.
