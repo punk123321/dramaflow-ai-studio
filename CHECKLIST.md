@@ -662,3 +662,9 @@ Unproven: picture search quality (keywords may find unrelated pictures; the app 
 | Audio panel: "Edge TTS" card (paste the same URL#TOKEN as News Video, voice Thiha / Nilar), per-chunk "Edge TTS" button and "all missing" button; the speed slider is sent as a percentage; the clip is stored like the other TTS clips (label "Edge TTS") | Yes (CI green, run 44908315451) | **No** |
 APK artifact `dramaflow-apk-branch-224`. Not merged to main.
 Unproven: Edge TTS Burmese voices through the unofficial library (Microsoft may block or change it), Colab tunnel with the request, long chunks (up to 1500 characters per chunk). Text of the chunk goes to the user's backend and from there to Microsoft's voice service.
+
+## TE-47: Video Editor tool tabs
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| The editor's tool row (24 tools in one long strip) is split into 4 tabs like a phone video editor: စာ / ပုံ (Text, Arrow, Box, Circle, Spot, Frame, Sticker), Edit (Zoom, Speed, Flip, Freeze, Cut), Effect (Filter, Blur, Censor, Fade in/out, Flash, Tint, Vignette, Bars, Shade), Layer / အသံ (Picture, Sound). The same tools and actions as before; only the grouping changed. No widget test (the editor needs a video player) | see run below | **No** |
+Unproven on a phone: the extra row (about 34 px) in the pinned top part on small screens. Not built: a "+" add button and Canvas / Audio tabs (there is no Canvas feature).

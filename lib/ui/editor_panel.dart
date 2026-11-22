@@ -413,6 +413,16 @@ class _EditorPanelState extends State<EditorPanel> {
     if (pick != null) _quickAdd(TransformTool.motionGraphics, kind: 'sticker', text: pick);
   }
 
+  String _toolGroup = 'text';
+
+  /// Tool tabs, like a phone video editor: one group of tools at a time.
+  static const _toolGroups = <String, String>{
+    'text': 'စာ / ပုံ',
+    'edit': 'Edit',
+    'effect': 'Effect',
+    'layer': 'Layer / အသံ',
+  };
+
   Widget _toolRow() {
     Widget tool(String label, IconData icon, VoidCallback f) => InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -426,37 +436,62 @@ class _EditorPanelState extends State<EditorPanel> {
             ]),
           ),
         );
+    final mg = TransformTool.motionGraphics;
+    final groups = <String, List<Widget>>{
+      'text': [
+        tool('Text', Icons.title, () => _quickAdd(mg, kind: 'label')),
+        tool('Arrow', Icons.arrow_forward, () => _quickAdd(mg, kind: 'arrow')),
+        tool('Box', Icons.crop_square, () => _quickAdd(mg, kind: 'box')),
+        tool('Circle', Icons.circle_outlined, () => _quickAdd(mg, kind: 'circle')),
+        tool('Spot', Icons.highlight_alt, () => _quickAdd(mg, kind: 'spot')),
+        tool('Frame', Icons.filter_frames, _frames),
+        tool('Sticker', Icons.emoji_emotions_outlined, _stickers),
+      ],
+      'edit': [
+        tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
+        tool('Speed', Icons.speed, () => _quickAdd(TransformTool.speedChange)),
+        tool('Flip', Icons.flip, () => _quickAdd(TransformTool.mirrorFlip)),
+        tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
+        tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
+      ],
+      'effect': [
+        tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
+        tool('Blur', Icons.blur_on, () => _quickAdd(TransformTool.blur)),
+        tool('Censor', Icons.visibility_off, () => _quickAdd(mg, kind: 'blurbox')),
+        tool('Fade in', Icons.vertical_align_bottom, () => _quickAdd(mg, kind: 'fadein')),
+        tool('Fade out', Icons.vertical_align_top, () => _quickAdd(mg, kind: 'fadeout')),
+        tool('Flash', Icons.flash_on, () => _quickAdd(mg, kind: 'flash')),
+        tool('Tint', Icons.invert_colors, () => _quickAdd(mg, kind: 'tint')),
+        tool('Vignette', Icons.vignette, () => _quickAdd(mg, kind: 'vignette')),
+        tool('Bars', Icons.movie_outlined, () => _quickAdd(mg, kind: 'bars')),
+        tool('Shade', Icons.gradient, () => _quickAdd(mg, kind: 'shade')),
+      ],
+      'layer': [
+        tool('Picture', Icons.image_outlined, () => _addViaDialog(TransformTool.pictureInPicture)),
+        tool('Sound', Icons.audiotrack, () => _addViaDialog(TransformTool.soundDesign)),
+      ],
+    };
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: SizedBox(
-        height: 62,
-        child: ListView(scrollDirection: Axis.horizontal, children: [
-          tool('Text', Icons.title, () => _quickAdd(TransformTool.motionGraphics, kind: 'label')),
-          tool('Arrow', Icons.arrow_forward, () => _quickAdd(TransformTool.motionGraphics, kind: 'arrow')),
-          tool('Box', Icons.crop_square, () => _quickAdd(TransformTool.motionGraphics, kind: 'box')),
-          tool('Circle', Icons.circle_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'circle')),
-          tool('Spot', Icons.highlight_alt, () => _quickAdd(TransformTool.motionGraphics, kind: 'spot')),
-          tool('Frame', Icons.filter_frames, _frames),
-          tool('Sticker', Icons.emoji_emotions_outlined, _stickers),
-          tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
-          tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
-          tool('Speed', Icons.speed, () => _quickAdd(TransformTool.speedChange)),
-          tool('Censor', Icons.visibility_off, () => _quickAdd(TransformTool.motionGraphics, kind: 'blurbox')),
-          tool('Blur', Icons.blur_on, () => _quickAdd(TransformTool.blur)),
-          tool('Flip', Icons.flip, () => _quickAdd(TransformTool.mirrorFlip)),
-          tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
-          tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
-          tool('Fade in', Icons.vertical_align_bottom, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadein')),
-          tool('Fade out', Icons.vertical_align_top, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadeout')),
-          tool('Flash', Icons.flash_on, () => _quickAdd(TransformTool.motionGraphics, kind: 'flash')),
-          tool('Tint', Icons.invert_colors, () => _quickAdd(TransformTool.motionGraphics, kind: 'tint')),
-          tool('Vignette', Icons.vignette, () => _quickAdd(TransformTool.motionGraphics, kind: 'vignette')),
-          tool('Bars', Icons.movie_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'bars')),
-          tool('Shade', Icons.gradient, () => _quickAdd(TransformTool.motionGraphics, kind: 'shade')),
-          tool('Picture', Icons.image_outlined, () => _addViaDialog(TransformTool.pictureInPicture)),
-          tool('Sound', Icons.audiotrack, () => _addViaDialog(TransformTool.soundDesign)),
-        ]),
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(
+          height: 34,
+          child: ListView(scrollDirection: Axis.horizontal, children: [
+            for (final e in _toolGroups.entries)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(e.value, style: const TextStyle(fontSize: 12.5)),
+                  selected: _toolGroup == e.key,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (_) => setState(() => _toolGroup = e.key),
+                ),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(height: 62, child: ListView(scrollDirection: Axis.horizontal, children: groups[_toolGroup] ?? const [])),
+      ]),
     );
   }
 
