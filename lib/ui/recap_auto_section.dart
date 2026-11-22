@@ -1,0 +1,366 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+
+import '../core/news_video.dart';
+import '../core/recap_auto.dart';
+import '../core/script.dart';
+import '../core/theme.dart';
+import '../data/ai_settings_repo.dart';
+import '../data/audio_clip.dart';
+import '../data/handoff_repo.dart';
+import '../data/news_video_repo.dart';
+import '../platform/audio_channel.dart';
+import '../platform/gemini_files.dart';
+import '../platform/news_video_client.dart';
+import '../platform/recap_client.dart';
+import 'widgets.dart';
+
+/// The "Auto" card of Video Recap and Scene Recap. One tap: the user's own
+/// backend asks Gemini for every part and makes the voice. The parts are saved
+/// like pasted answers, so the screen's own "save as script" button follows.
+class RecapAutoSection extends StatefulWidget {
+  const RecapAutoSection({
+    super.key,
+    required this.projectId,
+    required this.task,
+    required this.mode,
+    required this.videoUri,
+    required this.buildGroups,
+    required this.onTextsSaved,
+  });
+
+  final int projectId;
+  final String task;
+
+  /// "video" (Gemini watches the whole video) or "scenes" (pictures + dialogue).
+  final String mode;
+  final String? videoUri;
+  final Future<List<RecapGroup>> Function(void Function(String) status) buildGroups;
+  final Future<void> Function() onTextsSaved;
+
+  @override
+  State<RecapAutoSection> createState() => _RecapAutoSectionState();
+}
+
+class _RecapAutoSectionState extends State<RecapAutoSection> {
+  final _repo = NewsVideoRepo();
+  final _handoff = HandoffRepo();
+  final _connectC = TextEditingController();
+  final _modelC = TextEditingController(text: defaultTextModel);
+
+  NewsVideoSettings _s = const NewsVideoSettings();
+  String _geminiKey = '';
+  bool _loaded = false;
+  bool _makeVoice = true;
+  String _voice = 'my-MM-ThihaNeural';
+
+  bool _running = false;
+  bool _canceled = false;
+  String _stage = '';
+  int _progress = 0;
+  RecapJob? _result;
+  String? _msg;
+  bool _err = false;
+  RecapClient? _client;
+
+  bool get _video => widget.mode == 'video';
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final s = await _repo.load();
+    final g = await AiSettingsRepo().load();
+    if (!mounted) return;
+    setState(() {
+      _s = s;
+      _geminiKey = g.apiKey.trim();
+      _connectC.text = s.ready ? '${s.url}#${s.token}' : '';
+      _loaded = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _canceled = true;
+    _client?.cancel();
+    _connectC.dispose();
+    _modelC.dispose();
+    super.dispose();
+  }
+
+  void _say(String m, {bool error = false}) {
+    if (!mounted) return;
+    setState(() {
+      _msg = m;
+      _err = error;
+    });
+  }
+
+  Future<void> _saveBackend() async {
+    final c = parseConnect(_connectC.text);
+    if (c == null || c.token.isEmpty) {
+      _say('Backend လိပ်စာ မမှန်ပါ။ "https://….go.altare.global#APP_TOKEN" ပုံစံ တစ်ကြောင်းလုံး ထည့်ပါ။', error: true);
+      return;
+    }
+    final next = _s.copyWith(url: c.url, token: c.token);
+    await _repo.save(next);
+    if (!mounted) return;
+    setState(() => _s = next);
+    _say('သိမ်းပြီး၊ ချိတ်ကြည့်နေတယ် …');
+    final ok = await NewsVideoClient(next).ping();
+    _say(ok ? 'Backend နဲ့ ချိတ်မိပြီ ✓' : 'သိမ်းပြီး၊ ဒါပေမဲ့ Backend မဖြေဘူး (deploy ပြီးလား၊ URL မှန်လား စစ်ပါ)', error: !ok);
+  }
+
+  Future<bool> _confirm() async {
+    final what = _video
+        ? 'ဗီဒီယိုတစ်ခုလုံးကို သင့် Gemini account (Google) ဆီ upload လုပ်မယ်။ Gemini key ကို သင့် Backend ဆီ ပို့မယ်။ '
+            'မူရင်းဗီဒီယိုကို မပြင်ဘူး၊ ဖုန်း cache ထဲ ယာယီကူးပြီး ပြီးရင် ဖျက်မယ်။ (ဗီဒီယိုကြီးရင် data အများကြီး သုံးမယ် — Wi-Fi သုံးပါ)'
+        : 'Scene ပုံတွေ (contact sheet) နဲ့ စာတန်းစာသားကို သင့် Backend နဲ့ Google (Gemini) ဆီ ပို့မယ်။ Gemini key ကိုလည်း Backend ဆီ ပို့မယ်။';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Auto စတင်မလား?'),
+        content: Text(what),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('မလုပ်ဘူး')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('စမယ်')),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _start() async {
+    if (!_s.ready) {
+      _say('Backend လိပ်စာ + token ကို အရင်သိမ်းပါ', error: true);
+      return;
+    }
+    if (_geminiKey.isEmpty) {
+      _say('Gemini API key မထည့်ရသေးဘူး။ Settings မှာ ထည့်ပါ', error: true);
+      return;
+    }
+    if (_video && widget.videoUri == null) {
+      _say('ဗီဒီယို မရွေးရသေးဘူး', error: true);
+      return;
+    }
+    if (!await _confirm() || !mounted) return;
+    final client = RecapClient(_s);
+    _client = client;
+    File? tmp;
+    setState(() {
+      _running = true;
+      _canceled = false;
+      _msg = null;
+      _err = false;
+      _result = null;
+      _progress = 0;
+      _stage = 'ပြင်ဆင်နေတယ်';
+    });
+    try {
+      var fileUri = '';
+      var mime = 'video/mp4';
+      if (_video) {
+        setState(() => _stage = 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
+        tmp = await GeminiFiles.copyToCache(widget.videoUri!);
+        final f = await GeminiFiles.upload(
+          _geminiKey,
+          tmp,
+          onStage: (s, _) {
+            if (mounted) setState(() => _stage = s);
+          },
+          canceled: () => _canceled,
+        );
+        fileUri = f.uri;
+        mime = f.mime;
+        try {
+          tmp.deleteSync();
+          tmp = null;
+        } catch (_) {}
+      }
+      final groups = await widget.buildGroups((s) {
+        if (mounted) setState(() => _stage = s);
+      });
+      if (_canceled) throw const RecapCanceled();
+      if (groups.isEmpty) throw const HttpException('ပို့စရာ အပိုင်း မရှိဘူး');
+      final job = await client.run(
+        recapRequestJson(
+          mode: widget.mode,
+          geminiKey: _geminiKey,
+          model: _modelC.text,
+          voice: _makeVoice ? _voice : '',
+          groups: groups,
+          fileUri: fileUri,
+          fileMime: mime,
+        ),
+        (j) {
+          if (mounted) {
+            setState(() {
+              _stage = j.stage;
+              _progress = j.progress;
+            });
+          }
+        },
+      );
+      for (final p in job.parts) {
+        await _handoff.saveResult(widget.projectId, widget.task, p.n, p.text);
+      }
+      await widget.onTextsSaved();
+      if (!mounted) return;
+      setState(() => _result = job);
+      final w = job.warnings.isEmpty ? '' : '\n⚠ ${job.warnings.join('\n⚠ ')}';
+      _say('အပိုင်း ${job.parts.length} ခု ရပြီး သိမ်းပြီး။ အောက်က "Script အဖြစ် သိမ်း" ကို နှိပ်ပါ၊ ပြီးမှ အသံကို project ထဲ သိမ်းပါ။$w');
+    } on RecapCanceled {
+      _say('ရပ်လိုက်ပြီ (Backend မှာ job က ဆက်လုပ်နေနိုင်တယ်)');
+    } on GeminiUploadException catch (e) {
+      _say(e.message, error: true);
+    } on HttpException catch (e) {
+      _say(e.message, error: true);
+    } catch (e) {
+      _say('$e', error: true);
+    } finally {
+      try {
+        tmp?.deleteSync();
+      } catch (_) {}
+      _client = null;
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  /// Downloads the voice files and stores them as the project's audio, one per
+  /// script chunk. Needs the script to be saved first so chunk and part match.
+  Future<void> _saveAudio() async {
+    final job = _result;
+    if (job == null) return;
+    final script = await _handoff.getDoc(widget.projectId, DocKind.script) ?? '';
+    final chunks = splitScript(script);
+    // The script is made from every saved part, so match against those, then
+    // use the voice only for parts whose text is still what the backend voiced.
+    final texts = await _handoff.results(widget.projectId, widget.task);
+    final keys = matchChunksToParts(chunks, texts);
+    if (keys == null) {
+      _say('Script နဲ့ အသံ အပိုင်း မကိုက်သေးဘူး။ အောက်က "Script အဖြစ် သိမ်း" ကို အရင်နှိပ်ပါ (ပြီးရင် ဒီခလုတ် ပြန်နှိပ်)။', error: true);
+      return;
+    }
+    final client = RecapClient(_s);
+    _client = client;
+    setState(() {
+      _running = true;
+      _canceled = false;
+      _msg = null;
+    });
+    try {
+      final repo = AudioRepo();
+      final old = await repo.forProject(widget.projectId);
+      var done = 0;
+      for (var i = 0; i < keys.length; i++) {
+        if (_canceled) throw const RecapCanceled();
+        final matches = job.parts.where((p) => p.n == keys[i] && p.text.trim() == (texts[keys[i]] ?? '').trim());
+        if (matches.isEmpty || matches.first.audioUrl.isEmpty) continue;
+        final part = matches.first;
+        setState(() => _stage = 'အသံ ဒေါင်းနေတယ် ${i + 1}/${keys.length}');
+        final bytes = await client.downloadAudio(part.audioUrl);
+        final f = await AudioChannel.saveAudioBytes('p${widget.projectId}_c${i + 1}_r${DateTime.now().millisecondsSinceEpoch}', bytes);
+        for (final c in old.where((c) => c.chunkIdx == i)) {
+          if (c.id != null) await repo.delete(c.id!);
+          if (c.ownsFile) {
+            try {
+              await AudioChannel.deleteFile(c.source);
+            } catch (_) {}
+          }
+        }
+        await repo.insert(AudioClip(
+          projectId: widget.projectId,
+          chunkIdx: i,
+          kind: ClipKind.tts,
+          label: 'Edge TTS',
+          source: f.source,
+          durationMs: f.durationMs,
+          sizeBytes: f.sizeBytes,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        ));
+        done++;
+      }
+      _say(done == 0 ? 'ဒီ job ရဲ့ အသံနဲ့ ကိုက်တဲ့ အပိုင်း မရှိဘူး (script ကို ပြင်ထားလား၊ အသံ switch ပိတ်ထားလား)' : 'အသံ $done ခု အဆင့် ၃ (Audio) ထဲ သိမ်းပြီး။');
+    } on RecapCanceled {
+      _say('ရပ်လိုက်ပြီ');
+    } on HttpException catch (e) {
+      _say(e.message, error: true);
+    } catch (e) {
+      _say('$e', error: true);
+    } finally {
+      _client = null;
+      if (mounted) setState(() => _running = false);
+    }
+  }
+
+  void _cancel() {
+    setState(() => _canceled = true);
+    _client?.cancel();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox.shrink();
+    final hasAudio = _result?.parts.any((p) => p.audioUrl.isNotEmpty) ?? false;
+    return DfCard(
+      title: '🤖 Auto (Backend နဲ့ တစ်ချက်တည်း)',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+          _video
+              ? 'ဗီဒီယိုကို သင့် Gemini ဆီ upload လုပ်၊ Backend က အပိုင်းတစ်ခုချင်း ကြည့်ခိုင်းပြီး script ရေး၊ မြန်မာအသံပါ ထုတ်ပေးမယ်။ Gemini key (Settings) လိုတယ်။'
+              : 'Scene ပုံ + စာတန်းကို Backend က Gemini ကို ပို့ပြီး scene တစ်ခုချင်း script ရေး၊ မြန်မာအသံပါ ထုတ်ပေးမယ်။ Gemini key (Settings) လိုတယ်။',
+          style: const TextStyle(color: DfColors.muted, fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          initiallyExpanded: !_s.ready,
+          title: Text('Backend${_s.ready ? ' ✓ ${Uri.tryParse(_s.url)?.host ?? ''}' : ' (မချိတ်ရသေးဘူး)'}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          children: [
+            TextField(
+              controller: _connectC,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: const InputDecoration(labelText: 'URL#TOKEN', hintText: 'https://….go.altare.global#APP_TOKEN'),
+            ),
+            const SizedBox(height: 6),
+            Align(alignment: Alignment.centerLeft, child: OutlinedButton(onPressed: _running ? null : _saveBackend, child: const Text('သိမ်း + စမ်းချိတ်'))),
+            const SizedBox(height: 6),
+            TextField(controller: _modelC, autocorrect: false, decoration: const InputDecoration(labelText: 'Gemini model (စာရေးဖို့)')),
+          ],
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('မြန်မာအသံပါ လုပ် (Edge TTS)'),
+          value: _makeVoice,
+          onChanged: _running ? null : (v) => setState(() => _makeVoice = v),
+        ),
+        if (_makeVoice)
+          DropdownButton<String>(
+            value: _voice,
+            items: [for (final e in recapVoices.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+            onChanged: _running ? null : (v) => setState(() => _voice = v ?? _voice),
+          ),
+        const SizedBox(height: 6),
+        if (_running) ...[
+          LinearProgressIndicator(value: _progress > 0 ? _progress / 100 : null),
+          const SizedBox(height: 4),
+          Text('$_stage${_progress > 0 ? ' · $_progress%' : ''}', style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 4),
+          OutlinedButton(onPressed: _cancel, child: const Text('ရပ်မယ်')),
+        ] else
+          Wrap(spacing: 8, runSpacing: 6, children: [
+            FilledButton.icon(onPressed: _start, icon: const Icon(Icons.auto_awesome, size: 18), label: const Text('Auto လုပ်မယ်')),
+            if (hasAudio) OutlinedButton.icon(onPressed: _saveAudio, icon: const Icon(Icons.graphic_eq, size: 18), label: const Text('အသံကို project ထဲ သိမ်း')),
+          ]),
+        if (_msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13))),
+      ]),
+    );
+  }
+}

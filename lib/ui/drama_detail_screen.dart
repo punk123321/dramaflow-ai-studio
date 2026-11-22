@@ -146,9 +146,10 @@ class _EpisodeTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.only(left: 14),
       decoration: BoxDecoration(
-        color: DfColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DfColors.line),
+        gradient: DfGradients.glass,
+        color: DfColors.surface.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DfColors.glassEdge),
       ),
       child: Row(
         children: [

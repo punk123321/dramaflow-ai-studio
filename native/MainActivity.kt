@@ -6,7 +6,11 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
+import android.media.MediaMuxer
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
@@ -19,6 +23,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -83,6 +88,8 @@ class MainActivity : FlutterActivity() {
         ch.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickVideo" -> startPickVideo(result)
+                    "extractAudio" -> extractAudio(result, call.argument<String>("uri") ?: "")
+                    "copyVideo" -> copyVideo(result, call.argument<String>("uri") ?: "")
                     "shareText" -> {
                         val text = call.argument<String>("text") ?: ""
                         val gemini = call.argument<Boolean>("gemini") ?: true
@@ -159,6 +166,94 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Copies the picked video into the cache so it can be uploaded (the app
+     * cannot read a content:// link as a file). The original is only read.
+     */
+    private fun copyVideo(result: MethodChannel.Result, uri: String) {
+        worker.execute {
+            try {
+                val out = File(cacheDir, "upload_" + System.currentTimeMillis() + ".mp4")
+                val input = contentResolver.openInputStream(Uri.parse(uri))
+                if (input == null) {
+                    runOnUiThread { result.error("copy_failed", "Cannot open the video", null) }
+                } else {
+                    input.use { i -> out.outputStream().use { o -> i.copyTo(o, 1 shl 20) } }
+                    runOnUiThread { result.success(hashMapOf("path" to out.absolutePath, "size" to out.length())) }
+                }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("copy_failed", e.message ?: e.toString(), null) }
+            }
+        }
+    }
+
+    /**
+     * Cuts the sound track out of a video into a small .m4a in the cache (no
+     * re-encoding) so only the sound is uploaded for speech-to-text. If the
+     * sound is not AAC (the .m4a container only takes that) the whole video is
+     * copied instead and "whole" is true. The original is only read.
+     */
+    private fun extractAudio(result: MethodChannel.Result, uri: String) {
+        worker.execute {
+            try {
+                val src = Uri.parse(uri)
+                val out = File(cacheDir, "asr_" + System.currentTimeMillis() + ".m4a")
+                var ok = false
+                val ex = MediaExtractor()
+                try {
+                    ex.setDataSource(this, src, null)
+                    var track = -1
+                    for (i in 0 until ex.trackCount) {
+                        val mime = ex.getTrackFormat(i).getString(MediaFormat.KEY_MIME) ?: ""
+                        if (mime.startsWith("audio/")) { track = i; break }
+                    }
+                    if (track >= 0) {
+                        val fmt = ex.getTrackFormat(track)
+                        if ((fmt.getString(MediaFormat.KEY_MIME) ?: "") == "audio/mp4a-latm") {
+                            ex.selectTrack(track)
+                            val mux = MediaMuxer(out.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                            try {
+                                val dst = mux.addTrack(fmt)
+                                mux.start()
+                                val buf = ByteBuffer.allocate(1 shl 20)
+                                val info = MediaCodec.BufferInfo()
+                                while (true) {
+                                    buf.clear()
+                                    val n = ex.readSampleData(buf, 0)
+                                    if (n < 0) break
+                                    val flags = if ((ex.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0
+                                    info.set(0, n, maxOf(0L, ex.sampleTime), flags)
+                                    mux.writeSampleData(dst, buf, info)
+                                    ex.advance()
+                                }
+                                mux.stop()
+                                ok = true
+                            } finally {
+                                try { mux.release() } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    ok = false
+                } finally {
+                    ex.release()
+                }
+                if (ok) {
+                    runOnUiThread { result.success(mapOf("path" to out.absolutePath, "whole" to false)) }
+                    return@execute
+                }
+                out.delete()
+                val whole = File(cacheDir, "asr_" + System.currentTimeMillis() + ".bin")
+                contentResolver.openInputStream(src)?.use { input ->
+                    FileOutputStream(whole).use { o -> input.copyTo(o) }
+                } ?: throw IllegalStateException("cannot open the video")
+                runOnUiThread { result.success(mapOf("path" to whole.absolutePath, "whole" to true)) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("extract_failed", e.message ?: e.toString(), null) }
+            }
+        }
     }
 
     private fun claim(code: Int, result: MethodChannel.Result): Boolean {

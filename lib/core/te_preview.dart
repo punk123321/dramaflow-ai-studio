@@ -147,15 +147,20 @@ List<String> previewBadges(List<TransformOp> ops, int posMs) {
 
 String _fmt(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
 
-/// 4x5 colour matrix (Flutter ColorFilter.matrix order) for brightness and
-/// contrast. Contrast scales around mid-grey; brightness adds.
+/// 4x5 colour matrix (Flutter ColorFilter.matrix order) for brightness,
+/// contrast and colour strength. Colour strength mixes each colour with its
+/// grey value (0 = grey, 1 = as shot, 2 = twice as strong); contrast scales
+/// around mid-grey; brightness adds.
 List<double> lookMatrix(LookAdjust l) {
   final m = 1 + l.contrast;
   final o = 255 * (0.5 * (1 - m) + l.brightness);
+  final s = 1 + l.saturation;
+  const lr = 0.2126, lg = 0.7152, lb = 0.0722;
+  final a = (1 - s) * lr, b = (1 - s) * lg, c = (1 - s) * lb;
   return [
-    m, 0, 0, 0, o, //
-    0, m, 0, 0, o, //
-    0, 0, m, 0, o, //
+    m * (a + s), m * b, m * c, 0, o, //
+    m * a, m * (b + s), m * c, 0, o, //
+    m * a, m * b, m * (c + s), 0, o, //
     0, 0, 0, 1, 0, //
   ];
 }

@@ -175,9 +175,10 @@ void main() {
   });
 
   group('prompts', () {
-    test('there are eleven templates with unique keys', () {
-      expect(templates.length, 11);
-      expect(templates.map((t) => t.key).toSet().length, 11);
+    test('there are twelve templates with unique keys', () {
+      expect(templates.length, 12);
+      expect(templateByKey('hook').kind, TaskKind.srtToText);
+      expect(templates.map((t) => t.key).toSet().length, 12);
     });
 
     test('SRT prompt contains chunk numbering, rules, payload and notes', () {

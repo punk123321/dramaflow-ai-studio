@@ -26,6 +26,7 @@ import '../platform/audio_channel.dart';
 import '../state/project_store.dart';
 import 'subtitle_studio_screen.dart';
 import 'te_dialogs.dart';
+import 'te_fullscreen.dart';
 import 'te_inline_editor.dart';
 import 'te_ops_section.dart';
 import 'te_shapes.dart';
@@ -36,9 +37,14 @@ import 'widgets.dart';
 /// This only writes an edit description. The original video is never changed;
 /// the next stage (Phase 7) renders the description into a new file.
 class EditorPanel extends StatefulWidget {
-  const EditorPanel({super.key, required this.project});
+  const EditorPanel({super.key, required this.project, this.pinned = false});
 
   final Project project;
+
+  /// True on the Video Editor page: preview, play bar and tools stay at the
+  /// top and only the part under them scrolls (like a phone video editor).
+  /// False in the workflow list, where the whole panel scrolls with the page.
+  final bool pinned;
 
   @override
   State<EditorPanel> createState() => _EditorPanelState();
@@ -407,6 +413,16 @@ class _EditorPanelState extends State<EditorPanel> {
     if (pick != null) _quickAdd(TransformTool.motionGraphics, kind: 'sticker', text: pick);
   }
 
+  String _toolGroup = 'text';
+
+  /// Tool tabs, like a phone video editor: one group of tools at a time.
+  static const _toolGroups = <String, String>{
+    'text': 'စာ / ပုံ',
+    'edit': 'Edit',
+    'effect': 'Effect',
+    'layer': 'Layer / အသံ',
+  };
+
   Widget _toolRow() {
     Widget tool(String label, IconData icon, VoidCallback f) => InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -420,37 +436,62 @@ class _EditorPanelState extends State<EditorPanel> {
             ]),
           ),
         );
+    final mg = TransformTool.motionGraphics;
+    final groups = <String, List<Widget>>{
+      'text': [
+        tool('Text', Icons.title, () => _quickAdd(mg, kind: 'label')),
+        tool('Arrow', Icons.arrow_forward, () => _quickAdd(mg, kind: 'arrow')),
+        tool('Box', Icons.crop_square, () => _quickAdd(mg, kind: 'box')),
+        tool('Circle', Icons.circle_outlined, () => _quickAdd(mg, kind: 'circle')),
+        tool('Spot', Icons.highlight_alt, () => _quickAdd(mg, kind: 'spot')),
+        tool('Frame', Icons.filter_frames, _frames),
+        tool('Sticker', Icons.emoji_emotions_outlined, _stickers),
+      ],
+      'edit': [
+        tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
+        tool('Speed', Icons.speed, () => _quickAdd(TransformTool.speedChange)),
+        tool('Flip', Icons.flip, () => _quickAdd(TransformTool.mirrorFlip)),
+        tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
+        tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
+      ],
+      'effect': [
+        tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
+        tool('Blur', Icons.blur_on, () => _quickAdd(TransformTool.blur)),
+        tool('Censor', Icons.visibility_off, () => _quickAdd(mg, kind: 'blurbox')),
+        tool('Fade in', Icons.vertical_align_bottom, () => _quickAdd(mg, kind: 'fadein')),
+        tool('Fade out', Icons.vertical_align_top, () => _quickAdd(mg, kind: 'fadeout')),
+        tool('Flash', Icons.flash_on, () => _quickAdd(mg, kind: 'flash')),
+        tool('Tint', Icons.invert_colors, () => _quickAdd(mg, kind: 'tint')),
+        tool('Vignette', Icons.vignette, () => _quickAdd(mg, kind: 'vignette')),
+        tool('Bars', Icons.movie_outlined, () => _quickAdd(mg, kind: 'bars')),
+        tool('Shade', Icons.gradient, () => _quickAdd(mg, kind: 'shade')),
+      ],
+      'layer': [
+        tool('Picture', Icons.image_outlined, () => _addViaDialog(TransformTool.pictureInPicture)),
+        tool('Sound', Icons.audiotrack, () => _addViaDialog(TransformTool.soundDesign)),
+      ],
+    };
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: SizedBox(
-        height: 62,
-        child: ListView(scrollDirection: Axis.horizontal, children: [
-          tool('Text', Icons.title, () => _quickAdd(TransformTool.motionGraphics, kind: 'label')),
-          tool('Arrow', Icons.arrow_forward, () => _quickAdd(TransformTool.motionGraphics, kind: 'arrow')),
-          tool('Box', Icons.crop_square, () => _quickAdd(TransformTool.motionGraphics, kind: 'box')),
-          tool('Circle', Icons.circle_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'circle')),
-          tool('Spot', Icons.highlight_alt, () => _quickAdd(TransformTool.motionGraphics, kind: 'spot')),
-          tool('Frame', Icons.filter_frames, _frames),
-          tool('Sticker', Icons.emoji_emotions_outlined, _stickers),
-          tool('Zoom', Icons.zoom_in, () => _quickAdd(TransformTool.cropReframe)),
-          tool('Filter', Icons.brightness_6, () => _quickAdd(TransformTool.colorGrade)),
-          tool('Speed', Icons.speed, () => _quickAdd(TransformTool.speedChange)),
-          tool('Censor', Icons.visibility_off, () => _quickAdd(TransformTool.motionGraphics, kind: 'blurbox')),
-          tool('Blur', Icons.blur_on, () => _quickAdd(TransformTool.blur)),
-          tool('Flip', Icons.flip, () => _quickAdd(TransformTool.mirrorFlip)),
-          tool('Freeze', Icons.pause_circle_outline, () => _quickAdd(TransformTool.freezeFrame)),
-          tool('Cut', Icons.content_cut, () => _quickAdd(TransformTool.smartCut)),
-          tool('Fade in', Icons.vertical_align_bottom, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadein')),
-          tool('Fade out', Icons.vertical_align_top, () => _quickAdd(TransformTool.motionGraphics, kind: 'fadeout')),
-          tool('Flash', Icons.flash_on, () => _quickAdd(TransformTool.motionGraphics, kind: 'flash')),
-          tool('Tint', Icons.invert_colors, () => _quickAdd(TransformTool.motionGraphics, kind: 'tint')),
-          tool('Vignette', Icons.vignette, () => _quickAdd(TransformTool.motionGraphics, kind: 'vignette')),
-          tool('Bars', Icons.movie_outlined, () => _quickAdd(TransformTool.motionGraphics, kind: 'bars')),
-          tool('Shade', Icons.gradient, () => _quickAdd(TransformTool.motionGraphics, kind: 'shade')),
-          tool('Picture', Icons.image_outlined, () => _addViaDialog(TransformTool.pictureInPicture)),
-          tool('Sound', Icons.audiotrack, () => _addViaDialog(TransformTool.soundDesign)),
-        ]),
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(
+          height: 34,
+          child: ListView(scrollDirection: Axis.horizontal, children: [
+            for (final e in _toolGroups.entries)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(e.value, style: const TextStyle(fontSize: 12.5)),
+                  selected: _toolGroup == e.key,
+                  visualDensity: VisualDensity.compact,
+                  onSelected: (_) => setState(() => _toolGroup = e.key),
+                ),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(height: 62, child: ListView(scrollDirection: Axis.horizontal, children: groups[_toolGroup] ?? const [])),
+      ]),
     );
   }
 
@@ -462,20 +503,46 @@ class _EditorPanelState extends State<EditorPanel> {
       return '${m.toString().padLeft(2, '0')}:${(s - m * 60).toStringAsFixed(1).padLeft(4, '0')}';
     }
 
-    return Row(children: [
-      IconButton(tooltip: 'နောက်ပြန်', onPressed: _undo.isEmpty ? null : _undoOp, icon: const Icon(Icons.undo)),
-      IconButton(tooltip: 'ရှေ့ပြန်', onPressed: _redo.isEmpty ? null : _redoOp, icon: const Icon(Icons.redo)),
-      Expanded(
-        child: Center(
-          child: IconButton.filled(
-            iconSize: 28,
-            onPressed: _togglePlay,
-            icon: Icon(c != null && c.value.isPlaying ? Icons.pause : Icons.play_arrow),
-          ),
+    // Jump to the start of the next / previous effect (or the ends of the video).
+    final marks = <int>{0, if (dur > 0) dur, for (final o in _plan.ops) o.startMs}.toList()..sort();
+    void jump(bool next) {
+      if (next) {
+        final t = marks.where((m) => m > _posMs + 300).firstOrNull;
+        _seek(t ?? (dur > 0 ? dur : _posMs));
+      } else {
+        final t = marks.where((m) => m < _posMs - 300).lastOrNull;
+        _seek(t ?? 0);
+      }
+    }
+
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Row(children: [
+        IconButton(tooltip: 'နောက်ပြန်', onPressed: _undo.isEmpty ? null : _undoOp, icon: const Icon(Icons.undo)),
+        IconButton(tooltip: 'ရှေ့ပြန်', onPressed: _redo.isEmpty ? null : _redoOp, icon: const Icon(Icons.redo)),
+        Expanded(
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            IconButton.filledTonal(tooltip: 'ရှေ့အဆင့်', onPressed: () => jump(false), icon: const Icon(Icons.skip_previous_rounded)),
+            const SizedBox(width: 6),
+            IconButton.filled(
+              iconSize: 30,
+              onPressed: _togglePlay,
+              icon: Icon(c != null && c.value.isPlaying ? Icons.pause : Icons.play_arrow),
+            ),
+            const SizedBox(width: 6),
+            IconButton.filledTonal(tooltip: 'နောက်အဆင့်', onPressed: () => jump(true), icon: const Icon(Icons.skip_next_rounded)),
+          ]),
         ),
-      ),
-      Text('${clock(pos)} / ${clock(dur)}', style: const TextStyle(fontSize: 12.5, color: DfColors.muted)),
-      const SizedBox(width: 4),
+        IconButton(
+          tooltip: 'အပြည့်ကြည့်',
+          icon: const Icon(Icons.fullscreen_rounded),
+          onPressed: c == null
+              ? null
+              : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => TeFullscreenPage(controller: c, ops: _plan.ops, durMs: dur),
+                  )),
+        ),
+      ]),
+      Text('${clock(pos)} / ${clock(dur)}', style: const TextStyle(fontSize: 12, color: DfColors.muted)),
     ]);
   }
 
@@ -796,9 +863,7 @@ class _EditorPanelState extends State<EditorPanel> {
     final issues = checkTimeline(_tl, sourceMs: _sourceMs);
     final remapped = remapSubtitles(_subs, _tl.pieces, offsetMs: _tl.subtitleOffsetMs);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    final children = <Widget>[
         const InfoHint(
           'မူရင်းဗီဒီယိုကို မပြင်ပါဘူး။ ဒီမှာ ရွေးထားတာတွေက "ဘယ်လိုထုတ်မလဲ" ဆိုတဲ့ စာရင်းပဲ။ တကယ်ထုတ်တာ အဆင့် ၅ (Render) မှာပါ။ '
           'Preview ကို လိုတဲ့နေရာ ရွှေ့ပြီး effect (ဖြတ်၊ zoom၊ freeze၊ စာသား၊ အသံ …) ထည့်၊ ချက်ချင်းကြည့်၊ ပြင်လို့ရတယ်။',
@@ -817,6 +882,7 @@ class _EditorPanelState extends State<EditorPanel> {
           ),
         _preview(),
         _toolRow(),
+        const _PinBreak(),
         TeTimeline(
           durMs: (_vc?.value.duration.inMilliseconds ?? 0) > 0 ? _vc!.value.duration.inMilliseconds : _sourceMs,
           posMs: _posMs,
@@ -827,6 +893,7 @@ class _EditorPanelState extends State<EditorPanel> {
           selectedId: _selId,
           onSeek: _seek,
           onSelect: (id) => setState(() => _selId = id),
+          onResize: (o, s, e, save) => _changeOp(o.copyWith(startMs: s, endMs: e), save),
         ),
         if (_selected case final o?)
           TeInlineEditor(
@@ -961,7 +1028,6 @@ class _EditorPanelState extends State<EditorPanel> {
         OutlinedButton(onPressed: () => _editCorner(null), child: const Text('+ စာတမ်းထည့်')),
         for (var i = 0; i < _tl.corners.length; i++)
           Card(
-            color: DfColors.surface,
             margin: const EdgeInsets.only(top: 6),
             child: ListTile(
               dense: true,
@@ -997,9 +1063,34 @@ class _EditorPanelState extends State<EditorPanel> {
             ),
         const SizedBox(height: 10),
         FilledButton(onPressed: _markDone, child: const Text('Editor ပြီးပြီ')),
+    ];
+    if (!widget.pinned) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final w in children) if (w is! _PinBreak) w]);
+    }
+    // Pinned: the hint and the messages go below the break, the preview, play
+    // bar and tools stay on top.
+    final at = children.indexWhere((w) => w is _PinBreak);
+    final head = children.sublist(0, at);
+    final hint = head.take(2).toList();
+    final top = head.skip(2).toList();
+    final rest = children.sublist(at + 1);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...top,
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 28),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [...rest, ...hint]),
+          ),
+        ),
       ],
     );
   }
+
+  Widget _stageBox(Widget stage) => widget.pinned
+      ? Center(child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.34), child: stage))
+      : stage;
 
   Widget _title(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
@@ -1048,7 +1139,7 @@ class _EditorPanelState extends State<EditorPanel> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        ClipRRect(
+        _stageBox(ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: AspectRatio(
             aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
@@ -1115,9 +1206,9 @@ class _EditorPanelState extends State<EditorPanel> {
               );
             }),
           ),
-        ),
+        )),
         _transport(pos, dur),
-        const Padding(
+        if (!widget.pinned) const Padding(
           padding: EdgeInsets.only(top: 4),
           child: Text(
             'Preview က နီးစပ်တဲ့ပုံ သက်သက် — တကယ့်ရလဒ်ကို Render မှာ ထုတ်မယ်။ Effect ကို ရွေးရင် အောက်မှာ တန်ဖိုးညှိလို့ရတယ်၊ Zoom ကို preview ပေါ်မှာ ညှပ်ချဲ့/ဆွဲရွှေ့၊ စာသား/မြား/ပုံကို ဆွဲရွှေ့။ အစိမ်း = ခွင့်ပြုပြီး၊ လိမ္မော် = စောင့်ဆိုင်း။',
@@ -1287,7 +1378,7 @@ class _EditorPanelState extends State<EditorPanel> {
     final p = _tl.pieces[i];
     final playing = _playingPiece == i;
     return Card(
-      color: playing ? DfColors.accent.withValues(alpha: 0.12) : DfColors.surface,
+      color: playing ? DfColors.accent.withValues(alpha: 0.18) : null,
       margin: const EdgeInsets.only(top: 6),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
@@ -1319,7 +1410,6 @@ class _EditorPanelState extends State<EditorPanel> {
   Widget _voiceRow(int i) {
     final v = _tl.voices[i];
     return Card(
-      color: DfColors.surface,
       margin: const EdgeInsets.only(top: 6),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 6, 4, 6),
@@ -1481,4 +1571,12 @@ class _CornerDialogState extends State<_CornerDialog> {
       ],
     );
   }
+}
+
+/// Marks where the pinned part of the editor ends (see [EditorPanel.pinned]).
+class _PinBreak extends StatelessWidget {
+  const _PinBreak();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

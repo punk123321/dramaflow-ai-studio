@@ -49,37 +49,43 @@ class CropFrame {
   int get hashCode => Object.hash(zoom, cx, cy);
 }
 
-/// Brightness and contrast of one video piece, each -0.6 to 0.6 (0 = as
-/// shot). Only changes how the picture looks; the original is never changed.
+/// Brightness, contrast and colour strength of one video piece. Brightness and
+/// contrast are -0.6 to 0.6 (0 = as shot); [saturation] is -1 (black and white)
+/// to 1 (twice as colourful), 0 = as shot. Only changes how the picture looks;
+/// the original is never changed.
 class LookAdjust {
-  const LookAdjust(this.brightness, this.contrast);
+  const LookAdjust(this.brightness, this.contrast, [this.saturation = 0]);
 
   static const limit = 0.6;
+  static const satLimit = 1.0;
 
   final double brightness;
   final double contrast;
+  final double saturation;
 
-  bool get isNeutral => brightness == 0 && contrast == 0;
+  bool get isNeutral => brightness == 0 && contrast == 0 && saturation == 0;
 
   LookAdjust get fitted => LookAdjust(
         brightness.isNaN ? 0 : brightness.clamp(-limit, limit).toDouble(),
         contrast.isNaN ? 0 : contrast.clamp(-limit, limit).toDouble(),
+        saturation.isNaN ? 0 : saturation.clamp(-satLimit, satLimit).toDouble(),
       );
 
-  List<double> toJson() => [brightness, contrast];
+  /// `[b, c]`, or `[b, c, s]` when the colour strength is changed.
+  List<double> toJson() => saturation == 0 ? [brightness, contrast] : [brightness, contrast, saturation];
 
   static LookAdjust? fromJson(Object? v) {
-    if (v is! List || v.length != 2 || v.any((e) => e is! num)) return null;
-    final l = LookAdjust((v[0] as num).toDouble(), (v[1] as num).toDouble()).fitted;
+    if (v is! List || (v.length != 2 && v.length != 3) || v.any((e) => e is! num)) return null;
+    final l = LookAdjust((v[0] as num).toDouble(), (v[1] as num).toDouble(), v.length == 3 ? (v[2] as num).toDouble() : 0).fitted;
     return l.isNeutral ? null : l;
   }
 
   @override
   bool operator ==(Object other) =>
-      other is LookAdjust && other.brightness == brightness && other.contrast == contrast;
+      other is LookAdjust && other.brightness == brightness && other.contrast == contrast && other.saturation == saturation;
 
   @override
-  int get hashCode => Object.hash(brightness, contrast);
+  int get hashCode => Object.hash(brightness, contrast, saturation);
 }
 
 /// Blur strength limits (shared by the operation check and the saved timeline).

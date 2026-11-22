@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/recap_auto.dart';
 import '../core/scenes.dart';
 import '../core/segments.dart';
 import '../core/srt.dart';
@@ -15,6 +16,7 @@ import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../data/segment_repo.dart';
 import '../platform/scene_channel.dart';
+import 'recap_auto_section.dart';
 import 'widgets.dart';
 
 /// Scene Recap: the phone finds the scenes and makes a numbered contact sheet;
@@ -199,6 +201,27 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
     }
   }
 
+  /// Contact sheets for every group, as base64 JPEG, for the automatic route.
+  Future<List<RecapGroup>> _autoGroups(void Function(String) status) async {
+    final p = widget.project;
+    final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final sheets = <int, String>{};
+    for (final g in sheetGroups(_scenes.length)) {
+      status('ပုံတစ်ချပ် (scene ${g.$1}–${g.$2}) လုပ်နေတယ်');
+      final r = await SceneChannel.contactSheet(p.sourceVideoUri!, _scenes.sublist(g.$1 - 1, g.$2), g.$1, 'scenes_${_pid}_${g.$1}_$stamp');
+      sheets[g.$1] = base64Encode(await File(r.path).readAsBytes());
+      if (mounted) setState(() => _sheets[g.$1] = r);
+    }
+    return sceneRecapGroups(
+      dramaTitle: p.dramaTitle,
+      episode: p.episode,
+      scenes: _scenes,
+      dialogue: _dialogue,
+      notes: _notes.text,
+      sheets: sheets,
+    );
+  }
+
   Future<void> _copyOnly((int, int) g) async {
     await Clipboard.setData(ClipboardData(text: _prompt(g.$1, g.$2)));
     _say('Prompt ကူးပြီး။');
@@ -313,7 +336,18 @@ class _SceneRecapScreenState extends State<SceneRecapScreen> {
                 subtitle: Text(_dialogue[i].isEmpty ? '(စာတန်း မရှိ)' : _dialogue[i], maxLines: 2, overflow: TextOverflow.ellipsis),
                 trailing: i == 0 ? null : TextButton(onPressed: () => _merge(i), child: const Text('ပေါင်း')),
               ),
-            const SectionTitle('၃။ Gemini ကို ပို့'),
+            RecapAutoSection(
+              projectId: _pid,
+              task: _task,
+              mode: 'scenes',
+              videoUri: widget.project.sourceVideoUri,
+              buildGroups: _autoGroups,
+              onTextsSaved: () async {
+                final r = await _repo.results(_pid, _task);
+                if (mounted) setState(() => _texts = r);
+              },
+            ),
+            const SectionTitle('၃။ Gemini ကို ပို့ (လက်နဲ့)'),
             const InfoHint('အုပ်စုတစ်ခုချင်း (scene ၁၂ ခုစီ) ပို့ပါ။ ပုံနဲ့ prompt ကို Gemini ဆီ တစ်ခါတည်း ပို့မယ်၊ prompt ကိုလည်း ကူးထားမယ်။'),
             for (final g in groups) ...[
               const SizedBox(height: 8),

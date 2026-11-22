@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/gemini_tts.dart';
+import '../core/news_video.dart';
+import '../core/recap_auto.dart' show recapVoices;
 import '../core/script.dart';
 import '../core/segments.dart';
 import '../core/stage.dart';
@@ -12,9 +15,12 @@ import '../core/theme.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
+import '../data/news_video_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
 import '../platform/gemini_tts_client.dart';
+import '../platform/news_video_client.dart';
+import '../platform/recap_client.dart';
 import 'gemini_panel.dart';
 import '../state/project_store.dart';
 
@@ -37,6 +43,10 @@ class _AudioPanelState extends State<AudioPanel> {
   GeminiTtsSettings _ai = const GeminiTtsSettings();
   final _keyC = TextEditingController();
   final _modelC = TextEditingController();
+  final _beRepo = NewsVideoRepo();
+  final _beC = TextEditingController();
+  NewsVideoSettings _be = const NewsVideoSettings();
+  String _edgeVoice = 'my-MM-ThihaNeural';
 
   bool _loading = true;
   TtsStatus? _tts;
@@ -78,6 +88,7 @@ class _AudioPanelState extends State<AudioPanel> {
   void dispose() {
     _keyC.dispose();
     _modelC.dispose();
+    _beC.dispose();
     _sub?.cancel();
     AudioChannel.stop().catchError((_) {});
     super.dispose();
@@ -119,6 +130,8 @@ class _AudioPanelState extends State<AudioPanel> {
       _ai = await _aiRepo.load();
       _keyC.text = _ai.apiKey;
       _modelC.text = _ai.model;
+      _be = await _beRepo.load();
+      _beC.text = _be.ready ? '${_be.url}#${_be.token}' : '';
     } catch (e) {
       _say('ဖတ်လို့မရပါ: $e', error: true);
     }
@@ -347,6 +360,82 @@ class _AudioPanelState extends State<AudioPanel> {
     );
   }
 
+  /// Narration from the user's own backend (Edge TTS). Only runs when tapped;
+  /// the chunk's text goes to that backend and from there to Microsoft's voice service.
+  Future<void> _makeEdgeTts(int i, String text) async {
+    setState(() {
+      _busy = i;
+      _msg = null;
+    });
+    try {
+      final wav = await RecapClient(_be).speak(text, _edgeVoice, ((_rate - 1) * 100).round());
+      final f = await AudioChannel.saveAudioBytes('p${_pid}_c${i + 1}_e${DateTime.now().millisecondsSinceEpoch}', wav);
+      await _storeClip(i, ClipKind.tts, f, 'Edge TTS');
+      _say('Chunk ${i + 1} Edge TTS အသံ ထုတ်ပြီး (${formatTime(f.durationMs)})');
+    } catch (e) {
+      _say(e is HttpException ? e.message : _explain(e), error: true);
+    }
+    if (mounted) setState(() => _busy = null);
+  }
+
+  Future<void> _edgeAll(List<String> chunks) async {
+    for (var i = 0; i < chunks.length; i++) {
+      if (!mounted) return;
+      if (_clipOf(i) != null || chunks[i].isEmpty) continue;
+      await _makeEdgeTts(i, chunks[i]);
+      if (_msgError) return;
+    }
+  }
+
+  Future<void> _saveBackend() async {
+    final c = parseConnect(_beC.text);
+    if (c == null || c.token.isEmpty) {
+      _say('Backend လိပ်စာ မမှန်ပါ။ "https://….trycloudflare.com#TOKEN" ပုံစံ တစ်ကြောင်းလုံး ထည့်ပါ။', error: true);
+      return;
+    }
+    final next = _be.copyWith(url: c.url, token: c.token);
+    await _beRepo.save(next);
+    if (!mounted) return;
+    setState(() => _be = next);
+    final ok = await NewsVideoClient(next).ping();
+    _say(ok ? 'Backend နဲ့ ချိတ်မိပြီ ✓' : 'သိမ်းပြီး၊ ဒါပေမဲ့ Backend မဖြေဘူး (Colab/Altare run နေလား စစ်ပါ)', error: !ok);
+  }
+
+  Widget _edgeSettings() {
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Text('Edge TTS (သင့် Backend နဲ့)${_be.ready ? ' ✓' : ''}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+      subtitle: const Text('မြန်မာအသံ သီဟ/နီလာ၊ Key မလို', style: TextStyle(fontSize: 12, color: DfColors.muted)),
+      children: [
+        TextField(
+          controller: _beC,
+          autocorrect: false,
+          enableSuggestions: false,
+          decoration: const InputDecoration(labelText: 'Backend: URL#TOKEN', hintText: 'https://….trycloudflare.com#TOKEN'),
+        ),
+        const SizedBox(height: 6),
+        Align(alignment: Alignment.centerLeft, child: OutlinedButton(onPressed: _saveBackend, child: const Text('သိမ်း + စမ်းချိတ်'))),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: ValueKey('ev$_edgeVoice'),
+          initialValue: _edgeVoice,
+          decoration: const InputDecoration(labelText: 'အသံ'),
+          items: [for (final e in recapVoices.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+          onChanged: (v) => setState(() => _edgeVoice = v ?? _edgeVoice),
+        ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6, bottom: 8),
+          child: Text(
+            'သတိ: Edge TTS နှိပ်တဲ့အခါ အဲဒီ chunk ရဲ့ စာသားကို သင့် Backend ဆီ internet နဲ့ ပို့ပြီး Backend က Microsoft ရဲ့ အသံ service ကို ခေါ်ပါတယ်။ '
+            'ဒါက တရားဝင် API key နဲ့ မဟုတ်တဲ့ နည်းမို့ Microsoft က ရပ်/ပြောင်းရင် အလုပ်မလုပ်တော့နိုင်တယ်။ အမြန်နှုန်းက အပေါ်က အမြန်နှုန်း slider ကို သုံးတယ်။ '
+            'ဒါကို အစစ်တကယ် မစမ်းရသေးလို့ error ပေါ်ရင် စာသားကို ပြောပြပါ။',
+            style: TextStyle(fontSize: 11.5, color: DfColors.muted),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _ttsAll(List<String> chunks) async {
     for (var i = 0; i < chunks.length; i++) {
       if (!mounted) return;
@@ -507,6 +596,7 @@ class _AudioPanelState extends State<AudioPanel> {
           ),
           const SizedBox(height: 14),
           _aiSettings(),
+          _edgeSettings(),
           _section('၃။ Chunk ${chunks.length} ခု · အသံ $haveClips/${chunks.length}${totalMs > 0 ? ' · ${formatTime(totalMs)}' : ''}'),
           if (_tts?.burmese == true && _script.trim().isNotEmpty)
             Padding(
@@ -524,6 +614,15 @@ class _AudioPanelState extends State<AudioPanel> {
                 onPressed: busyAny ? null : () => _apiAll(chunks),
                 icon: const Icon(Icons.cloud_outlined, size: 18),
                 label: const Text('မရှိသေးတာ အားလုံး Gemini အသံ ထုတ်'),
+              ),
+            ),
+          if (_be.ready && _script.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FilledButton.tonalIcon(
+                onPressed: busyAny ? null : () => _edgeAll(chunks),
+                icon: const Icon(Icons.graphic_eq, size: 18),
+                label: const Text('မရှိသေးတာ အားလုံး Edge TTS ထုတ်'),
               ),
             ),
           for (var i = 0; i < chunks.length; i++) _chunkCard(i, chunks[i]),
@@ -597,6 +696,11 @@ class _AudioPanelState extends State<AudioPanel> {
           Wrap(spacing: 4, runSpacing: 2, children: [
             if (canTts)
               TextButton(onPressed: (busyThis || otherBusy || recordingThis) ? null : () => _makeTts(i, text), child: Text(clip?.kind == ClipKind.tts ? 'TTS ပြန်ထုတ်' : 'TTS ထုတ်')),
+            if (_be.ready && text.isNotEmpty)
+              TextButton(
+                onPressed: (busyThis || otherBusy || recordingThis) ? null : () => _makeEdgeTts(i, text),
+                child: Text(clip?.label == 'Edge TTS' ? 'Edge ပြန်ထုတ်' : 'Edge TTS'),
+              ),
             if (_ai.ready && text.isNotEmpty)
               TextButton(
                 onPressed: (busyThis || otherBusy || recordingThis) ? null : () => _makeApiTts(i, text),

@@ -88,10 +88,11 @@ class _WorkflowScreenState extends State<WorkflowScreen> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: DfColors.surface.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: open ? c : c.withValues(alpha: 0.4), width: open ? 2 : 1.5),
-          boxShadow: open ? [BoxShadow(color: c.withValues(alpha: 0.3), blurRadius: 18)] : null,
+          gradient: DfGradients.glass,
+          color: DfColors.surface.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: open ? c : DfColors.glassEdge, width: open ? 1.6 : 1),
+          boxShadow: [BoxShadow(color: open ? c.withValues(alpha: 0.3) : const Color(0x33000000), blurRadius: open ? 20 : 14, offset: const Offset(0, 6))],
         ),
         child: Column(
           children: [

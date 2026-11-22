@@ -168,9 +168,9 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
           ),
         ];
       case TransformTool.colorGrade:
-        Widget preset(String label, double b, double c) => ActionChip(
+        Widget preset(String label, double b, double c, [double s = 0]) => ActionChip(
               label: Text(label, style: const TextStyle(fontSize: 12)),
-              onPressed: () => widget.onChange(_op.copyWith(params: {..._op.params, 'brightness': b, 'contrast': c}), true),
+              onPressed: () => widget.onChange(_op.copyWith(params: {..._op.params, 'brightness': b, 'contrast': c, 'saturation': s}), true),
             );
         return [
           Wrap(spacing: 6, runSpacing: 2, children: [
@@ -178,9 +178,13 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
             preset('လင်း', 0.2, 0.0),
             preset('Contrast မြင့်', 0.0, 0.35),
             preset('ပျော့', 0.05, -0.25),
+            preset('B&W', 0.0, 0.1, -1),
+            preset('အရောင်ထင်', 0.0, 0.1, 0.5),
+            preset('အရောင်မှိန်', 0.0, 0.0, -0.5),
           ]),
           _slider('အလင်း', 'brightness', 0.15, -0.6, 0.6),
           _slider('Contrast', 'contrast', 0.0, -0.6, 0.6),
+          _slider('အရောင်အား (−1 = B&W)', 'saturation', 0.0, -1.0, 1.0),
         ];
       case TransformTool.speedChange:
         Widget sp(String label, double v) => ChoiceChip(

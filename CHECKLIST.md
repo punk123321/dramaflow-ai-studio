@@ -601,3 +601,71 @@ Unproven on a phone: how the glows, glass blur and nav pill look and perform on 
 | Video Index, Recap Studio, TTS / MP3 and Render Center now open as their own full page (like Subtitle Studio) instead of jumping to the Workflow tab; the page shows the same panel as the Workflow tab, the project header, and a "stage done" switch | Yes (CI green, run 44727168604) | **No** |
 | Home Studio grid now has 6 tiles: Video Index, Recap Studio, Scene Studio, TTS / MP3, Subtitle Studio, Video Editor; Render Center is the wide tile; step numbers removed | Yes (CI green, run 44727168604) | **No** |
 The Workflow tab still exists and shows all stages in order. Scene Studio is the old Scene Recap screen, only renamed and moved up to the grid. Unproven on a phone: that every panel behaves the same on its own page as inside the Workflow tab. Not merged to main. APK artifact `dramaflow-apk-branch-205`.
+
+## TE-40: colour strength / B&W, drag the edges of an effect, fullscreen preview
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Filter effect has a colour-strength slider (−100% = black and white, +100% = twice as colourful) and chips "B&W", "အရောင်ထင်", "အရောင်မှိန်"; the preview shows it, and the render applies it with Media3's saturation adjustment | Yes (CI green, run 44730339071) | **No** |
+| Timeline: the selected effect shows two white grips on its edges; drag to make it shorter or longer (min 0.2 s, stays inside the video); the change is saved when the finger lifts | Yes (CI green, run 44730339071) | **No** |
+| A fullscreen button on the preview opens the video in landscape with play / pause, seek and the filter, crop, blur and flip applied (texts, overlays and subtitles are not drawn there) | Yes (CI green, run 44730339071) | **No** |
+Old saved timelines load as before (the look was two numbers, it is now two or three). Unproven on a phone: that the saturation in the render matches the preview (the preview uses a colour matrix, the render uses Media3's saturation; they can differ a little), grip dragging next to the horizontal scroll of the timeline, and the fullscreen rotation coming back to normal. Not built on purpose: transitions, Canvas and a voice track in the timeline (changes the render path, better after the phone tests), Speech-to-Text (needs a paid service or a large model). Not merged to main; branch `claude/te-40-upgrades`. APK artifact `dramaflow-apk-branch-208`.
+
+## TE-41: AI Hook, optional AssemblyAI speech-to-SRT, glass look on the other screens
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| New Gemini prompt "အစ ဆွဲဆောင်စာ (Hook)": 5 opening lines of 3 to 5 seconds, facts from the text only, no ending spoilers (copy/paste like the other prompts) | Yes (CI green, run 44768403494) | **No** |
+| Settings: optional AssemblyAI key and language code (stored on the phone, not in backup). Subtitle Studio: new icon "အသံကနေ SRT ထုတ်" cuts the sound out of the video (Kotlin MediaExtractor + MediaMuxer to .m4a, no re-encode; copies the whole video if the sound is not AAC), uploads it, waits, downloads the SRT, and replaces the Studio text only after asking (undo brings the old text back) | Yes (CI green, run 44768403494) | **No** |
+| Glass style on Workflow step cards, Library, drama pages, Settings, effect list, timeline, Fair Use, cards in the editor; Subtitle Studio bottom bar uses the same nav pill | Yes (CI green, run 44768403494) | **No** |
+| Widget tests for the nav bar (it stays a bar at the bottom, the page keeps its space), tabs, buttons, Reveal / Glass / Pressable; tests for the AssemblyAI request and reply handling | Yes (CI green, run 44768403494) | n/a |
+Unproven: everything that talks to AssemblyAI. The request was written from AssemblyAI's own docs (upload, create transcript with language_code, poll, /srt?chars_per_caption=28) but has never been run with a real key; the language code "zh" / "my" is not confirmed by the docs (the field in Settings can be edited; the error text from the service is shown); Mandarin accuracy on drama audio, Burmese accuracy (docs list it as "fair"), upload time and data use, whether the sound cut-out works for every phone video (AAC only; otherwise the whole video is copied to the cache and uploaded), and whether the free credit is still given. Not merged to main; branch `claude/te-40-upgrades`. APK artifact `dramaflow-apk-branch-211`.
+
+## TE-42: News Video (own Colab backend) 
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| `tools/news_backend_colab.py` (backend v2): jobs with progress (POST /jobs, GET /jobs/<id>, download), access token, keys not stored, per-scene start/end seconds, ffmpeg errors reported, same encode settings for every clip, strict grounding really sent, real length measured. Only syntax-checked (py_compile); never run | n/a (Python, not built by CI) | **No** |
+| Home > Tools > "News Video" screen: paste "URL#TOKEN" from Colab, Pexels key (optional), Gemini key from Settings, topic, 3 to 5 minutes, 9:16 / 16:9, voice, sources, strict grounding, 4 master prompts (editable); progress; result with scenes; save MP4 to Gallery, save SRT (made from scene timing), copy script | Yes (CI green, run 44847621657) | **No** |
+| Tests for the connect line, settings, request limits, job reply, SRT from scenes | Yes (same run) | n/a |
+Unproven: the backend has never run (not in Colab, not with real keys); Edge TTS Burmese voices, Gemini with Google Search grounding (may need billing or have a free quota; not checked), Pexels downloads, the Cloudflare tunnel, Colab terms for serving a tunnel, ffmpeg concat of the clips, and the app screen on a phone. The video has no burned-in subtitles, ticker or logo (the backend has no Burmese font); the SRT is for the app's own render. News content is made by AI: facts are not verified. APK artifact `dramaflow-apk-branch-213`.
+
+## TE-43: Video Editor page like a phone video editor
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Video Editor page: preview (max about a third of the screen), play bar (undo, redo, previous / play / next, fullscreen) and the tool row stay on top; the timeline, effect editor, effect list and the rest scroll underneath. The workflow's Stage 4 still scrolls as one page | Yes (CI green, run 44848369562) | **No** |
+| "Export Video" button on the editor's top bar opens the Render page | Yes (CI green, run 44848369562) | **No** |
+| Previous / next jump to the previous / next effect start (or the ends of the video) | Yes (CI green, run 44848369562) | **No** |
+Unproven on a phone: the proportions on small screens (the scrolling part may be short when an effect is selected), keyboard covering the editor fields, and portrait videos (preview is capped by height). Not merged to main. APK artifact `dramaflow-apk-branch-214`.
+
+## TE-44: Automatic Video Recap / Scene Recap (own backend) + more stock sources for News Video
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| `tools/dramaflow_backend/` (FastAPI, for Altare / Colab / any Python host): POST /recap/jobs, GET /recap/jobs/<id>, GET .../audio/<n>.wav; asks Gemini per group, reads "=== PART n ===", Edge TTS Burmese voice per part (24 kHz mono WAV); token via APP_TOKEN; keys not stored and hidden in errors. The pure part (`recap_core.py`) has 8 unit tests that pass locally (`python3 -m unittest`); `main.py` is only py_compile-checked, never run with Gemini / Edge TTS / on Altare | n/a (Python, not built by CI) | **No** |
+| Scene Recap > "Auto": makes the contact sheets, sends them with the prompts to the backend, saves the returned parts like pasted answers; "Script အဖြစ် သိမ်း" then "အသံကို project ထဲ သိမ်း" stores the WAVs as stage-3 audio (only when script chunks and parts match one-to-one) | Yes (CI green, run 44875365857) | **No** |
+| Video Recap > "Auto": copies the video to the app cache (new native `copyVideo`), uploads it to the user's own Gemini Files API (resumable), backend asks Gemini for each 5-part batch with a start/end offset of the video | Yes (CI green, run 44875365857) | **No** |
+| News Video: background source choice: Wikimedia Commons (no key), Pixabay (video), Unsplash (picture), Pexels; pictures get a slow zoom-in (Ken Burns, ffmpeg zoompan, command tested locally); falls back to Wikimedia when the chosen source finds nothing; older Pexels saves still load | Yes (CI green, run 44875365857) | **No** |
+APK artifact `dramaflow-apk-branch-217`. Not merged to main.
+Unproven: everything that talks to the network (Gemini video offsets via `video_metadata`, Files API upload of a big video from a phone, Edge TTS Burmese, Pixabay / Unsplash / Wikimedia answers, Altare free app staying on, its URL and body-size limits), the Kotlin `copyVideo` on a phone, matching of chunks to parts on a real script. Video upload uses a lot of data and Gemini free-tier quota; scene mode is far lighter. Wikimedia / Unsplash pictures may need credit.
+
+## TE-45: News Video: about 20 pictures found at once and put in order
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Backend: Gemini gives 2 to 3 search phrases per scene; for each scene the backend finds as many different pictures as its voice length needs (about one per 12 s for 20 pictures in 4 minutes, at most 4 per scene, never the same picture twice), splits the scene time equally and joins them in story order with a slow zoom that alternates in / out. Sources: Wikimedia Commons (no key), Unsplash, Pixabay photos; nothing found: falls back to Wikimedia, then a plain colour. Video sources (Pixabay video, Pexels) still use one clip per scene. Helpers tested locally with ffmpeg (`python3 tools/test_news_helpers.py`: picture count rule; 3 pictures + voice become one 720x1280 scene of the right length; scenes of different kinds join without decode errors). The searches and downloads (Wikimedia, Unsplash, Pixabay) have never run | n/a (Python) | **No** |
+| App: "Pixabay (ပုံ)" source; slider for the number of pictures (0 to 40, default 20, 0 = one per scene); the on-screen source, key and count are saved when a video is started; Pixabay pictures reuse the Pixabay key | Yes (CI green, run 44903753550) | **No** |
+APK artifact `dramaflow-apk-branch-221`. Not merged to main.
+Gemini model default changed to `gemini-3.8-flash` (the old `gemini-2.5-flash` answered 404 NOT_FOUND on the user's account, seen on the phone); the model name is editable in the News Video screen and the Recap Auto card.
+Phone result seen: with Google Search on, Gemini answered 429 RESOURCE_EXHAUSTED on the user's free account; a "Google Search" switch (default on) was added to the News Video screen; when off the backend writes without search and warns that facts are unchecked.
+Unproven: picture search quality (keywords may find unrelated pictures; the app does not show them before rendering), Wikimedia / Unsplash licences and credit, portrait crop of landscape pictures, Colab speed with many ffmpeg steps (each scene several encodes). Re-run Cell 2 of the notebook to get the new backend.
+
+## TE-46: Stage 3 (Audio): Edge TTS through the user's backend
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| Backends (`news_backend_colab.py` and `tools/dramaflow_backend/main.py`): new `POST /tts` (text, voice, rate) answers a 24 kHz mono WAV; token needed; text up to 6000 characters; only syntax-checked, never run (Edge TTS, ffmpeg) | n/a (Python) | **No** |
+| Audio panel: "Edge TTS" card (paste the same URL#TOKEN as News Video, voice Thiha / Nilar), per-chunk "Edge TTS" button and "all missing" button; the speed slider is sent as a percentage; the clip is stored like the other TTS clips (label "Edge TTS") | Yes (CI green, run 44908315451) | **No** |
+APK artifact `dramaflow-apk-branch-224`. Not merged to main.
+Unproven: Edge TTS Burmese voices through the unofficial library (Microsoft may block or change it), Colab tunnel with the request, long chunks (up to 1500 characters per chunk). Text of the chunk goes to the user's backend and from there to Microsoft's voice service.
+
+## TE-47: Video Editor tool tabs
+| Feature | Compiles on CI | Phone-tested |
+|---|---|---|
+| The editor's tool row (24 tools in one long strip) is split into 4 tabs like a phone video editor: စာ / ပုံ (Text, Arrow, Box, Circle, Spot, Frame, Sticker), Edit (Zoom, Speed, Flip, Freeze, Cut), Effect (Filter, Blur, Censor, Fade in/out, Flash, Tint, Vignette, Bars, Shade), Layer / အသံ (Picture, Sound). The same tools and actions as before; only the grouping changed. No widget test (the editor needs a video player) | Yes (CI green, run 44980733356) | **No** |
+APK artifact `dramaflow-apk-branch-227`. Not merged to main.
+Unproven on a phone: the extra row (about 34 px) in the pinned top part on small screens. Not built: a "+" add button and Canvas / Audio tabs (there is no Canvas feature).

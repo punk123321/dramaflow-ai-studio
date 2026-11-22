@@ -26,6 +26,7 @@ class TeTimeline extends StatefulWidget {
     required this.selectedId,
     required this.onSeek,
     required this.onSelect,
+    this.onResize,
   });
 
   final int durMs;
@@ -38,6 +39,10 @@ class TeTimeline extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final ValueChanged<String> onSelect;
 
+  /// Called while an edge of the selected effect is dragged (`save` false) and
+  /// once when the finger lifts (`save` true).
+  final void Function(TransformOp op, int startMs, int endMs, bool save)? onResize;
+
   @override
   State<TeTimeline> createState() => _TeTimelineState();
 }
@@ -47,6 +52,60 @@ class _TeTimelineState extends State<TeTimeline> {
   double _pps = 30; // pixels per second
 
   static const _ruler = 22.0;
+  static const _minLenMs = 200;
+  static const _handle = 22.0;
+
+  // State of an edge drag.
+  int _dragS = 0;
+  int _dragE = 0;
+  double _acc = 0;
+
+  void _edge(TransformOp o, bool left, double dx, bool save) {
+    final cb = widget.onResize;
+    if (cb == null) return;
+    final dur = widget.durMs > 0 ? widget.durMs : o.endMs;
+    _acc += dx;
+    final dMs = (_acc / _pps * 1000).round();
+    var s = _dragS;
+    var e = _dragE;
+    if (left) {
+      s = (_dragS + dMs).clamp(0, _dragE - _minLenMs);
+    } else {
+      e = (_dragE + dMs).clamp(_dragS + _minLenMs, math.max(dur, _dragS + _minLenMs));
+    }
+    cb(o, s, e, save);
+  }
+
+  /// Two grips on the edges of the selected effect; drag to make it shorter or longer.
+  List<Widget> _grips(TransformOp o, double top) {
+    if (widget.onResize == null || o.endMs - o.startMs < _minLenMs) return const [];
+    final l = o.startMs / 1000 * _pps;
+    final r = math.max(l + 30, o.endMs / 1000 * _pps);
+    Widget grip(bool left) => Positioned(
+          left: (left ? l : r) - _handle / 2,
+          top: top,
+          width: _handle,
+          height: _row - 4,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (_) {
+              _dragS = o.startMs;
+              _dragE = o.endMs;
+              _acc = 0;
+            },
+            onHorizontalDragUpdate: (d) => _edge(o, left, d.delta.dx, false),
+            onHorizontalDragEnd: (_) => _edge(o, left, 0, true),
+            child: Center(
+              child: Container(
+                width: 6,
+                height: _row - 10,
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3), boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 3)]),
+              ),
+            ),
+          ),
+        );
+    return [grip(true), grip(false)];
+  }
   static const _row = 28.0;
 
   @override
@@ -185,9 +244,10 @@ class _TeTimelineState extends State<TeTimeline> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: DfColors.surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DfColors.line),
+        gradient: DfGradients.glass,
+        color: DfColors.surface.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: DfColors.glassEdge),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
@@ -273,6 +333,9 @@ class _TeTimelineState extends State<TeTimeline> {
                         widget.onSeek(o.startMs);
                       },
                     ),
+                  // Edge grips of the selected effect.
+                  for (final o in widget.ops)
+                    if (widget.selectedId == o.id) ..._grips(o, base + (lanes.lane[o.id] ?? 0) * _row + 2),
                   // Playhead.
                   Positioned(
                     left: widget.posMs / 1000 * _pps - 1,

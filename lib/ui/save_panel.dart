@@ -135,7 +135,6 @@ class _SavePanelState extends State<SavePanel> {
           const Text('ထုတ်ပြီးသား ဗီဒီယို မရှိသေးပါ။ အဆင့် ၅ မှာ အရင်ထုတ်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
         for (final e in _items)
           Card(
-            color: DfColors.surface,
             margin: const EdgeInsets.only(bottom: 8),
             child: Padding(
               padding: const EdgeInsets.all(12),

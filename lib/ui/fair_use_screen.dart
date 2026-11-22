@@ -188,7 +188,7 @@ class _FairUseScreenState extends State<FairUseScreen> {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: DfColors.surface, borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(gradient: DfGradients.glass, color: DfColors.surface.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(14), border: Border.all(color: DfColors.glassEdge)),
                   child: Text(uploadNote(cur, dramaTitle: p.dramaTitle), style: const TextStyle(fontSize: 13.5)),
                 ),
                 const SizedBox(height: 8),
