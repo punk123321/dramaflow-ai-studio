@@ -18,7 +18,7 @@ void main() {
   });
 
   test('encode and decode; bad text is an empty log', () {
-    final u = const UsageLog(day: '2026-11-22', gemini: 4, asrSeconds: 90, voices: 2);
+    const u = UsageLog(day: '2026-11-22', gemini: 4, asrSeconds: 90, voices: 2);
     final r = UsageLog.decode(u.encode());
     expect((r.day, r.gemini, r.asrSeconds, r.voices), ('2026-11-22', 4, 90, 2));
     expect(UsageLog.decode('x').isEmpty, isTrue);

@@ -698,10 +698,12 @@ Not real: the backend was tested only with stand-ins for fastapi, edge-tts and G
 
 CI (run 45003681194, commit 7a6dbc4, branch `claude/te-48-hardening`): `flutter analyze` 100 infos (same 100 as before: the deprecated `material.dart` import; no warnings or errors), `flutter test` 351 passed, release APK built (artifact `dramaflow-apk-branch-232`). So TE-49 and TE-50 **compile on CI and their tests pass**. Phone-tested: **No**. Not merged into main.
 
-## TE-51: more recap upgrades (CI result below once run)
+## TE-51: more recap upgrades
 | Feature | Tested here | Compiles on CI | Phone-tested |
 |---|---|---|---|
 | Optional "အရန် model" field (Auto card): if the main Gemini model is gone (404) or over quota after 3 tries, the backend asks the second model; saved on the phone | Python tests with stand-in Gemini (404 -> fallback, 429 x3 -> fallback, no fallback -> error) | see CI | **No**. The right second model name is yours to type; I cannot check which names exist |
 | Confirmation box says how many minutes of sound go to AssemblyAI (from the project's video length) | Dart helper test | see CI | **No** |
 | "ဒီနေ့ ဒီဖုန်းက ပို့ခဲ့တာ (ခန့်မှန်း)" line: Gemini requests (one per group), AssemblyAI minutes, voice parts, stored on the phone, reset each day | Dart tests of the counter | see CI | **No**. It is the app's own estimate, not the service's real quota |
 Already covered, not new work: an AssemblyAI result is saved as the project's subtitles and Auto does not run it again when subtitles exist, so a second Auto run does not spend credit twice; language auto-detect (empty code) already exists in Settings.
+
+CI (run 45029307868, commit b9b0ff2): `flutter analyze` 101 infos (one more than before: a `prefer_const_declarations` hint in the new test, fixed afterwards; no warnings/errors), `flutter test` 356 passed, release APK built (artifact `dramaflow-apk-branch-234`). TE-51 compiles on CI and its tests pass. Phone-tested: **No**. Not merged into main.
