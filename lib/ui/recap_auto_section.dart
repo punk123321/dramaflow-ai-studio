@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/assembly.dart';
+import '../core/backend_kind.dart';
 import '../core/news_video.dart';
 import '../core/recap_auto.dart';
 import '../core/recap_queue.dart' show QStep, qStepLabels;
@@ -15,7 +16,7 @@ import '../data/ai_settings_repo.dart';
 import '../data/assembly_settings_repo.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
-import '../data/news_video_repo.dart';
+import '../data/recap_backend_repo.dart';
 import '../data/usage_repo.dart';
 import '../platform/assembly_client.dart';
 import '../platform/audio_channel.dart';
@@ -63,7 +64,7 @@ class RecapAutoSection extends StatefulWidget {
 }
 
 class _RecapAutoSectionState extends State<RecapAutoSection> {
-  final _repo = NewsVideoRepo();
+  final _repo = RecapBackendRepo();
   final _handoff = HandoffRepo();
   final _connectC = TextEditingController();
   final _modelC = TextEditingController(text: defaultTextModel);
@@ -204,8 +205,14 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     if (!mounted) return;
     setState(() => _s = next);
     _say('သိမ်းပြီး၊ ချိတ်ကြည့်နေတယ် …');
-    final ok = await NewsVideoClient(next).ping();
-    _say(ok ? 'Backend နဲ့ ချိတ်မိပြီ ✓' : 'သိမ်းပြီး၊ ဒါပေမဲ့ Backend မဖြေဘူး (deploy ပြီးလား၊ URL မှန်လား စစ်ပါ)', error: !ok);
+    final svc = await NewsVideoClient(next).healthService();
+    if (svc == null) {
+      _say('သိမ်းပြီး၊ ဒါပေမဲ့ Backend မဖြေဘူး (Colab Cell ၅ run နေလား၊ URL မှန်လား စစ်ပါ)', error: true);
+    } else if (backendKindOf(svc) == BackendKind.news) {
+      _say(wrongBackendForRecap, error: true);
+    } else {
+      _say('Backend နဲ့ ချိတ်မိပြီ ✓${backendKindOf(svc) == BackendKind.unknown ? ' (backend အမည်: ${svc.isEmpty ? 'မသိ' : svc})' : ''}');
+    }
   }
 
   Future<bool> _confirm(bool asr) async {

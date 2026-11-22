@@ -15,7 +15,7 @@ import '../core/theme.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/audio_clip.dart';
 import '../data/handoff_repo.dart';
-import '../data/news_video_repo.dart';
+import '../data/recap_backend_repo.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
 import '../platform/gemini_tts_client.dart';
@@ -43,7 +43,7 @@ class _AudioPanelState extends State<AudioPanel> {
   GeminiTtsSettings _ai = const GeminiTtsSettings();
   final _keyC = TextEditingController();
   final _modelC = TextEditingController();
-  final _beRepo = NewsVideoRepo();
+  final _beRepo = RecapBackendRepo();
   final _beC = TextEditingController();
   NewsVideoSettings _be = const NewsVideoSettings();
   String _edgeVoice = 'my-MM-ThihaNeural';

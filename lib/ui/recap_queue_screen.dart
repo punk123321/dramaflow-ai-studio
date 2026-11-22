@@ -12,7 +12,7 @@ import '../core/segments.dart' show formatTime;
 import '../core/theme.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/assembly_settings_repo.dart';
-import '../data/news_video_repo.dart';
+import '../data/recap_backend_repo.dart';
 import '../data/project.dart';
 import '../data/usage_repo.dart';
 import '../platform/recap_episode_runner.dart';
@@ -55,7 +55,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
   }
 
   Future<void> _init() async {
-    final b = await NewsVideoRepo().load();
+    final b = await RecapBackendRepo().load();
     final g = await AiSettingsRepo().load();
     final a = await AssemblySettingsRepo().load();
     final fb = await UsageRepo().fallbackModel();

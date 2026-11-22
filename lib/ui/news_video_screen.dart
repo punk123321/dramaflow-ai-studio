@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/backend_kind.dart';
 import '../core/news_video.dart';
 import '../core/srt.dart';
 import '../core/theme.dart';
@@ -121,8 +122,16 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _error = null;
       _msg = c.token.isEmpty ? 'သိမ်းပြီး (Token မပါဘူး၊ Colab ရဲ့ # နောက်က စာကိုပါ ထည့်ပါ)' : 'သိမ်းပြီး';
     });
-    final ok = await NewsVideoClient(next).ping();
-    if (mounted) setState(() => _msg = ok ? 'Backend နဲ့ ချိတ်မိပြီ ✓' : 'သိမ်းပြီး၊ ဒါပေမဲ့ Backend မဖြေဘူး (Colab run နေလား စစ်ပါ)');
+    final svc = await NewsVideoClient(next).healthService();
+    if (!mounted) return;
+    if (svc != null && backendKindOf(svc) == BackendKind.recap) {
+      setState(() {
+        _msg = null;
+        _error = wrongBackendForNews;
+      });
+    } else {
+      setState(() => _msg = svc != null ? 'Backend နဲ့ ချိတ်မိပြီ ✓' : 'သိမ်းပြီး၊ ဒါပေမဲ့ Backend မဖြေဘူး (Colab run နေလား စစ်ပါ)');
+    }
   }
 
   Future<void> _start() async {

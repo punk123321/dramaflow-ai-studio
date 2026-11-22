@@ -49,7 +49,7 @@ class RecapClient {
     } catch (_) {}
     final why = switch (code) {
       401 => 'Token မမှန်ဘူး (APP_TOKEN ကို စစ်ပါ)',
-      404 => 'မတွေ့ပါ (Backend က Recap version အသစ် မဟုတ်ဘူးနိုင်တယ်)',
+      404 => 'မတွေ့ပါ (ဒီ URL က Recap backend မဟုတ်ဘူးနိုင်တယ် — News Video backend နဲ့ ရောထည့်ထားလား၊ (သို့) Backend က version အဟောင်း)',
       409 => 'Backend မှာ တခြား job လုပ်နေတုန်း',
       413 => 'ပို့တဲ့ အရွယ်အစား ကြီးလွန်းတယ်',
       502 || 503 || 504 || 524 => 'Backend မရောက်ဘူး (ပိတ်နေလား၊ ပြတ်နေလား)',
