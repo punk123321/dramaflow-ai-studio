@@ -34,11 +34,12 @@ class SceneChannel {
     return FrameSamples(times, bytes);
   }
 
-  static Future<SheetResult> contactSheet(String uri, List<SceneSpan> scenes, int firstNumber, String name, {int cols = 4}) async {
+  static Future<SheetResult> contactSheet(String uri, List<SceneSpan> scenes, int firstNumber, String name, {int cols = 4, bool toGallery = true}) async {
     final r = await _ch.invokeMapMethod<String, Object?>('contactSheet', {
       'uri': uri,
       'name': name,
       'cols': cols,
+      'gallery': toGallery,
       'items': [
         for (var i = 0; i < scenes.length; i++) {'n': firstNumber + i, 'atMs': scenes[i].keyMs},
       ],

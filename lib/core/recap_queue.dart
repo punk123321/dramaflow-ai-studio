@@ -4,17 +4,23 @@
 // each step really does is in lib/platform/recap_episode_runner.dart.
 
 /// The steps one episode goes through, in order.
-enum QStep { subtitles, upload, ask, save, audio }
+enum QStep { subtitles, upload, scenes, ask, save, audio }
 
 const qStepLabels = <QStep, String>{
   QStep.subtitles: 'စာတန်း',
   QStep.upload: 'Upload',
+  QStep.scenes: 'Scene + ပုံ',
   QStep.ask: 'Gemini + အသံ',
   QStep.save: 'သိမ်း',
   QStep.audio: 'အသံ သိမ်း',
 };
 
 enum QStatus { waiting, running, done, failed, canceled }
+
+/// The steps shown for each kind of queue: Video Recap uploads the video to
+/// Gemini; Scene Recap splits scenes and makes the contact sheets instead.
+const videoQSteps = <QStep>[QStep.subtitles, QStep.upload, QStep.ask, QStep.save, QStep.audio];
+const sceneQSteps = <QStep>[QStep.subtitles, QStep.scenes, QStep.ask, QStep.save, QStep.audio];
 
 /// Thrown by a step that noticed the queue was stopped.
 class QueueCanceled implements Exception {
@@ -212,4 +218,28 @@ class RecapQueue {
     }
     return b.toString().trimRight();
   }
+}
+
+/// What the phone's background notification says while the queue runs:
+/// "2/5 · title · step" and the overall percent (finished episodes plus the
+/// running one's own progress). Pure, so it is tested without a phone.
+({String text, int percent}) queueNotice(RecapQueue q) {
+  final total = q.items.length;
+  if (total == 0) return (text: '', percent: 0);
+  final finished = q.count(QStatus.done) + q.count(QStatus.failed) + q.count(QStatus.canceled);
+  QueueItem? running;
+  for (final it in q.items) {
+    if (it.status == QStatus.running) {
+      running = it;
+      break;
+    }
+  }
+  final pct = ((finished * 100 + (running?.progress ?? 0)) ~/ total).clamp(0, 100);
+  final b = StringBuffer('$finished/$total');
+  if (running != null) {
+    b.write(' · ${running.title}');
+    final st = running.step;
+    if (st != null) b.write(' · ${qStepLabels[st]}');
+  }
+  return (text: b.toString(), percent: pct);
 }

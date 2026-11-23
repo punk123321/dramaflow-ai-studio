@@ -9,7 +9,7 @@ import '../core/theme.dart';
 class RecapStepBar extends StatelessWidget {
   const RecapStepBar({
     super.key,
-    this.steps = QStep.values,
+    this.steps = videoQSteps,
     this.current,
     this.done = const {},
     this.skipped = const {},

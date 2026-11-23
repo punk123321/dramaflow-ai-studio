@@ -30,7 +30,8 @@ class RenderService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val text = intent?.getStringExtra("text") ?: "Render"
         val percent = intent?.getIntExtra("percent", -1) ?: -1
-        val notification = build(text, percent)
+        val title = intent?.getStringExtra("title") ?: "DramaFlow · ဗီဒီယို ထုတ်နေတယ်"
+        val notification = build(title, text, percent)
         try {
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -59,7 +60,7 @@ class RenderService : Service() {
         super.onDestroy()
     }
 
-    private fun build(text: String, percent: Int): Notification {
+    private fun build(title: String, text: String, percent: Int): Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Render", NotificationManager.IMPORTANCE_LOW))
@@ -69,7 +70,7 @@ class RenderService : Service() {
         }
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this)
         b.setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("DramaFlow · ဗီဒီယို ထုတ်နေတယ်")
+            .setContentTitle(title)
             .setContentText(if (percent in 0..100) "$text · $percent%" else text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

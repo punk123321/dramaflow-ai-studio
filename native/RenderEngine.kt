@@ -97,6 +97,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
     // between the parts of a queue.
     private var keepAlive = false
     private var note = ""
+    private var title = ""
     private var lastPct = -1
 
     private fun serviceOn() {
@@ -104,6 +105,7 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             val i = Intent(activity, RenderService::class.java)
                 .putExtra("text", if (note.isNotEmpty()) note else "Render")
                 .putExtra("percent", lastPct)
+                .apply { if (title.isNotEmpty()) putExtra("title", title) }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.startForegroundService(i) else activity.startService(i)
         } catch (e: Exception) {
             // Not allowed right now: the render still runs while the app stays open.
@@ -140,11 +142,14 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
             "renderKeepAlive" -> {
                 keepAlive = args?.get("on") as? Boolean ?: false
                 note = args?.get("text") as? String ?: ""
+                title = args?.get("title") as? String ?: ""
                 if (keepAlive) {
+                    (args?.get("percent") as? Number)?.toInt()?.let { lastPct = it }
                     askNotificationPermission()
                     serviceOn()
                 } else {
                     lastPct = -1
+                    title = ""
                     serviceOff()
                 }
                 result.success(null)

@@ -120,6 +120,7 @@ class SceneTools(private val activity: Activity) {
         val uri = Uri.parse(args?.get("uri") as? String ?: "")
         val name = args?.get("name") as? String ?: ("scenes_" + System.currentTimeMillis())
         val cols = ((args?.get("cols") as? Number)?.toInt() ?: 4).coerceIn(1, 6)
+        val toGallery = args?.get("gallery") as? Boolean ?: true
         val cellW = ((args?.get("cellW") as? Number)?.toInt() ?: 384).coerceIn(160, 640)
         @Suppress("UNCHECKED_CAST")
         val items = (args?.get("items") as? List<Map<String, Any?>>) ?: emptyList()
@@ -173,7 +174,7 @@ class SceneTools(private val activity: Activity) {
                 FileOutputStream(f).use { sheet.compress(Bitmap.CompressFormat.JPEG, 80, it) }
                 sheet.recycle()
                 var link: String? = null
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (toGallery && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val resolver = activity.contentResolver
                     val values = ContentValues().apply {
                         put(MediaStore.Images.Media.DISPLAY_NAME, "$name.jpg")

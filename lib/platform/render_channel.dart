@@ -68,9 +68,14 @@ class RenderChannel {
 
   /// Keeps the background service (and its notification) up between the parts
   /// of a queue, so the phone does not stop the app while it waits.
-  static Future<void> keepAlive(bool on, {String text = ''}) async {
+  static Future<void> keepAlive(bool on, {String text = '', String title = '', int? percent}) async {
     try {
-      await _channel.invokeMethod('renderKeepAlive', {'on': on, 'text': text});
+      await _channel.invokeMethod('renderKeepAlive', {
+        'on': on,
+        'text': text,
+        if (title.isNotEmpty) 'title': title,
+        if (percent != null) 'percent': percent,
+      });
     } catch (_) {
       // Best effort: the render itself does not depend on it.
     }
