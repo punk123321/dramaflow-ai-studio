@@ -738,3 +738,13 @@ What the screenshots showed: (1) Queue/Video Recap upload failed with "User loca
 | Connecting checks the backend's /health name and says "this is the News/Recap backend" when mixed up; 404 text mentions it | Python /health names checked; Dart test | yes | **No** |
 | Self-test hint for 503 and for a location refusal on the backend | Python tests | n/a | **No** |
 Still open: News Video itself was not tested working. It needs the NEWS Colab notebook (`dramaflow_news_backend`) running and its own URL#TOKEN pasted on the News Video page. The Colab recap notebook was regenerated (re-upload it to get the new hints). CI: run 45057201438, `flutter analyze` 104 infos (no warnings/errors), `flutter test` 372 passed, APK artifact `dramaflow-apk-branch-240`. Not merged into main.
+
+## TE-55: video from a link (YouTube / TikTok / Red Note) + News AI pictures (2026-11-23)
+Asked by the user: give a link instead of uploading a video file; News should make its pictures automatically. Branch `claude/te-55-link-ingest`, not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Recap backend `/ingest/jobs`: link -> yt-dlp download (max 720p, size/length limits, private/local addresses refused) -> put into the user's Gemini account from the backend (so no VPN is needed for this upload) -> `file_uri`, mime, length | Python tests (`test_ingest_core`, `test_main_stubbed`) with stand-ins for yt-dlp and Gemini | yes (run 45118749572) | **No** |
+| App: link card in Video Recap, link used by Auto and by the Queue (a project with a link and no local video can run); the answer is cached ~40 h so a retry does not download again; no subtitles for a link-only run (Gemini listens to the sound itself) | Dart tests (`source_link_test`) for link reading, cache and answer parsing | yes (run 45118749572) | **No** |
+| News Video: AI picture sources (Gemini image, Pollinations) with fallback to Wikimedia stock search | Python + Dart tests of the helpers | yes (run 45118749572) | **No** |
+Honest limits: yt-dlp against the real sites was NOT run here (no network). YouTube often blocks Colab's addresses ("sign in to confirm you're not a bot"); TikTok / Red Note short links may need updates of yt-dlp. The backend says so in Burmese when it happens. Downloading is for videos you have the right to use; the original is never changed (a temporary copy on the backend is deleted after the upload). Needs the NEW Recap notebook (`dramaflow_recap_colab_standalone.ipynb`, installs yt-dlp) and the News notebook re-uploaded.
+CI: run 45118749572 success, `flutter analyze` 107 infos (no warnings/errors), APK artifact `dramaflow-apk-branch-246`. Not merged into main.
