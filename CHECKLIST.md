@@ -768,3 +768,11 @@ Idea taken from the user's "All In One Download" notebook (only the downloader i
 | App: those subtitles are saved as the project's source subtitles only when the project has none; used at once by Auto and the Queue (a log line says so) | Dart tests of the answer reading | yes (run 45159229875) | **No** |
 Honest limits: the real YouTube / Bilibili / TikTok / Red Note were NOT contacted here. Cookies may expire or be refused; a cookie from your main Google account is a risk (use a spare account). Many videos have no uploader subtitles at all (then nothing changes). Needs the NEW Recap notebook.
 CI: run 45159229875 success, `flutter analyze` 107 infos (no warnings/errors), `flutter test` 399 passed, APK artifact `dramaflow-apk-branch-252`.
+
+## TE-59: downloads and jobs keep going when the screen turns off (2026-11-24)
+Reported by the user: "ဖုန်းပိတ်ရင် download ဆွဲတယ် အခု မဆွဲ". Cause found by reading: only the Recap queue and the render screens started the foreground service; the link download, the Recap job (Auto / resume), the voice download and the News video job + MP4 download did not, so the phone stopped the app's network a few minutes after the screen went dark. Branch `claude/te-59-keepalive` (built on TE-57). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| New `BackgroundWork` (counted begin/update/end) around: link -> backend -> Gemini, Recap Auto run, Recap job resume, voice download, News video job, News MP4 download. Notification shows the stage and percent; it is switched off only when the last job ends | Dart test with a mocked channel (`background_work_test`) | see CI | **No** |
+| `RenderService` also holds a Wi-Fi lock (released with the wake lock) so the Wi-Fi radio does not sleep with the screen off | none (Kotlin, needs a phone) | see CI | **No** |
+Honest limits: this makes it much more likely, it does not guarantee it. Some phone makers (Xiaomi, Oppo, Huawei ...) still kill background apps unless battery saving is set to "No restrictions" for DramaFlow; swiping the app away stops it. Android 13+ asks once for the notification permission. If the phone loses Wi-Fi/mobile data, the job on the backend still goes on and can be resumed.

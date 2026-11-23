@@ -10,6 +10,7 @@ import '../core/theme.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/handoff_repo.dart';
 import '../data/recap_backend_repo.dart';
+import '../platform/background_work.dart';
 import '../platform/link_ingest.dart';
 import '../platform/news_video_client.dart';
 import '../platform/recap_client.dart';
@@ -144,6 +145,7 @@ class _RecapLinkCardState extends State<RecapLinkCard> {
       _progress = 0;
       _linkC.text = link;
     });
+    await BackgroundWork.begin('DramaFlow · link က ဗီဒီယို ဆွဲနေတယ်', 'စတင်နေတယ်');
     try {
       await _ingest.saveLink(widget.projectId, link);
       _saved = link;
@@ -154,6 +156,7 @@ class _RecapLinkCardState extends State<RecapLinkCard> {
         url: link,
         geminiKey: _geminiKey,
         onStage: (st, pct) {
+          BackgroundWork.update(st, percent: pct);
           if (mounted) {
             setState(() {
               _stage = st;
@@ -178,6 +181,7 @@ class _RecapLinkCardState extends State<RecapLinkCard> {
       _say('$e', error: true);
     } finally {
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }

@@ -9,6 +9,7 @@ import '../core/srt.dart';
 import '../core/theme.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/news_video_repo.dart';
+import '../platform/background_work.dart';
 import '../platform/handoff_channel.dart';
 import '../platform/news_video_client.dart';
 import '../platform/render_channel.dart';
@@ -166,6 +167,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _result = null;
       _job = null;
     });
+    await BackgroundWork.begin('DramaFlow · News video လုပ်နေတယ်', 'စတင်နေတယ်');
     try {
       final job = await client.run(
         newsRequestJson(
@@ -185,6 +187,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
           prompt: _promptC.text.trim(),
         ),
         (j) {
+          BackgroundWork.update(j.stage, percent: j.progress);
           if (mounted) setState(() => _job = j);
         },
       );
@@ -197,6 +200,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       if (mounted) setState(() => _error = '$e');
     } finally {
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }
@@ -212,8 +216,10 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _error = null;
       _msg = 'ဗီဒီယို ဒေါင်းနေတယ် …';
     });
+    await BackgroundWork.begin('DramaFlow · ဗီဒီယို ဒေါင်းနေတယ်', 'စတင်နေတယ်');
     try {
       await client.download(r.downloadUrl, tmp, (got, total) {
+        if (total > 0) BackgroundWork.update('ဗီဒီယို ဒေါင်းနေတယ်', percent: (got * 100 / total).round());
         if (mounted && total > 0) setState(() => _msg = 'ဗီဒီယို ဒေါင်းနေတယ် ${(got * 100 / total).round()}%');
       });
       final name = 'news_${DateTime.now().millisecondsSinceEpoch}';
@@ -232,6 +238,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
         if (tmp.existsSync()) tmp.deleteSync();
       } catch (_) {}
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _saving = false);
     }
   }

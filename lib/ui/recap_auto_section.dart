@@ -21,6 +21,7 @@ import '../data/recap_backend_repo.dart';
 import '../data/usage_repo.dart';
 import '../platform/assembly_client.dart';
 import '../platform/audio_channel.dart';
+import '../platform/background_work.dart';
 import '../platform/gemini_files.dart';
 import '../platform/link_ingest.dart';
 import '../platform/news_video_client.dart';
@@ -326,6 +327,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _stage = 'ပြင်ဆင်နေတယ်';
     });
     if (!retry) _stepReset();
+    await BackgroundWork.begin('DramaFlow · Recap လုပ်နေတယ်', 'ပြင်ဆင်နေတယ်');
     try {
       if (retry) {
         _enter(QStep.subtitles);
@@ -354,6 +356,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
           url: widget.linkUrl,
           geminiKey: _geminiKey,
           onStage: (st, pct) {
+            BackgroundWork.update(st, percent: pct);
             if (mounted) {
               setState(() {
                 _stage = st;
@@ -433,6 +436,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         tmp?.deleteSync();
       } catch (_) {}
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }
@@ -460,6 +464,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _msg = null;
     });
     _enter(QStep.audio);
+    await BackgroundWork.begin('DramaFlow · အသံ ဒေါင်းနေတယ်', 'စတင်နေတယ်');
     try {
       final repo = AudioRepo();
       final old = await repo.forProject(widget.projectId);
@@ -502,6 +507,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _say('$e', error: true);
     } finally {
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }
@@ -513,6 +519,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         _progress = j.progress;
       });
     }
+    BackgroundWork.update(j.stage, percent: j.progress);
   }
 
   String get _jobKind => 'recap_job_${widget.task}';
@@ -576,6 +583,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     });
     _stepReset();
     _enter(QStep.ask);
+    await BackgroundWork.begin('DramaFlow · Recap job စောင့်နေတယ်', 'Backend ကို မေးနေတယ်');
     try {
       final job = await client.resume(id, _onJobUpdate);
       await _applyJob(job, retry: false, groupCount: 0);
@@ -589,6 +597,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _say('$e', error: true);
     } finally {
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }

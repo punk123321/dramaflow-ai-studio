@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.net.wifi.WifiManager
 import android.os.PowerManager
 
 /**
@@ -24,6 +25,7 @@ import android.os.PowerManager
  */
 class RenderService : Service() {
     private var wake: PowerManager.WakeLock? = null
+    private var wifi: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -51,12 +53,31 @@ class RenderService : Service() {
                 acquire(6L * 60L * 60L * 1000L)
             }
         }
+        if (wifi == null) {
+            // Without this the Wi-Fi radio goes to sleep when the screen is off and
+            // downloads/polling to the backend stall. Best effort only.
+            try {
+                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                @Suppress("DEPRECATION")
+                wifi = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "dramaflow:wifi").apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+            } catch (e: Exception) {
+                wifi = null
+            }
+        }
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         wake?.let { if (it.isHeld) it.release() }
         wake = null
+        try {
+            wifi?.let { if (it.isHeld) it.release() }
+        } catch (e: Exception) {
+        }
+        wifi = null
         super.onDestroy()
     }
 
