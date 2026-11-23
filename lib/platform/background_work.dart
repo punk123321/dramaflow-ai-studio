@@ -37,7 +37,7 @@ class BackgroundWork {
     final now = DateTime.now();
     final changedPct = percent != null && percent != _percent;
     if (text == _text && !changedPct) return;
-    if (now.difference(_lastSent) < const Duration(seconds: 2) && !(changedPct && (percent! - (_percent ?? -10)).abs() >= 5)) return;
+    if (now.difference(_lastSent) < const Duration(seconds: 2) && !(changedPct && (percent - (_percent ?? -10)).abs() >= 5)) return;
     _text = text;
     _percent = percent ?? _percent;
     _lastSent = now;
