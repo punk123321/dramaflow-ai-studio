@@ -7,8 +7,10 @@ private working copy on the backend; it is deleted after the upload. Nothing
 here touches the network, so it is tested on its own (test_ingest_core.py).
 """
 import ipaddress
+import os
 import re
 import socket
+from pathlib import Path
 from typing import Callable, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -132,6 +134,15 @@ def clean_srt(text: str) -> str:
     if "-->" not in t or len(t) > MAX_SRT_CHARS:
         return ""
     return t
+
+
+def cookies_source() -> Optional[Path]:
+    """An optional cookies.txt the user put on the backend machine themselves (Colab: /content/cookies.txt,
+    or the path in DF_COOKIES). It never goes through the app."""
+    for c in (os.environ.get("DF_COOKIES"), "/content/cookies.txt", str(Path(__file__).resolve().parent / "cookies.txt")):
+        if c and Path(c).is_file():
+            return Path(c)
+    return None
 
 
 def check_url(url: str, resolve: Callable = socket.getaddrinfo) -> Tuple[bool, str]:

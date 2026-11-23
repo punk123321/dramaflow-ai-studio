@@ -39,7 +39,7 @@ from google.genai import types
 from pydantic import BaseModel
 
 from ingest_core import (MAX_BYTES, MAX_SECONDS, SUB_LANGS, SUB_SUFFIXES, check_url, classify, clean_srt, cookie_note,
-                         cookies_problem, ingest_hint, parse_ffmpeg_duration, pick_subtitle, run_ingest)
+                         cookies_problem, cookies_source as _cookies_source, ingest_hint, parse_ffmpeg_duration, pick_subtitle, run_ingest)
 from recap_core import fit_tempo, gemini_hint, mask_key, run_recap
 from tts_text import normalize_for_tts
 
@@ -308,15 +308,6 @@ class IngestRequest(BaseModel):
 def _state_name(f) -> str:
     st = getattr(f, "state", None)
     return str(getattr(st, "name", st) or "")
-
-
-def _cookies_source() -> Optional[Path]:
-    """An optional cookies.txt the user put on the backend machine themselves
-    (in Colab: /content/cookies.txt). It never goes through the app."""
-    for c in (os.environ.get("DF_COOKIES"), "/content/cookies.txt", str(Path(__file__).resolve().parent / "cookies.txt")):
-        if c and Path(c).is_file():
-            return Path(c)
-    return None
 
 
 def _ytdlp_download(url: str, job_dir: Path, max_height: int, on_pct):
