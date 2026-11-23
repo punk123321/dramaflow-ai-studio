@@ -39,10 +39,11 @@ void main() {
     await BackgroundWork.update('x', percent: 10);
     expect(calls, isEmpty);
     await BackgroundWork.begin('A', 'start');
+    await BackgroundWork.update('half', percent: 50); // a big jump goes through
     final n = calls.length;
-    await BackgroundWork.update('same quickly', percent: 1);
-    await BackgroundWork.update('same quickly', percent: 2);
-    expect(calls.length, n, reason: 'two updates within 2 s are held back');
+    await BackgroundWork.update('half', percent: 51);
+    await BackgroundWork.update('half', percent: 52);
+    expect(calls.length, n, reason: 'small changes within 2 s are held back');
     await BackgroundWork.end();
   });
 
