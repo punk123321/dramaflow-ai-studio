@@ -7,6 +7,7 @@ import '../core/recap_queue.dart';
 import '../core/scenes.dart' show SceneSpan, dialogueFor;
 import '../core/script.dart';
 import '../core/segments.dart';
+import '../core/source_link.dart';
 import '../core/srt.dart';
 import '../core/video_recap.dart';
 import '../data/audio_clip.dart';
@@ -105,7 +106,7 @@ class RecapEpisodeRunner {
     } else if (!hasFile) {
       ctx.skip(QStep.subtitles, 'link သက်သက်မို့ စာတန်း မထုတ်နိုင်ဘူး — Gemini က ဗီဒီယိုထဲက အသံကို ကိုယ်တိုင် နားထောင်မယ်');
     } else {
-      entries = await _asr(p, uri!, ctx);
+      entries = await _asr(p, uri, ctx);
     }
     ctx.check();
 

@@ -38,6 +38,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
   final _connectC = TextEditingController();
   final _stockC = TextEditingController();
   final _modelC = TextEditingController(text: defaultTextModel);
+  final _imageModelC = TextEditingController();
   String _provider = 'wikimedia';
   int _imageCount = 20;
   final _topicC = TextEditingController();
@@ -81,6 +82,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
       _stockC.text = s.keyOf(s.provider);
       _imageCount = s.imageCount;
       _modelC.text = s.model;
+      _imageModelC.text = s.imageModel;
       _search = s.search;
       _loaded = true;
     });
@@ -92,6 +94,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     _connectC.dispose();
     _stockC.dispose();
     _modelC.dispose();
+    _imageModelC.dispose();
     _topicC.dispose();
     _promptC.dispose();
     super.dispose();
@@ -105,7 +108,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     } else {
       keys[_provider] = k;
     }
-    return base.copyWith(provider: _provider, keys: keys, imageCount: _imageCount, model: _modelC.text.trim().isEmpty ? defaultTextModel : _modelC.text.trim(), search: _search);
+    return base.copyWith(provider: _provider, keys: keys, imageCount: _imageCount, model: _modelC.text.trim().isEmpty ? defaultTextModel : _modelC.text.trim(), search: _search, imageModel: _imageModelC.text.trim());
   }
 
   Future<void> _saveBackend() async {
@@ -150,7 +153,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
     }
     // Use what is on screen now (provider and key), not only what was saved before.
     final eff = _withStock(_s);
-    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey || eff.imageCount != _s.imageCount || eff.model != _s.model || eff.search != _s.search) {
+    if (eff.provider != _s.provider || eff.stockKey != _s.stockKey || eff.imageCount != _s.imageCount || eff.model != _s.model || eff.search != _s.search || eff.imageModel != _s.imageModel) {
       await _repo.save(eff);
       _s = eff;
     }
@@ -173,6 +176,7 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
           imageCount: stockProviders[_s.provider]!.images ? _s.imageCount : 0,
           model: _s.model,
           search: _s.search,
+          imageModel: _s.imageModel,
           ratio: _ratio,
           minutes: _minutes,
           voice: _voice,
@@ -306,6 +310,23 @@ class _NewsVideoScreenState extends State<NewsVideoScreen> {
                         onChanged: _running ? null : (v) => setState(() => _imageCount = v.round()),
                       ),
                     ],
+                    if (_provider == 'ai_gemini') ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _imageModelC,
+                        autocorrect: false,
+                        enabled: !_running,
+                        decoration: const InputDecoration(labelText: 'Gemini ပုံ model (မဖြစ်မနေ မဟုတ်)', helperText: 'ဗလာထားရင် gemini-2.5-flash-image။ Error မှာ model မရှိဘူးပြောရင် ဒီနာမည်ပြောင်းပါ'),
+                      ),
+                    ],
+                    if (isAiProvider(_provider))
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text(
+                          'AI ပုံတွေက သရုပ်ဖော်ပုံ ဖြစ်တယ် — ဖြစ်ရပ်အစစ်ရဲ့ ဓာတ်ပုံ မဟုတ်ဘူး။ ထုတ်ဝေရင် "AI ပုံ" လို့ ဖော်ပြပါ။',
+                          style: TextStyle(color: DfColors.warn, fontSize: 12),
+                        ),
+                      ),
                     if (stockProviders[_provider]!.needsKey) ...[
                       const SizedBox(height: 8),
                       TextField(

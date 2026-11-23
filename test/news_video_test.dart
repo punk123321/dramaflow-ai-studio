@@ -129,4 +129,27 @@ void main() {
       expect(e.text, contains('{{SOURCES}}'));
     }
   });
+
+  test('AI picture sources: listed as picture sources without a key, model sent only for Gemini', () {
+    for (final p in ['ai_gemini', 'ai_pollinations']) {
+      expect(stockProviders[p]!.images, isTrue, reason: p);
+      expect(stockProviders[p]!.needsKey, isFalse, reason: p);
+      expect(isAiProvider(p), isTrue);
+    }
+    expect(isAiProvider('wikimedia'), isFalse);
+    final g = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'ai_gemini', stockKey: '', imageModel: ' my-image-model ', ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(g['stock_provider'], 'ai_gemini');
+    expect(g['image_model'], 'my-image-model');
+    final empty = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'ai_gemini', stockKey: '', ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(empty.containsKey('image_model'), isFalse);
+    final other = newsRequestJson(
+        topic: 't', geminiKey: 'g', stockProvider: 'ai_pollinations', stockKey: '', imageModel: 'x', ratio: '9:16', minutes: 4, voice: 'v', sources: ['a'], strict: true, prompt: 'p');
+    expect(other.containsKey('image_model'), isFalse);
+    final back = NewsVideoSettings.decode(const NewsVideoSettings(url: 'https://a.b', token: 't', provider: 'ai_gemini', imageModel: 'm1').encode());
+    expect(back.provider, 'ai_gemini');
+    expect(back.imageModel, 'm1');
+    expect(NewsVideoSettings.decode('{"url":"https://a.b","token":"t"}').imageModel, '');
+  });
 }

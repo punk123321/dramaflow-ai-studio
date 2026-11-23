@@ -20,6 +20,7 @@
 #                            !wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared
 import asyncio, json, re, secrets, shutil, subprocess, threading, time
 from pathlib import Path
+from urllib.parse import quote
 from typing import List, Optional
 
 import edge_tts
@@ -47,7 +48,8 @@ class NewsRequest(BaseModel):
     topic: str
     gemini_key: str
     pexels_key: str = ""  # old apps; same as stock_key when stock_provider is "pexels"
-    stock_provider: str = "wikimedia"  # "wikimedia" (no key), "pixabay", "unsplash", "pexels"
+    stock_provider: str = "wikimedia"  # "wikimedia" (no key), "pixabay", "unsplash", "pexels", or AI-made: "ai_gemini", "ai_pollinations"
+    image_model: str = ""  # Gemini picture model for "ai_gemini"; empty = gemini-2.5-flash-image
     stock_key: str = ""
     image_count: int = 20  # pictures for the whole video (picture sources only); 0 = one per scene
     aspect_ratio: str = "9:16"  # "9:16" or "16:9"
@@ -287,6 +289,132 @@ def _cands_pixabay_photo(keyword: str, key: str, ratio: str) -> list:
 IMAGE_SEARCH = {"wikimedia": _cands_wikimedia, "unsplash": _cands_unsplash, "pixabay_photo": _cands_pixabay_photo}
 
 
+# ---- pictures made by AI (optional source; the others are searched) ---------
+AI_PROVIDERS = ("ai_gemini", "ai_pollinations")
+AI_GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
+_PACE = {"last": 0.0}
+
+
+def ai_prompt(keyword: str, ratio: str, variant: int = 0) -> str:
+    """The picture prompt for one scene keyword. It asks for a plain documentary
+    look with no text, logos or recognisable real people (the picture is an
+    illustration, not a photo of the real event)."""
+    angles = ["wide establishing shot", "close-up detail", "medium shot", "aerial view"]
+    orient = "vertical portrait" if ratio == "9:16" else "horizontal landscape"
+    return (f"{str(keyword).strip()[:160]}, {angles[variant % len(angles)]}, {orient} composition, "
+            "documentary news photograph style, realistic, natural light, "
+            "no text, no captions, no logos, no watermark, no identifiable real people")
+
+
+def gemini_image_bytes(payload: dict) -> Optional[bytes]:
+    """The first picture in a generateContent answer (inlineData, base64), or None."""
+    import base64
+    for c in (payload or {}).get("candidates") or []:
+        for p in (c.get("content") or {}).get("parts") or []:
+            d = p.get("inlineData") or p.get("inline_data")
+            if d and d.get("data"):
+                try:
+                    return base64.b64decode(d["data"])
+                except Exception:
+                    return None
+    return None
+
+
+def short_api_error(text: str, key: str = "") -> str:
+    """A short readable reason from an error answer, with the key hidden."""
+    msg = text or ""
+    try:
+        j = json.loads(text)
+        msg = (j.get("error") or {}).get("message") or msg
+    except Exception:
+        pass
+    if key and len(key) >= 8:
+        msg = msg.replace(key, "***")
+    return " ".join(msg.split())[:160]
+
+
+def gen_gemini_image(prompt: str, key: str, model: str, save: Path) -> str:
+    """Makes one picture with the user's Gemini key. Returns "" when it was
+    saved, otherwise a short reason."""
+    try:
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}},
+            timeout=90)
+    except Exception as e:
+        return "ချိတ်ဆက်မရ: " + short_api_error(str(e), key)
+    if r.status_code != 200:
+        return f"HTTP {r.status_code} {short_api_error(r.text, key)}"
+    try:
+        data = gemini_image_bytes(r.json())
+    except Exception:
+        data = None
+    if not data or len(data) < 1000:
+        return "ပုံ မပါလာဘူး (ဒီ model က ပုံမထုတ်ဘူး / ပိတ်ထားတယ်)"
+    save.write_bytes(data)
+    return ""
+
+
+def _pace(gap: float = 20.0):
+    """The free Pollinations service lets one picture through every 15-45 s per
+    address, so requests are spaced out."""
+    wait = _PACE["last"] + gap - time.time()
+    if wait > 0:
+        time.sleep(wait)
+    _PACE["last"] = time.time()
+
+
+def gen_pollinations_image(prompt: str, ratio: str, seed: int, save: Path) -> str:
+    w, h = (432, 768) if ratio == "9:16" else (768, 432)
+    url = f"https://image.pollinations.ai/prompt/{quote(prompt)}?width={w}&height={h}&seed={seed}&nologo=true&safe=true"
+    for _ in range(3):
+        _pace()
+        try:
+            r = requests.get(url, timeout=120, headers=UA)
+        except Exception as e:
+            return "ချိတ်ဆက်မရ: " + short_api_error(str(e))
+        if r.status_code in (402, 429):
+            try:
+                wait = int(r.headers.get("Retry-After") or 30)
+            except ValueError:
+                wait = 30
+            time.sleep(min(60, max(5, wait)))
+            continue
+        if r.status_code == 200 and r.headers.get("content-type", "").startswith("image") and len(r.content) > 1000:
+            save.write_bytes(r.content)
+            return ""
+        return f"HTTP {r.status_code}"
+    return "Pollinations ရဲ့ အခမဲ့ ကန့်သတ်ချက် ပြည့်နေတယ်"
+
+
+def generate_images(provider: str, key: str, model: str, keywords: list, ratio: str, need: int, work: Path, tag, state: dict) -> list:
+    """Up to [need] AI pictures for one scene. After two failures in a row the
+    source is switched off for the rest of the video ([state]["off"]) and the
+    reason is kept in [state]["why"], so the caller can fall back to searched pictures."""
+    got: list = []
+    if state.get("off") or not keywords:
+        return got
+    for v in range(need):
+        path = work / f"img_{tag}_{len(got)}.jpg"
+        prompt = ai_prompt(keywords[v % len(keywords)], ratio, v)
+        if provider == "ai_gemini":
+            why = gen_gemini_image(prompt, key, model or AI_GEMINI_IMAGE_MODEL, path)
+        else:
+            why = gen_pollinations_image(prompt, ratio, secrets.randbelow(10**6), path)
+        if not why:
+            got.append(path)
+            state["made"] = state.get("made", 0) + 1
+            state["fails"] = 0
+        else:
+            state["fails"] = state.get("fails", 0) + 1
+            state["why"] = why
+            if state["fails"] >= 2:
+                state["off"] = True
+                break
+    return got
+
+
 def collect_images(keywords: list, provider: str, key: str, ratio: str, need: int, used: set, work: Path, tag) -> list:
     """Up to [need] different pictures for one scene, never one already used in
     this video. Falls back to Wikimedia (no key) when the chosen source gives nothing."""
@@ -417,8 +545,11 @@ def run_job(job_id: str, req: NewsRequest):
         scenes = data["scenes"]
         n = len(scenes)
         clips, out_scenes, t, stock_used = [], [], 0.0, {}
-        use_images = req.stock_provider in IMAGE_SEARCH and req.image_count > 0
-        sec_per_image = max(4.0, max(3.0, min(5.0, req.duration_min)) * 60 / max(1, min(60, req.image_count)))
+        use_ai = req.stock_provider in AI_PROVIDERS
+        image_count = min(req.image_count, 16) if req.stock_provider == "ai_pollinations" else req.image_count
+        use_images = (req.stock_provider in IMAGE_SEARCH or use_ai) and image_count > 0
+        sec_per_image = max(4.0, max(3.0, min(5.0, req.duration_min)) * 60 / max(1, min(60, image_count)))
+        ai_state: dict = {"made": 0, "fails": 0, "off": False, "why": ""}
         used_ids: set = set()
         for i, sc in enumerate(scenes):
             narr = str(sc.get("narration", "")).strip()
@@ -439,7 +570,12 @@ def run_job(job_id: str, req: NewsRequest):
             raw_kw = [raw_kw] if isinstance(raw_kw, str) else raw_kw
             kws = [str(k).strip() for k in raw_kw if str(k).strip()] or [str(sc.get("keyword") or "news")]
             imgs = []
-            if use_images:
+            if use_images and use_ai:
+                need = images_for(dur, sec_per_image)
+                imgs = generate_images(req.stock_provider, req.gemini_key, req.image_model.strip(), kws, req.aspect_ratio, need, work, i, ai_state)
+                if not imgs:  # AI source failed or is off: searched pictures instead
+                    imgs = collect_images(kws, "wikimedia", "", req.aspect_ratio, need, used_ids, work, i)
+            elif use_images:
                 imgs = collect_images(kws, req.stock_provider, req.stock_key, req.aspect_ratio,
                                       images_for(dur, sec_per_image), used_ids, work, i)
             if imgs:
@@ -468,9 +604,15 @@ def run_job(job_id: str, req: NewsRequest):
             warnings.append(f"အသံရှည်က {int(t // 60)}:{int(t % 60):02d} ဖြစ်နေတယ် (၃-၅ မိနစ် မဟုတ်ဘူး)")
         if not req.use_search:
             warnings.append("Google Search မသုံးဘူး — သတင်းအချက်အလက်ကို Gemini ရဲ့ မှတ်ဉာဏ်ကပဲ ယူထားတယ်၊ မမှန်နိုင်ဘူး။ ထုတ်ဝေမလုပ်ခင် ကိုယ်တိုင် စစ်ပါ")
+        if use_ai and not ai_state["made"] and ai_state["why"]:
+            warnings.append("AI ပုံ ထုတ်လို့ မအောင်ဘူး၊ Wikimedia ပုံနဲ့ အစားထိုးခဲ့တယ် — အကြောင်းရင်း: " + ai_state["why"])
         if not stock_used:
             warnings.append("နောက်ခံ ဗီဒီယို/ပုံ တစ်ခုမှ မရဘူး (key မှန်လား၊ keyword ရှာမတွေ့လား) — အရောင်နောက်ခံပဲ ဖြစ်တယ်")
         elif stock_used.get("image"):
+            if ai_state["made"]:
+                warnings.append(f"AI ဖန်တီးတဲ့ ပုံ {ai_state['made']} ခု ပါတယ် — ဓာတ်ပုံအစစ် မဟုတ်ဘူး၊ ဖြစ်ရပ်အစစ်ကို ပြတာ မဟုတ်ဘူး။ ထုတ်ဝေရင် \"AI ပုံ\" လို့ ဖော်ပြပါ")
+            if use_ai and ai_state["made"] and ai_state["why"] and (ai_state["off"] or ai_state["fails"]):
+                warnings.append("AI ပုံ ထုတ်လို့ မအောင်လို့ တချို့ scene တွေမှာ Wikimedia ပုံနဲ့ အစားထိုးထားတယ် — အကြောင်းရင်း: " + ai_state["why"])
             warnings.append(f"ပုံ {stock_used['image']} ခု သုံးထားတယ် (scene အလိုက် စဉ်ပေး၊ Ken Burns zoom)။ Wikimedia/Unsplash ပုံတွေမှာ လိုင်စင်/credit လိုနိုင်တယ် — publish မလုပ်ခင် စစ်ပါ")
         _set(job_id, status="done", stage="ပြီးပြီ", progress=100, title=data.get("title", req.topic),
              scenes=out_scenes, seconds=round(t, 1), warnings=warnings, size=final.stat().st_size)
