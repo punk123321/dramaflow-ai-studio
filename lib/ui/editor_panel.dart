@@ -1287,7 +1287,8 @@ class _EditorPanelState extends State<EditorPanel> {
                       child: BackdropFilter(
                         filter: ui.ImageFilter.blur(sigmaX: m.strength * 0.4, sigmaY: m.strength * 0.4),
                         child: DecoratedBox(
-                          decoration: BoxDecoration(border: Border.all(color: sel ? DfColors.accent : Colors.white54, width: sel ? 2 : 1)),
+                          // The line is only a guide in the preview (the render has none). With "edge" off it shows only while the box is selected, so it can still be moved.
+                          decoration: (m.edge || sel) ? BoxDecoration(border: Border.all(color: sel ? DfColors.accent : Colors.white54, width: sel ? 2 : 1)) : null,
                         ),
                       ),
                     ),

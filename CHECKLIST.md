@@ -776,3 +776,9 @@ Reported by the user: "ဖုန်းပိတ်ရင် download ဆွဲ�
 | New `BackgroundWork` (counted begin/update/end) around: link -> backend -> Gemini, Recap Auto run, Recap job resume, voice download, News video job, News MP4 download. Notification shows the stage and percent; it is switched off only when the last job ends | Dart test with a mocked channel (`background_work_test`) | see CI | **No** |
 | `RenderService` also holds a Wi-Fi lock (released with the wake lock) so the Wi-Fi radio does not sleep with the screen off | none (Kotlin, needs a phone) | see CI | **No** |
 Honest limits: this makes it much more likely, it does not guarantee it. Some phone makers (Xiaomi, Oppo, Huawei ...) still kill background apps unless battery saving is set to "No restrictions" for DramaFlow; swiping the app away stops it. Android 13+ asks once for the notification permission. If the phone loses Wi-Fi/mobile data, the job on the backend still goes on and can be resumed.
+
+## TE-60: Censor (rectangle blur) — switch to hide the border line (2026-11-24)
+Asked by the user ("censor ကို ဘေးက border လိုင်းပေါ်နေတာ ဖျောက်ပေးတဲ့ ခလုတ်"). Branch `claude/te-60-censor-border` (built on TE-59). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Censor settings: new switch "ဘောင်လိုင်း ပြ" (default on). Off = no line round the box in the preview unless the box is selected (so it can still be moved). The exported video never had a line (it is only the blur), so the export is unchanged | Dart test (`te_blur_flip_test`): default, off, kept through `withTime`, box still compiled | see CI | **No** |

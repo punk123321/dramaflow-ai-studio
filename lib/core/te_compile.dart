@@ -141,6 +141,7 @@ class MotionItem {
     this.top = false,
     this.fill = false,
     this.strength = 25,
+    this.edge = true,
     this.template = 0,
   });
 
@@ -179,6 +180,9 @@ class MotionItem {
   /// Blur box: blur strength.
   final double strength;
 
+  /// Blur box: draw a thin line round the box in the preview. The rendered video never has a line, only the blur.
+  final bool edge;
+
   /// Frame: a ready-made frame (see te_frames.dart), 0 = the plain line / rainbow border.
   final int template;
 
@@ -201,6 +205,7 @@ class MotionItem {
         top: top,
         fill: fill,
         strength: strength,
+        edge: edge,
         template: template,
       );
 
@@ -284,6 +289,7 @@ MotionItem? motionFromParams(Map<String, Object?> p) {
     top: p['top'] == true,
     fill: p['fill'] == true,
     strength: st is num ? st.toDouble() : 25,
+    edge: p['edge'] != false,
     template: p['tpl'] is int && frameTemplateById(p['tpl'] as int) != null ? p['tpl'] as int : 0,
   );
 }

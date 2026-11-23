@@ -307,6 +307,7 @@ class _TeInlineEditorState extends State<TeInlineEditor> {
             _slider('အရွယ်', 'size', 0.06, 0.03, 0.4),
           if (shape) _slider('အမြင့်', 'ar', 0.5, 0.1, 3.0),
           if (k == 'blurBox') _slider('မှုန်ပမာဏ', 'strength', 25, 5, 60),
+          if (k == 'blurBox') flag('ဘောင်လိုင်း ပြ (ပိတ် = မပြ၊ ရွေးထားချိန်ပဲ မြင်ရ)', 'edge', defaultOn: true),
           if (k == 'arrow') _slider('လှည့်', 'angle', 0, 0, 359, whole: true),
           if (k == 'box' || k == 'circle') flag('အတွင်း ဖြည့် (marker)', 'fill'),
           if (k == 'frame' && _op.params['tpl'] is! int) flag('သက်တန့်ရောင်စုံ', 'grad'),
