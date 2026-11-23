@@ -748,3 +748,13 @@ Asked by the user: give a link instead of uploading a video file; News should ma
 | News Video: AI picture sources (Gemini image, Pollinations) with fallback to Wikimedia stock search | Python + Dart tests of the helpers | yes (run 45118749572) | **No** |
 Honest limits: yt-dlp against the real sites was NOT run here (no network). YouTube often blocks Colab's addresses ("sign in to confirm you're not a bot"); TikTok / Red Note short links may need updates of yt-dlp. The backend says so in Burmese when it happens. Downloading is for videos you have the right to use; the original is never changed (a temporary copy on the backend is deleted after the upload). Needs the NEW Recap notebook (`dramaflow_recap_colab_standalone.ipynb`, installs yt-dlp) and the News notebook re-uploaded.
 CI: run 45118749572 success, `flutter analyze` 107 infos (no warnings/errors), APK artifact `dramaflow-apk-branch-246`. Not merged into main.
+
+## TE-56: Scene Recap in the queue + the queue keeps going in the background (2026-11-23)
+Asked by the user ("နှစ်ခုလုံးလုပ်ထား"). Branch `claude/te-56-queue-scenes` (built on TE-55; merging it brings TE-55 too). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Queue: Video / Scene switch. Scene mode per episode: subtitles -> scene split + contact sheets on the phone -> pictures to the user's backend (Gemini + voice there; no VPN needed) -> save -> audio. A scene plan the user already made is reused; the script and Video Index are written only when the project has neither | Dart tests for scene-plan reading and the step lists / notice text; the runner itself needs a phone and a backend | yes (run 45120451549) | **No** |
+| Link-only projects are not offered in Scene mode (frames need the video file) | by reading | yes | **No** |
+| Contact sheets made by the queue are not saved to the phone gallery (a new `gallery:false` option in SceneTools.kt) | none (Kotlin) | yes | **No** |
+| Background: the queue starts the existing foreground service (notification + wake lock) with its own title and "2/5 · episode · step" and a percent; it stops when the queue ends | notice text tested; the service needs a phone | yes | **No** |
+Honest limits: this keeps the app alive, it does not guarantee it. Swiping the app away or a maker's battery saver can still stop it; "retry" then continues with what is left. Android 13+ asks once for the notification permission (without it the queue still runs, only the notification is hidden). CI: `flutter analyze` 107 infos (no warnings/errors), `flutter test` 397 passed, APK artifact `dramaflow-apk-branch-250`.
