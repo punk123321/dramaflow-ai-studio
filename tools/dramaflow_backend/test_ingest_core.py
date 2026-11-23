@@ -25,6 +25,56 @@ class ExtractUrl(unittest.TestCase):
         self.assertEqual(ic.extract_url(None), "")
 
 
+class Cookies(unittest.TestCase):
+    OK = "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1893456000\tSID\tabc\n"
+
+    def test_good_file(self):
+        self.assertEqual(ic.cookies_problem(self.OK), "")
+        self.assertEqual(ic.cookies_problem("\ufeff" + self.OK), "")
+        self.assertEqual(ic.cookies_problem("#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tabc"), "")
+
+    def test_problems(self):
+        self.assertIn("အလွတ်", ic.cookies_problem("  \n"))
+        self.assertIn("JSON", ic.cookies_problem('[{"name":"SID"}]'))
+        self.assertIn("JSON", ic.cookies_problem('{"a":1}'))
+        self.assertIn("tab", ic.cookies_problem("# Netscape\njust some text without tabs"))
+        self.assertIn("ကြီးလွန်း", ic.cookies_problem(self.OK + ("x" * (ic.MAX_COOKIE_BYTES + 1))))
+
+    def test_note_when_other_website(self):
+        self.assertEqual(ic.cookie_note(self.OK, "youtube"), "")
+        self.assertIn("tiktok.com", ic.cookie_note(self.OK, "tiktok"))
+        self.assertEqual(ic.cookie_note(self.OK, "other"), "")
+
+
+class Subtitles(unittest.TestCase):
+    def test_chinese_first_then_english(self):
+        self.assertEqual(ic.pick_subtitle(["v.mp4", "v.en.srt", "v.zh-Hans.srt"]), ("v.zh-Hans.srt", "zh-Hans"))
+        self.assertEqual(ic.pick_subtitle(["v.en.srt", "v.my.srt"]), ("v.en.srt", "en"))
+        self.assertEqual(ic.pick_subtitle(["v.fr.srt", "v.zh-Hant-HK.srt"]), ("v.zh-Hant-HK.srt", "zh-Hant-HK"))
+        self.assertEqual(ic.pick_subtitle(["v.fr.srt"]), ("v.fr.srt", "fr"))
+
+    def test_danmaku_and_other_files_are_not_subtitles(self):
+        self.assertEqual(ic.pick_subtitle(["v.danmaku.srt", "v.live_chat.srt", "v.zh.vtt", "v.mp4"]), (None, ""))
+        self.assertEqual(ic.pick_subtitle([]), (None, ""))
+
+    def test_clean_srt(self):
+        self.assertEqual(ic.clean_srt("\ufeff1\n00:00:01,000 --> 00:00:02,000\nhi\n"), "1\n00:00:01,000 --> 00:00:02,000\nhi")
+        self.assertEqual(ic.clean_srt("nothing here"), "")
+        self.assertEqual(ic.clean_srt("-->" + "x" * (ic.MAX_SRT_CHARS + 1)), "")
+        self.assertEqual(ic.clean_srt(None), "")
+
+    def test_run_ingest_passes_srt_and_cookie_flag(self):
+        got = {"path": "/tmp/v.mp4", "title": "T", "duration_ms": 1000, "srt": "1\n00:00:01,000 --> 00:00:02,000\nhi", "srt_lang": "zh-Hans", "cookies": True}
+        out = ic.run_ingest("https://142.250.1.1/v", lambda u, p: got, lambda p, m: ("uri", m), lambda s, p: None)
+        self.assertEqual(out["srt_lang"], "zh-Hans")
+        self.assertIn("hi", out["srt"])
+        self.assertTrue(out["cookies"])
+        got2 = {"path": "/tmp/v.mp4", "title": "T", "duration_ms": 1000, "srt": "garbage"}
+        out2 = ic.run_ingest("https://142.250.1.1/v", lambda u, p: got2, lambda p, m: ("uri", m), lambda s, p: None)
+        self.assertNotIn("srt", out2)
+        self.assertFalse(out2["cookies"])
+
+
 class Classify(unittest.TestCase):
     def test_kinds(self):
         self.assertEqual(ic.classify("https://www.youtube.com/watch?v=x"), "youtube")

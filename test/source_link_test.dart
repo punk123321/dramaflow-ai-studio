@@ -97,6 +97,21 @@ void main() {
       expect(i.source, 'tiktok');
       expect(i.savedAtMs, 7);
     });
+    test('subtitles that came with the video are read but not kept in the record', () {
+      final j = parseIngestJob('{"status":"done","info":{"file_uri":"u","duration_ms":5000,"srt":"1\\n00:00:01,000 --> 00:00:02,000\\nhi","srt_lang":"zh-Hans"}}');
+      final i = ingestInfoFrom('https://youtu.be/x', j.info, 7)!;
+      expect(i.srt, contains('-->'));
+      expect(i.srtLang, 'zh-Hans');
+      final back = IngestInfo.decode(i.encode())!;
+      expect(back.srt, isEmpty); // the app saves them as the project's subtitles instead
+      expect(back.fileUri, 'u');
+      expect(i.encode(), isNot(contains('-->')));
+    });
+    test('an answer without subtitles has empty ones', () {
+      final i = ingestInfoFrom('u', {'file_uri': 'x', 'duration_ms': 5}, 1)!;
+      expect(i.srt, isEmpty);
+      expect(i.srtLang, isEmpty);
+    });
     test('error text is kept', () {
       final j = parseIngestJob('{"status":"error","error":"YouTube က တားထားတယ်"}');
       expect(j.state, JobState.error);

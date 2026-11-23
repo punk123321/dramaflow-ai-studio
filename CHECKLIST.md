@@ -758,3 +758,12 @@ Asked by the user ("နှစ်ခုလုံးလုပ်ထား"). Branc
 | Contact sheets made by the queue are not saved to the phone gallery (a new `gallery:false` option in SceneTools.kt) | none (Kotlin) | yes | **No** |
 | Background: the queue starts the existing foreground service (notification + wake lock) with its own title and "2/5 · episode · step" and a percent; it stops when the queue ends | notice text tested; the service needs a phone | yes | **No** |
 Honest limits: this keeps the app alive, it does not guarantee it. Swiping the app away or a maker's battery saver can still stop it; "retry" then continues with what is left. Android 13+ asks once for the notification permission (without it the queue still runs, only the notification is hidden). CI: `flutter analyze` 107 infos (no warnings/errors), `flutter test` 397 passed, APK artifact `dramaflow-apk-branch-250`.
+
+## TE-57: link — cookies.txt (YouTube bot check) + the link's own subtitles (2026-11-23)
+Idea taken from the user's "All In One Download" notebook (only the downloader ideas; its Zoom/Flip/Colour/Pitch editor part was NOT used). Branch `claude/te-56-queue-scenes` (same branch as TE-56). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Backend: an optional cookies.txt that YOU put on the backend machine (Colab: `/content/cookies.txt`, new notebook Cell 5b) is used by yt-dlp from a private copy that is deleted with the job. It never goes through the app. A broken file (JSON, empty, no tabs) stops with a Burmese reason; the bot-check hint says how to add cookies, or that they may be old | Python tests with a yt-dlp stand-in (`test_main_stubbed`, `test_ingest_core`) | n/a (Python) | **No** |
+| Backend: the uploader's own subtitles (zh first, then en, my; not machine captions, not danmaku) are asked for as .srt and returned; a subtitle file is never mistaken for the video | same | n/a | **No** |
+| App: those subtitles are saved as the project's source subtitles only when the project has none; used at once by Auto and the Queue (a log line says so) | Dart tests of the answer reading | see CI note | **No** |
+Honest limits: the real YouTube / Bilibili / TikTok / Red Note were NOT contacted here. Cookies may expire or be refused; a cookie from your main Google account is a risk (use a spare account). Many videos have no uploader subtitles at all (then nothing changes). Needs the NEW Recap notebook.

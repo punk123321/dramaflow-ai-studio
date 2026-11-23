@@ -38,7 +38,8 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
-from ingest_core import MAX_BYTES, MAX_SECONDS, check_url, classify, ingest_hint, parse_ffmpeg_duration, run_ingest
+from ingest_core import (MAX_BYTES, MAX_SECONDS, SUB_LANGS, SUB_SUFFIXES, check_url, classify, clean_srt, cookie_note,
+                         cookies_problem, ingest_hint, parse_ffmpeg_duration, pick_subtitle, run_ingest)
 from recap_core import fit_tempo, gemini_hint, mask_key, run_recap
 from tts_text import normalize_for_tts
 
@@ -309,6 +310,15 @@ def _state_name(f) -> str:
     return str(getattr(st, "name", st) or "")
 
 
+def _cookies_source() -> Optional[Path]:
+    """An optional cookies.txt the user put on the backend machine themselves
+    (in Colab: /content/cookies.txt). It never goes through the app."""
+    for c in (os.environ.get("DF_COOKIES"), "/content/cookies.txt", str(Path(__file__).resolve().parent / "cookies.txt")):
+        if c and Path(c).is_file():
+            return Path(c)
+    return None
+
+
 def _ytdlp_download(url: str, job_dir: Path, max_height: int, on_pct):
     """yt-dlp is imported here so the backend still starts (and recaps work)
     when it is not installed; the error then says what to install."""
@@ -325,6 +335,24 @@ def _ytdlp_download(url: str, job_dir: Path, max_height: int, on_pct):
             if tot:
                 on_pct(int(100 * (d.get("downloaded_bytes") or 0) / tot))
 
+    cookies_text = ""
+    cookie_file = None
+    src = _cookies_source()
+    if src is not None:
+        cookies_text = src.read_text(encoding="utf-8", errors="ignore")
+        bad = cookies_problem(cookies_text)
+        if bad:
+            raise ValueError(bad)
+        cookie_file = job_dir / "cookies.txt"  # a private copy (yt-dlp writes to its cookie file); deleted with the job
+        cookie_file.write_text(cookies_text, encoding="utf-8")
+        try:
+            os.chmod(cookie_file, 0o600)
+        except OSError:
+            pass
+        note = cookie_note(cookies_text, classify(url))
+        if note:
+            print("cookies:", note, flush=True)
+
     opts = {
         "outtmpl": str(job_dir / "v.%(ext)s"),
         "format": f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/bv*[height<={h}]+ba/b[height<={h}]/b",
@@ -338,10 +366,17 @@ def _ytdlp_download(url: str, job_dir: Path, max_height: int, on_pct):
         "retries": 3,
         "ffmpeg_location": _ffmpeg(),
         "progress_hooks": [hook],
+        # the uploader's own subtitles, as .srt (a failure here does not stop the video)
+        "writesubtitles": True,
+        "subtitleslangs": list(SUB_LANGS),
+        "subtitlesformat": "srt/best",
+        "postprocessors": [{"key": "FFmpegSubtitlesConvertor", "format": "srt", "when": "before_dl"}],
     }
+    if cookie_file is not None:
+        opts["cookiefile"] = str(cookie_file)
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
-    files = [f for f in job_dir.glob("v.*") if f.suffix not in (".part", ".ytdl")]
+    files = [f for f in job_dir.glob("v.*") if f.suffix.lower() not in (".part", ".ytdl") + tuple(SUB_SUFFIXES)]
     if not files:
         raise RuntimeError("ဗီဒီယို မရဘူး (၃ နာရီထက် ရှည်တာ / live / ၂ GB ထက်ကြီးတာ ဖြစ်နိုင်တယ်)")
     path = max(files, key=lambda f: f.stat().st_size)
@@ -354,7 +389,17 @@ def _ytdlp_download(url: str, job_dir: Path, max_height: int, on_pct):
             ms = parse_ffmpeg_duration(p.stderr)
         except Exception:
             ms = 0
-    return {"path": str(path), "title": (info or {}).get("title") or "", "duration_ms": ms}
+    srt, srt_lang = "", ""
+    sub_name, srt_lang = pick_subtitle([f.name for f in job_dir.glob("v.*.srt")])
+    if sub_name:
+        try:
+            srt = clean_srt((job_dir / sub_name).read_text(encoding="utf-8", errors="ignore"))
+        except OSError:
+            srt = ""
+        if not srt:
+            srt_lang = ""
+    return {"path": str(path), "title": (info or {}).get("title") or "", "duration_ms": ms,
+            "srt": srt, "srt_lang": srt_lang, "cookies": cookie_file is not None}
 
 
 def _gemini_upload(key: str, path: str, mime: str):
@@ -387,7 +432,7 @@ def run_ingest_job(job_id: str, req: IngestRequest):
         err = ""
     except Exception as e:  # shown in the app, with the key hidden
         msg = mask_key(str(e), req.gemini_key)
-        hint = ingest_hint(msg, classify(req.url))
+        hint = ingest_hint(msg, classify(req.url), has_cookies=_cookies_source() is not None)
         err = ((hint + " · ") if hint else "") + msg[:300]
     shutil.rmtree(job_dir, ignore_errors=True)  # the downloaded copy is never kept
     if err:

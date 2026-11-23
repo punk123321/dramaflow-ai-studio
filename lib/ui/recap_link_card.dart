@@ -147,6 +147,7 @@ class _RecapLinkCardState extends State<RecapLinkCard> {
     try {
       await _ingest.saveLink(widget.projectId, link);
       _saved = link;
+      var subsNote = '';
       final info = await _ingest.ensure(
         projectId: widget.projectId,
         client: client,
@@ -160,11 +161,12 @@ class _RecapLinkCardState extends State<RecapLinkCard> {
             });
           }
         },
+        onSubs: (n, lang) => subsNote = 'စာတန်း $n ကြောင်းလည်း ပါလာပြီး သိမ်းပြီး${lang.isEmpty ? '' : ' ($lang)'}',
       );
       if (!mounted) return;
       setState(() => _info = info);
       widget.onChanged(link, info);
-      _say('ရပြီ ✓ Gemini ဆီ ရောက်နေပြီ (${(info.durationMs / 60000).toStringAsFixed(1)} မိနစ်)။ အောက်က Auto နဲ့ Recap စလို့ရပြီ');
+      _say('ရပြီ ✓ Gemini ဆီ ရောက်နေပြီ (${(info.durationMs / 60000).toStringAsFixed(1)} မိနစ်)${subsNote.isEmpty ? '' : '၊ $subsNote'}။ အောက်က Auto နဲ့ Recap စလို့ရပြီ');
     } on RecapCanceled {
       widget.onChanged(_saved, _info);
       _say('ရပ်လိုက်ပြီ (Backend မှာ ဆက်လုပ်နေနိုင်တယ်၊ link ကိုတော့ သိမ်းထားတယ်)');

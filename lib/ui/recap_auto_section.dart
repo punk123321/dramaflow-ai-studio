@@ -362,7 +362,9 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
             }
           },
           reused: (r) => _note(r ? 'link ကနေ ဆွဲပြီးသား Gemini file ကို ပြန်သုံး' : 'link ကို Backend က ဆွဲပြီး Gemini ဆီ တင်မယ် (${linkKindLabels[linkKindOf(widget.linkUrl)]})'),
+          onSubs: (n, lang) => _note('ဗီဒီယိုနဲ့အတူ စာတန်း $n ကြောင်း ရပြီး သိမ်းပြီး${lang.isEmpty ? '' : ' ($lang)'}'),
         );
+        await widget.onSrtReady(); // so the groups below use the link's own subtitles, if they came
         fileUri = info.fileUri;
         mime = info.mime;
         _lastFileUri = info.fileUri;

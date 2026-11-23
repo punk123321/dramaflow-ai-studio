@@ -59,6 +59,8 @@ class IngestInfo {
     this.title = '',
     this.source = 'other',
     this.savedAtMs = 0,
+    this.srt = '',
+    this.srtLang = '',
   });
 
   final String url;
@@ -68,6 +70,12 @@ class IngestInfo {
   final String title;
   final String source;
   final int savedAtMs;
+
+  /// The uploader's own subtitles that came with the video (SRT text) and their
+  /// language. Only in the answer of a fresh download; never kept in the record
+  /// (the app saves them as the project's subtitles instead).
+  final String srt;
+  final String srtLang;
 
   /// True when this is for the same link and Gemini surely still has the file.
   bool usableFor(String link, int nowMs) =>
@@ -166,5 +174,7 @@ IngestInfo? ingestInfoFrom(String url, Map<String, Object?>? answer, int nowMs) 
     title: answer['title'] is String ? answer['title'] as String : '',
     source: answer['source'] is String ? answer['source'] as String : 'other',
     savedAtMs: nowMs,
+    srt: answer['srt'] is String ? answer['srt'] as String : '',
+    srtLang: answer['srt_lang'] is String ? answer['srt_lang'] as String : '',
   );
 }

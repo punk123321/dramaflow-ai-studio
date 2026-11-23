@@ -23,7 +23,7 @@ os.environ["APP_TOKEN"] = "test-token-123456"
 SPOKEN = []  # the text each fake voice call received
 GEMINI = {"reply": None, "gate": None, "calls": 0}
 FILES = {"uploads": [], "states": ["ACTIVE"], "gets": 0}  # Gemini Files API stand-in
-YTDLP = {"calls": [], "fail": None, "ext": "mp4", "duration": 754.0}
+YTDLP = {"calls": [], "fail": None, "ext": "mp4", "duration": 754.0, "subs": [], "cookie_seen": None}
 
 
 class _HTTPException(Exception):
@@ -140,6 +140,10 @@ def _install():
                 raise RuntimeError(YTDLP["fail"])
             out = Path(self.opts["outtmpl"].replace("%(ext)s", YTDLP["ext"]))
             out.write_bytes(b"x" * 2048)
+            for lang, text in YTDLP["subs"]:
+                (out.parent / f"v.{lang}.srt").write_text(text, encoding="utf-8")
+            if self.opts.get("cookiefile"):
+                YTDLP["cookie_seen"] = (self.opts["cookiefile"], Path(self.opts["cookiefile"]).read_text(encoding="utf-8"))
             for h in self.opts["progress_hooks"]:
                 h({"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 2048})
             return {"title": "Episode 12", "duration": YTDLP["duration"]}
@@ -194,7 +198,8 @@ class IngestTests(unittest.TestCase):
     def setUp(self):
         main.JOBS.clear()
         FILES.update(uploads=[], states=["ACTIVE"], gets=0)
-        YTDLP.update(calls=[], fail=None, ext="mp4", duration=754.0)
+        YTDLP.update(calls=[], fail=None, ext="mp4", duration=754.0, subs=[], cookie_seen=None)
+        self._cookies_env = os.environ.pop("DF_COOKIES", None)
         self._defaults = main.check_url.__defaults__
         main.check_url.__defaults__ = (lambda h, p: [(0, 0, 0, "", ("142.250.1.1", 0))],)
         self._sleep = main.time.sleep
@@ -203,6 +208,9 @@ class IngestTests(unittest.TestCase):
     def tearDown(self):
         main.check_url.__defaults__ = self._defaults
         main.time.sleep = self._sleep
+        os.environ.pop("DF_COOKIES", None)
+        if self._cookies_env is not None:
+            os.environ["DF_COOKIES"] = self._cookies_env
 
     def _start(self, **kw):
         base = dict(url=self.URL, gemini_key="AIza-secret-key-1234")
@@ -280,6 +288,78 @@ class IngestTests(unittest.TestCase):
         j = _wait_ingest(self._start())
         self.assertEqual(j["status"], "done", j.get("error"))
         self.assertGreaterEqual(j["info"]["duration_ms"], 0)  # ffmpeg cannot read the fake bytes: 0, not a crash
+
+    SRT_ZH = "1\n00:00:01,000 --> 00:00:03,000\n你好\n\n2\n00:00:03,500 --> 00:00:05,000\n再见\n"
+    SRT_EN = "1\n00:00:01,000 --> 00:00:03,000\nHello\n"
+    COOKIES = "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1893456000\tSID\tSECRET-COOKIE-VALUE\n"
+
+    def test_subtitles_are_asked_for_and_the_best_one_comes_back(self):
+        YTDLP["subs"] = [("en", self.SRT_EN), ("zh-Hans", self.SRT_ZH), ("danmaku", "1\n00:00:01,000 --> 00:00:02,000\nbullet\n")]
+        jid = self._start()
+        j = _wait_ingest(jid)
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(j["info"]["srt_lang"], "zh-Hans")
+        self.assertIn("你好", j["info"]["srt"])
+        self.assertEqual(j["info"]["mime"], "video/mp4")  # a subtitle file is never taken for the video
+        opts = YTDLP["calls"][0][1]
+        self.assertTrue(opts["writesubtitles"])
+        self.assertIn("zh-Hans", opts["subtitleslangs"])
+        self.assertFalse(opts.get("writeautomaticsub"))  # machine captions are not asked for
+        self.assertNotIn("cookiefile", opts)
+        self.assertFalse(j["info"]["cookies"])
+
+    def test_no_subtitles_means_no_srt_in_the_answer(self):
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertNotIn("srt", j["info"])
+
+    def test_a_broken_subtitle_file_is_left_out_not_fatal(self):
+        YTDLP["subs"] = [("zh-Hans", "this is not a subtitle file")]
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertNotIn("srt", j["info"])
+
+    def test_cookies_file_is_used_from_a_private_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "cookies.txt"
+            f.write_text(self.COOKIES, encoding="utf-8")
+            os.environ["DF_COOKIES"] = str(f)
+            jid = self._start()
+            j = _wait_ingest(jid)
+            self.assertEqual(j["status"], "done", j.get("error"))
+            self.assertTrue(j["info"]["cookies"])
+            path, content = YTDLP["cookie_seen"]
+            self.assertEqual(content, self.COOKIES)
+            self.assertNotEqual(Path(path), f)  # yt-dlp got a copy, the user's file is not touched
+            self.assertEqual(f.read_text(encoding="utf-8"), self.COOKIES)
+            self.assertFalse(Path(path).exists())  # the copy went with the job
+            self.assertNotIn("SECRET-COOKIE-VALUE", str(j))
+
+    def test_a_bad_cookies_file_stops_before_downloading(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "cookies.txt"
+            f.write_text('[{"name": "SID"}]', encoding="utf-8")
+            os.environ["DF_COOKIES"] = str(f)
+            j = _wait_ingest(self._start())
+            self.assertEqual(j["status"], "error")
+            self.assertIn("JSON", j["error"])
+            self.assertNotIn("robot", j["error"])  # not mistaken for the YouTube bot check
+            self.assertEqual(YTDLP["calls"], [])
+
+    def test_bot_check_with_cookies_says_they_may_be_old(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "cookies.txt"
+            f.write_text(self.COOKIES, encoding="utf-8")
+            os.environ["DF_COOKIES"] = str(f)
+            YTDLP["fail"] = "ERROR: Sign in to confirm you're not a bot"
+            j = _wait_ingest(self._start())
+            self.assertEqual(j["status"], "error")
+            self.assertIn("သက်တမ်း", j["error"])
+
+    def test_bot_check_without_cookies_says_how_to_add_them(self):
+        YTDLP["fail"] = "ERROR: Sign in to confirm you're not a bot"
+        j = _wait_ingest(self._start())
+        self.assertIn("/content/cookies.txt", j["error"])
 
     def test_second_job_while_running_is_refused(self):
         main.JOBS["ingest_1_aaaa"] = {"status": "running", "stage": "", "progress": 5, "created": time.time(), "error": "", "info": {}}

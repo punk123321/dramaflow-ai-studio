@@ -116,7 +116,7 @@ class RecapEpisodeRunner {
     } else if (!s.useAsr || !s.asr.hasKey) {
       ctx.skip(QStep.subtitles, 'စာတန်းမရှိ၊ AssemblyAI မသုံးဘူး — စာတန်းမပါဘဲ ဆက်သွားမယ်');
     } else if (!hasFile) {
-      ctx.skip(QStep.subtitles, 'link သက်သက်မို့ စာတန်း မထုတ်နိုင်ဘူး — Gemini က ဗီဒီယိုထဲက အသံကို ကိုယ်တိုင် နားထောင်မယ်');
+      ctx.skip(QStep.subtitles, 'link သက်သက်မို့ AssemblyAI မသုံးနိုင်ဘူး — link ကနေ စာတန်းပါလာရင် ယူမယ်၊ မပါရင် Gemini က ဗီဒီယိုထဲက အသံကို ကိုယ်တိုင် နားထောင်မယ်');
     } else {
       entries = await _asr(p, uri, ctx);
     }
@@ -146,7 +146,9 @@ class RecapEpisodeRunner {
           geminiKey: s.geminiKey,
           onStage: (st, pct) => ctx.progress(pct, st),
           reused: (r) => ctx.log(r ? 'link ကနေ ဆွဲပြီးသား Gemini file ကို ပြန်သုံး' : 'link ကို Backend က ဆွဲပြီး Gemini ဆီ တင်မယ် (${linkKindLabels[linkKindOf(link)]})'),
+          onSubs: (n, lang) => ctx.log('ဗီဒီယိုနဲ့အတူ စာတန်း $n ကြောင်း ရပြီး သိမ်းပြီး${lang.isEmpty ? '' : ' ($lang)'}'),
         );
+        if (entries.isEmpty) entries = await _loadSrt(pid); // the link's own subtitles, if they came
         ctx.log('Gemini ဆီ ရောက်ပြီး (${info.mime}, ${(info.durationMs / 60000).toStringAsFixed(1)} မိနစ်${info.title.isEmpty ? '' : ' · ${info.title}'})');
         file = GeminiFile(info.fileUri, info.mime);
         await prepareParts(p.videoDurationMs ?? info.durationMs);
