@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/part_progress.dart';
 import '../core/render_plan.dart';
 import '../core/segments.dart';
 import '../core/srt.dart';
@@ -53,7 +54,22 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
   int _doneParts = 0;
   int _runTotal = 0;
   String _runLabel = '';
-  Set<int> _finished = {};
+  // Parts already made (kept on the phone, so a stop or a crash does not start over).
+  // A part is known by its time range, sound setting and subtitle count, so moving a cut
+  // elsewhere does not make the finished parts look unfinished.
+  Set<String> _doneKeys = {};
+  static const _doneKind = 'parts_done_split';
+  String _keyOfPart(SplitPart p) => partKey(p.startMs, p.endMs, tag: '${_keepSound ? 's' : 'm'}${_lines.length}');
+  Set<int> get _finished {
+    final parts = _parts;
+    return {for (var i = 0; i < parts.length; i++) if (_doneKeys.contains(_keyOfPart(parts[i]))) i};
+  }
+
+  Future<void> _saveDone() async {
+    try {
+      await _repo.setDoc(_pid, _doneKind, encodeDone(_doneKeys));
+    } catch (_) {}
+  }
   String? _msg;
   bool _err = false;
 
@@ -72,7 +88,6 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     super.didUpdateWidget(old);
     if (old.refresh != widget.refresh && !_running) {
       _breaks = {};
-      _finished = {};
       _load();
     }
   }
@@ -90,6 +105,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       final raw = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
       if (raw != null) _lines = sortedLines(parseSrt(raw).entries);
       _tl = Timeline.decode(await _repo.getDoc(_pid, DocKind.timeline));
+      _doneKeys = decodeDone(await _repo.getDoc(_pid, _doneKind));
     } catch (e) {
       _say('ဖတ်လို့မရပါ: $e', error: true);
     }
@@ -145,7 +161,7 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       _doneParts = 0;
       _runTotal = indexes.length;
       _runLabel = indexes.length == 1 ? 'အပိုင်း ${indexes.first + 1}' : '';
-      _finished = {..._finished}..removeAll(indexes);
+      _doneKeys = {..._doneKeys}..removeAll([for (final i in indexes) _keyOfPart(parts[i])]);
       _msg = null;
     });
     final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -187,7 +203,8 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       }
       ok++;
       _doneParts = ok;
-      _finished = {..._finished, i};
+      _doneKeys = {..._doneKeys, _keyOfPart(part)};
+      await _saveDone();
       final done = rs.lastDone;
       if (_toGallery && done != null) {
         try {
@@ -257,7 +274,6 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
                                         final b = {..._breaks};
                                         if (!b.remove(i)) b.add(i);
                                         _breaks = b;
-                                        _finished = {};
                                       }),
                             ),
                     ),
@@ -302,14 +318,12 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         final n = int.tryParse(_linesC.text.trim()) ?? 0;
         setState(() {
           _breaks = breaksEveryLines(_lines.length, n);
-          _finished = {};
         });
       }),
       _autoRow(_minC, Icons.timer_outlined, 'မိနစ်', () {
         final m = double.tryParse(_minC.text.trim()) ?? 0;
         setState(() {
           _breaks = breaksEveryMs(_lines, (m * 60000).round());
-          _finished = {};
         });
       }),
       Row(children: [
@@ -322,7 +336,6 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
                 ? null
                 : () => setState(() {
                       _breaks = {};
-                      _finished = {};
                     }),
             icon: const Icon(Icons.layers_clear_outlined, size: 20),
             tooltip: 'ခွဲထားတာ အားလုံး ဖျက်',
@@ -446,11 +459,22 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
             child: Text('လက်ရှိအပိုင်းပြီးရင် ရပ်ထားမယ်', style: TextStyle(color: DfColors.muted, fontSize: 12)),
           ),
       ] else
-        FilledButton.icon(
-          onPressed: (parts.isEmpty || rs.running) ? null : () => _renderParts(parts, [for (var i = 0; i < parts.length; i++) i]),
-          icon: const Icon(Icons.movie_creation_outlined, size: 18),
-          label: Text('${parts.length} ခုလုံး MP4 ထုတ်'),
-        ),
+        Builder(builder: (_) {
+          final left = pendingParts(parts.length, _finished);
+          final partly = left.isNotEmpty && left.length < parts.length;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            FilledButton.icon(
+              onPressed: (parts.isEmpty || rs.running) ? null : () => _renderParts(parts, left.isEmpty ? [for (var i = 0; i < parts.length; i++) i] : left),
+              icon: const Icon(Icons.movie_creation_outlined, size: 18),
+              label: Text(partly ? 'ကျန်တာ MP4 ထုတ် (${left.length}/${parts.length})' : '${parts.length} ခုလုံး MP4 ထုတ်'),
+            ),
+            if (partly)
+              TextButton(
+                onPressed: rs.running ? null : () => _renderParts(parts, [for (var i = 0; i < parts.length; i++) i]),
+                child: const Text('အစကနေ အကုန်ပြန်ထုတ်'),
+              ),
+          ]);
+        }),
       if (_msg != null)
         Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: _err ? DfColors.danger : DfColors.ok, fontSize: 13))),
       _label(Icons.format_list_bulleted, '${_lines.length}'),

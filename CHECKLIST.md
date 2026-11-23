@@ -782,3 +782,10 @@ Asked by the user ("censor ကို ဘေးက border လိုင်းပ�
 | Change | Tested here | Compiles on CI | Phone-tested |
 |---|---|---|---|
 | Censor settings: new switch "ဘောင်လိုင်း ပြ" (default on). Off = no line round the box in the preview unless the box is selected (so it can still be moved). The exported video never had a line (it is only the blur), so the export is unchanged | Dart test (`te_blur_flip_test`): default, off, kept through `withTime`, box still compiled | see CI | **No** |
+
+## TE-61: "make all parts" only makes the parts that are left (2026-11-24)
+Asked by the user: after the first part(s) finished and the run stopped, "all" started again from the first one. Branch `claude/te-61-resume-parts` (built on TE-60 -> TE-59 -> TE-57). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Video Index segments and Split-by-subtitle parts: a finished part is remembered on the phone (per project), by its time range + sound setting (+ subtitle count for Split). The big button then says "ကျန်တာ … ထုတ် (3/8)" and makes only the rest; a small "အစကနေ အကုန်ပြန်ထုတ်" button makes all again. Survives stop, error and closing the app. Moving a cut elsewhere does not reset parts whose range did not change | Dart tests for the key, the "what is left" list and the saved-list reading (`part_progress_test`); the screens themselves need a phone | see CI | **No** |
+Honest limits: "finished" means the MP4 was made and saved to the Gallery in an earlier run; if you deleted that file from the Gallery, press "အစကနေ အကုန်ပြန်ထုတ်" (the app does not check the Gallery). A part that was cut in the middle is not counted as finished. Includes TE-60 (Censor line switch).

@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../core/part_progress.dart';
 import '../core/render_plan.dart';
 import '../core/segments.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
+import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/render_channel.dart';
 import '../platform/video_import.dart';
@@ -45,7 +47,20 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
   int _done = 0;
   int _total = 0;
   String _label = '';
-  Set<int> _finished = {};
+  // Parts already made (kept on the phone, so a stop or a crash does not start over).
+  final _repo = HandoffRepo();
+  Set<String> _doneKeys = {};
+  static const _doneKind = 'parts_done_seg';
+  String _keyOfSpec(SegmentSpec s) => partKey(s.startMs, s.endMs, tag: _keepSound ? 's' : 'm');
+  Set<int> get _finished => {for (var i = 0; i < _specs.length; i++) if (_doneKeys.contains(_keyOfSpec(_specs[i]))) i};
+
+  Future<void> _saveDone() async {
+    final id = widget.project.id;
+    if (id == null) return;
+    try {
+      await _repo.setDoc(id, _doneKind, encodeDone(_doneKeys));
+    } catch (_) {}
+  }
   String? _msg;
   bool _msgErr = false;
 
@@ -72,8 +87,14 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
     setState(() => _loading = true);
     try {
       final list = await store.segmentsOf(widget.project);
+      Set<String> done = {};
+      try {
+        final id = widget.project.id;
+        if (id != null) done = decodeDone(await _repo.getDoc(id, _doneKind));
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
+        _doneKeys = done;
         _specs = sortedSegments(list);
         _loading = false;
       });
@@ -203,7 +224,7 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
       _done = 0;
       _total = indexes.length;
       _label = indexes.length == 1 ? '#${indexes.first + 1}' : '';
-      _finished = {..._finished}..removeAll(indexes);
+      _doneKeys = {..._doneKeys}..removeAll([for (final i in indexes) _keyOfSpec(_specs[i])]);
       _msg = null;
       _msgErr = false;
     });
@@ -258,8 +279,9 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
       if (mounted) {
         setState(() {
           _done = ok;
-          _finished = {..._finished, i};
+          _doneKeys = {..._doneKeys, _keyOfSpec(spec)};
         });
+        await _saveDone();
       }
     }
     await RenderChannel.keepAlive(false);
@@ -368,11 +390,22 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
               child: Text('လက်ရှိ segment ပြီးရင် ရပ်ထားမယ်', style: TextStyle(color: DfColors.muted, fontSize: 12)),
             ),
         ] else
-          FilledButton.icon(
-            onPressed: (busyElsewhere || _specs.isEmpty) ? null : () => _download([for (var i = 0; i < _specs.length; i++) i]),
-            icon: const Icon(Icons.download),
-            label: Text('အားလုံး download (${_specs.length})'),
-          ),
+          Builder(builder: (_) {
+            final left = pendingParts(_specs.length, _finished);
+            final partly = left.isNotEmpty && left.length < _specs.length;
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              FilledButton.icon(
+                onPressed: (busyElsewhere || _specs.isEmpty) ? null : () => _download(left.isEmpty ? [for (var i = 0; i < _specs.length; i++) i] : left),
+                icon: const Icon(Icons.download),
+                label: Text(partly ? 'ကျန်တာ download (${left.length}/${_specs.length})' : 'အားလုံး download (${_specs.length})'),
+              ),
+              if (partly)
+                TextButton(
+                  onPressed: busyElsewhere ? null : () => _download([for (var i = 0; i < _specs.length; i++) i]),
+                  child: const Text('အစကနေ အကုန်ပြန်ထုတ်'),
+                ),
+            ]);
+          }),
         if (_msg != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
