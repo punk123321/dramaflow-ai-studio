@@ -3,3 +3,4 @@ uvicorn
 edge-tts
 google-genai
 imageio-ffmpeg
+yt-dlp

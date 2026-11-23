@@ -27,6 +27,12 @@ class DocKind {
 
   /// Scenes found by Scene Recap, as JSON [[startMs, endMs], ...].
   static const scenePlan = 'scene_plan';
+
+  /// The video link (YouTube / TikTok / Red Note ...) used instead of a video file.
+  static const sourceLink = 'source_link';
+
+  /// What the backend answered for that link (Gemini file address, length) as JSON.
+  static const ingestInfo = 'ingest_info';
 }
 
 /// Source subtitles, name/term notes and the replies brought back from Gemini.

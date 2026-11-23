@@ -10,11 +10,13 @@ import '../core/recap_auto.dart';
 import '../core/recap_queue.dart';
 import '../core/segments.dart' show formatTime;
 import '../core/theme.dart';
+import '../core/source_link.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/assembly_settings_repo.dart';
 import '../data/recap_backend_repo.dart';
 import '../data/project.dart';
 import '../data/usage_repo.dart';
+import '../data/handoff_repo.dart';
 import '../platform/recap_episode_runner.dart';
 import '../state/project_store.dart';
 import 'recap_step_bar.dart';
@@ -46,6 +48,8 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
   RecapQueue? _queue;
   RecapEpisodeRunner? _runner;
   Map<int, Project> _byId = {};
+  // projects that take their video from a link (project id -> link)
+  Map<int, String> _links = {};
   String? _msg;
 
   @override
@@ -59,6 +63,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
     final g = await AiSettingsRepo().load();
     final a = await AssemblySettingsRepo().load();
     final fb = await UsageRepo().fallbackModel();
+    await _loadLinks();
     if (!mounted) return;
     setState(() {
       _backend = b;
@@ -67,6 +72,21 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
       _fallback = fb;
       _loaded = true;
     });
+  }
+
+  /// The links of the projects, so a project with a link and no video file can be queued too.
+  Future<void> _loadLinks() async {
+    final out = <int, String>{};
+    try {
+      final h = HandoffRepo();
+      for (final p in context.read<ProjectStore>().items) {
+        final id = p.id;
+        if (id == null) continue;
+        final l = (await h.getDoc(id, DocKind.sourceLink) ?? '').trim();
+        if (l.isNotEmpty) out[id] = l;
+      }
+    } catch (_) {} // the list then shows the projects with a video file only
+    _links = out;
   }
 
   @override
@@ -87,6 +107,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
         title: Text('Episode $n ခု စမလား?'),
         content: Text(
           'တစ်ခုပြီးမှ တစ်ခု ဆက်သွားမယ်။ ဗီဒီယိုတစ်ခုချင်းစီကို သင့် Gemini account ဆီ upload လုပ်မယ် (Wi-Fi သုံးပါ၊ data အများကြီးသုံးမယ်)။ '
+          'link ပါတဲ့ project ကိုတော့ Backend က ဗီဒီယိုကို ကိုယ်တိုင်ဆွဲပြီး Gemini ဆီ တင်မယ် (ဖုန်းကနေ upload မလုပ်ဘူး၊ VPN မလိုဘူး)။ '
           'Gemini key ကို သင့် Backend ဆီ ပို့မယ်။ မူရင်းဗီဒီယိုကို မပြင်ဘူး။$asrNote\n\n'
           'လုပ်နေတုန်း ဒီစာမျက်နှာကို မပိတ်ပါနဲ့၊ ဖုန်း screen ကိုလည်း ဖွင့်ထားပါ။',
         ),
@@ -169,7 +190,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) return DfScaffold(appBar: AppBar(title: const Text('Recap Queue')), body: const Center(child: CircularProgressIndicator()));
-    final all = context.watch<ProjectStore>().items.where((p) => p.hasVideo && p.id != null).toList()
+    final all = context.watch<ProjectStore>().items.where((p) => (p.hasVideo || _links.containsKey(p.id)) && p.id != null).toList()
       ..sort((a, b) {
         final c = a.dramaTitle.compareTo(b.dramaTitle);
         return c != 0 ? c : a.episode.compareTo(b.episode);
@@ -242,9 +263,9 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
   Widget _pickCard(List<Project> all) {
     final chosen = [for (final p in all) if (_selected.contains(p.id)) p];
     return DfCard(
-      title: 'Episode ရွေး (ဗီဒီယိုရှိတာတွေပဲ)',
+      title: 'Episode ရွေး (ဗီဒီယိုဖိုင် သို့ link ရှိတာတွေပဲ)',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (all.isEmpty) const Text('ဗီဒီယိုပါတဲ့ project မရှိသေးဘူး။ Project ဖန်တီးပြီး Stage 1 မှာ ဗီဒီယိုရွေးပါ။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
+        if (all.isEmpty) const Text('ဗီဒီယိုဖိုင် / link ပါတဲ့ project မရှိသေးဘူး။ Project ဖန်တီးပြီး Stage 1 မှာ ဗီဒီယိုရွေးပါ၊ ဒါမှမဟုတ် Video Recap စာမျက်နှာမှာ link ထည့်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
         for (final p in all)
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
@@ -252,7 +273,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
             value: _selected.contains(p.id),
             onChanged: (v) => setState(() => v == true ? _selected.add(p.id!) : _selected.remove(p.id)),
             title: Text('${p.dramaTitle} · အပိုင်း ${p.episode}', style: const TextStyle(fontSize: 14)),
-            subtitle: Text('${p.name} · ${formatTime(p.videoDurationMs ?? 0)}', style: const TextStyle(fontSize: 12)),
+            subtitle: Text(_links.containsKey(p.id) ? '${p.name} · link: ${linkKindLabels[linkKindOf(_links[p.id]!)]}' : '${p.name} · ${formatTime(p.videoDurationMs ?? 0)}', style: const TextStyle(fontSize: 12)),
           ),
         if (all.isNotEmpty)
           Wrap(spacing: 8, runSpacing: 6, children: [

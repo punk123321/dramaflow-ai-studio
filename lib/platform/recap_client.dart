@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../core/news_video.dart';
 import '../core/recap_auto.dart';
+import '../core/source_link.dart';
 
 class RecapCanceled implements Exception {
   const RecapCanceled();
@@ -117,6 +118,60 @@ class RecapClient {
       if (job.state == JobState.error) throw HttpException(job.error);
       if (job.state == JobState.done) return job;
       if (DateTime.now().difference(started).inMinutes > 60) throw const HttpException('အချိန်ကြာလွန်းလို့ ရပ်လိုက်တယ်');
+    }
+  }
+
+  /// Gives the backend a video link: it downloads the video, puts it into the
+  /// user's own Gemini account and answers with the file address and length.
+  /// Throws [HttpException] (Burmese reason) or [RecapCanceled].
+  Future<IngestInfo> ingest(String url, String geminiKey, void Function(IngestJob) onUpdate) async {
+    try {
+      final r = await _call('POST', '/ingest/jobs', json: jsonEncode({'url': url.trim(), 'gemini_key': geminiKey.trim()}));
+      if (_canceled) throw const RecapCanceled();
+      if (r.$1 == 404 || r.$1 == 405) {
+        throw const HttpException('Backend က link ကို မသိသေးဘူး (version အဟောင်း) — Colab notebook အသစ်ကို ပြန် run ပါ');
+      }
+      if (r.$1 != 200) throw HttpException(httpError(r.$1, r.$2));
+      final id = (jsonDecode(r.$2) as Map)['job_id'];
+      if (id is! String) throw const HttpException('Job id မရ');
+      final started = DateTime.now();
+      var failures = 0;
+      while (true) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        if (_canceled) throw const RecapCanceled();
+        (int, String) s;
+        try {
+          s = await _call('GET', '/ingest/jobs/$id');
+          failures = 0;
+        } on SocketException {
+          if (++failures >= 5) throw const HttpException('Backend နဲ့ ဆက်သွယ်လို့မရတော့ဘူး');
+          continue;
+        } on TimeoutException {
+          if (++failures >= 5) throw const HttpException('Backend ပြန်မဖြေတော့ဘူး');
+          continue;
+        }
+        if (s.$1 != 200) throw HttpException(httpError(s.$1, s.$2));
+        final job = parseIngestJob(s.$2);
+        onUpdate(job);
+        if (job.state == JobState.error) throw HttpException(job.error.isEmpty ? 'ဗီဒီယို မရဘူး' : job.error);
+        if (job.state == JobState.done) {
+          final info = ingestInfoFrom(url, job.info, DateTime.now().millisecondsSinceEpoch);
+          if (info == null) throw const HttpException('Backend က ဗီဒီယိုအရှည်/Gemini address မပေးဘူး (Backend version စစ်ပါ)');
+          return info;
+        }
+        if (DateTime.now().difference(started).inMinutes > 45) throw const HttpException('အချိန်ကြာလွန်းလို့ ရပ်လိုက်တယ်');
+      }
+    } on RecapCanceled {
+      rethrow;
+    } on SocketException {
+      if (_canceled) throw const RecapCanceled();
+      throw const HttpException('Backend နဲ့ ဆက်သွယ်လို့မရဘူး (Colab/Altare ပွင့်နေလား၊ URL မှန်လား)');
+    } on TimeoutException {
+      if (_canceled) throw const RecapCanceled();
+      throw const HttpException('Backend ပြန်မဖြေဘူး (အချိန်ကြာလွန်းတယ်)');
+    } catch (e) {
+      if (_canceled) throw const RecapCanceled();
+      rethrow;
     }
   }
 

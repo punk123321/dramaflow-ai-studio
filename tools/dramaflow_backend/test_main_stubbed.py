@@ -22,6 +22,8 @@ os.environ["APP_TOKEN"] = "test-token-123456"
 # ---- stand-ins -------------------------------------------------------------
 SPOKEN = []  # the text each fake voice call received
 GEMINI = {"reply": None, "gate": None, "calls": 0}
+FILES = {"uploads": [], "states": ["ACTIVE"], "gets": 0}  # Gemini Files API stand-in
+YTDLP = {"calls": [], "fail": None, "ext": "mp4", "duration": 754.0}
 
 
 class _HTTPException(Exception):
@@ -89,7 +91,7 @@ def _install():
             return _Kw(**k)
 
     types_mod = types.ModuleType("google.genai.types")
-    for name in ("Part", "FileData", "VideoMetadata", "GenerateContentConfig"):
+    for name in ("Part", "FileData", "VideoMetadata", "GenerateContentConfig", "UploadFileConfig"):
         setattr(types_mod, name, type(name, (_Kw,), {"from_bytes": staticmethod(lambda **k: _Kw(**k))}))
     genai = types.ModuleType("google.genai")
 
@@ -103,10 +105,47 @@ def _install():
                 raise r
             return types.SimpleNamespace(text=r)
 
+    class _Files:
+        def upload(self, file, config=None):
+            FILES["uploads"].append((file, getattr(config, "k", {})))
+            st = FILES["states"][0]
+            return types.SimpleNamespace(name="files/abc", uri="https://gen.example/files/abc", state=types.SimpleNamespace(name=st))
+
+        def get(self, name):
+            FILES["gets"] += 1
+            st = FILES["states"][min(FILES["gets"], len(FILES["states"]) - 1)]
+            return types.SimpleNamespace(name=name, uri="https://gen.example/files/abc", state=types.SimpleNamespace(name=st))
+
     class Client:
         def __init__(self, api_key=None):
-            self.api_key, self.models = api_key, _Models()
+            self.api_key, self.models, self.files = api_key, _Models(), _Files()
 
+    yt = types.ModuleType("yt_dlp")
+    ytu = types.ModuleType("yt_dlp.utils")
+    ytu.match_filter_func = lambda expr: expr
+
+    class YoutubeDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def extract_info(self, url, download=True):
+            YTDLP["calls"].append((url, self.opts))
+            if YTDLP["fail"]:
+                raise RuntimeError(YTDLP["fail"])
+            out = Path(self.opts["outtmpl"].replace("%(ext)s", YTDLP["ext"]))
+            out.write_bytes(b"x" * 2048)
+            for h in self.opts["progress_hooks"]:
+                h({"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 2048})
+            return {"title": "Episode 12", "duration": YTDLP["duration"]}
+
+    yt.YoutubeDL, yt.utils = YoutubeDL, ytu
+    sys.modules.update({"yt_dlp": yt, "yt_dlp.utils": ytu})
     genai.Client, genai.types = Client, types_mod
     google = types.ModuleType("google")
     google.genai = genai
@@ -137,6 +176,119 @@ def _req(**kw):
                 groups=[main.Group(first=1, last=2, prompt="P", part_ms=[5000, 800])])
     base.update(kw)
     return main.RecapRequest(**base)
+
+
+def _wait_ingest(job_id, secs=20):
+    end = time.time() + secs
+    while time.time() < end:
+        j = main.ingest_status(job_id, x_app_token=main.TOKEN)
+        if j["status"] in ("done", "error"):
+            return j
+        time.sleep(0.05)
+    raise AssertionError("ingest did not finish")
+
+
+class IngestTests(unittest.TestCase):
+    URL = "https://youtu.be/abc123"
+
+    def setUp(self):
+        main.JOBS.clear()
+        FILES.update(uploads=[], states=["ACTIVE"], gets=0)
+        YTDLP.update(calls=[], fail=None, ext="mp4", duration=754.0)
+        self._defaults = main.check_url.__defaults__
+        main.check_url.__defaults__ = (lambda h, p: [(0, 0, 0, "", ("142.250.1.1", 0))],)
+        self._sleep = main.time.sleep
+        main.time.sleep = lambda s: None
+
+    def tearDown(self):
+        main.check_url.__defaults__ = self._defaults
+        main.time.sleep = self._sleep
+
+    def _start(self, **kw):
+        base = dict(url=self.URL, gemini_key="AIza-secret-key-1234")
+        base.update(kw)
+        return main.create_ingest(main.IngestRequest(**base), x_app_token=main.TOKEN)["job_id"]
+
+    def test_token_and_bad_input(self):
+        with self.assertRaises(main.HTTPException) as c:
+            main.create_ingest(main.IngestRequest(url=self.URL, gemini_key="k"), x_app_token="bad")
+        self.assertEqual(c.exception.status_code, 401)
+        with self.assertRaises(main.HTTPException) as c:
+            main.create_ingest(main.IngestRequest(url=self.URL, gemini_key="  "), x_app_token=main.TOKEN)
+        self.assertEqual(c.exception.status_code, 400)
+        with self.assertRaises(main.HTTPException) as c:
+            self._private()
+        self.assertEqual(c.exception.status_code, 400)
+        with self.assertRaises(main.HTTPException):
+            main.ingest_status("recap_1_abcd", x_app_token=main.TOKEN)
+
+    def _private(self):
+        main.check_url.__defaults__ = (lambda h, p: [(0, 0, 0, "", ("10.0.0.1", 0))],)
+        return main.create_ingest(main.IngestRequest(url="https://evil.example/x", gemini_key="k"), x_app_token=main.TOKEN)
+
+    def test_happy_path(self):
+        jid = self._start()
+        j = _wait_ingest(jid)
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(j["info"]["file_uri"], "https://gen.example/files/abc")
+        self.assertEqual(j["info"]["mime"], "video/mp4")
+        self.assertEqual(j["info"]["duration_ms"], 754000)
+        self.assertEqual(j["info"]["title"], "Episode 12")
+        self.assertEqual(j["info"]["source"], "youtube")
+        self.assertEqual(j["progress"], 100)
+        opts = YTDLP["calls"][0][1]
+        self.assertTrue(opts["noplaylist"])
+        self.assertIn("720", opts["format"])
+        self.assertNotIn("AIza", str(j))  # the key is never in the answer
+        # the downloaded copy is gone after the upload
+        self.assertFalse((main.OUT_DIR / jid).exists())
+
+    def test_height_is_clamped(self):
+        _wait_ingest(self._start(max_height=99999))
+        self.assertIn("1080", YTDLP["calls"][0][1]["format"])
+        self.assertNotIn("99999", YTDLP["calls"][0][1]["format"])
+
+    def test_processing_then_active(self):
+        FILES["states"] = ["PROCESSING", "PROCESSING", "ACTIVE"]
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(FILES["gets"], 2)
+
+    def test_gemini_refuses_file(self):
+        FILES["states"] = ["FAILED"]
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "error")
+        self.assertIn("FAILED", j["error"])
+
+    def test_download_error_has_hint_and_no_key(self):
+        YTDLP["fail"] = "ERROR: Sign in to confirm you're not a bot AIza-secret-key-1234"
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "error")
+        self.assertIn("YouTube", j["error"])
+        self.assertNotIn("AIza-secret", j["error"])
+        self.assertEqual(FILES["uploads"], [])  # nothing was uploaded
+
+    def test_unsupported_container_is_not_uploaded(self):
+        YTDLP["ext"] = "mkv"
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "error")
+        self.assertIn("mkv", j["error"])
+        self.assertEqual(FILES["uploads"], [])
+
+    def test_unknown_duration_falls_back_to_ffmpeg(self):
+        YTDLP["duration"] = 0
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertGreaterEqual(j["info"]["duration_ms"], 0)  # ffmpeg cannot read the fake bytes: 0, not a crash
+
+    def test_second_job_while_running_is_refused(self):
+        main.JOBS["ingest_1_aaaa"] = {"status": "running", "stage": "", "progress": 5, "created": time.time(), "error": "", "info": {}}
+        with self.assertRaises(main.HTTPException) as c:
+            self._start()
+        self.assertEqual(c.exception.status_code, 409)
+
+    def test_health_says_ingest(self):
+        self.assertIn("ingest", main.health()["features"])
 
 
 class MainTests(unittest.TestCase):

@@ -9,6 +9,10 @@ What it does for the app (Video Recap and Scene Recap):
   POST /recap/jobs             start a job, answers at once with a job id
   GET  /recap/jobs/<id>        progress, then the script parts (and voice files)
   GET  /recap/jobs/<id>/audio/<n>.wav   the voice of part n (24 kHz mono WAV)
+  POST /ingest/jobs            a video link (YouTube, TikTok, Red Note ...): download it
+                               here, put it into the user's own Gemini account, answer
+                               with the Gemini file address and the length
+  GET  /ingest/jobs/<id>       progress, then {file_uri, mime, duration_ms, title}
 The Gemini key arrives with the request, is used for the job and is not stored.
 """
 import asyncio
@@ -34,6 +38,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+from ingest_core import MAX_BYTES, MAX_SECONDS, check_url, classify, ingest_hint, parse_ffmpeg_duration, run_ingest
 from recap_core import fit_tempo, gemini_hint, mask_key, run_recap
 from tts_text import normalize_for_tts
 
@@ -249,7 +254,7 @@ def run_job(job_id: str, req: RecapRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "DramaFlow Recap Backend"}
+    return {"status": "ok", "service": "DramaFlow Recap Backend", "features": ["recap", "tts", "ingest"]}
 
 
 @app.post("/recap/jobs")
@@ -290,6 +295,134 @@ def audio(job_id: str, n: int, x_app_token: Optional[str] = Header(default=None)
     if not p.exists():
         raise HTTPException(status_code=404, detail="Audio not found")
     return FileResponse(p, media_type="audio/wav", filename=p.name)
+
+
+# ---- link -> video in the user's own Gemini account -------------------------
+class IngestRequest(BaseModel):
+    url: str
+    gemini_key: str
+    max_height: int = 720  # Gemini looks at about 1 frame a second, so 720p is plenty
+
+
+def _state_name(f) -> str:
+    st = getattr(f, "state", None)
+    return str(getattr(st, "name", st) or "")
+
+
+def _ytdlp_download(url: str, job_dir: Path, max_height: int, on_pct):
+    """yt-dlp is imported here so the backend still starts (and recaps work)
+    when it is not installed; the error then says what to install."""
+    try:
+        import yt_dlp
+        from yt_dlp.utils import match_filter_func
+    except Exception:
+        raise RuntimeError("yt-dlp မတပ်ရသေးဘူး (Colab Cell 1 ကို ပြန် run ပါ)")
+    h = max(240, min(1080, int(max_height)))
+
+    def hook(d):
+        if d.get("status") == "downloading":
+            tot = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            if tot:
+                on_pct(int(100 * (d.get("downloaded_bytes") or 0) / tot))
+
+    opts = {
+        "outtmpl": str(job_dir / "v.%(ext)s"),
+        "format": f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/bv*[height<={h}]+ba/b[height<={h}]/b",
+        "merge_output_format": "mp4",
+        "noplaylist": True,
+        "max_filesize": MAX_BYTES,
+        "match_filter": match_filter_func(f"!is_live & duration <=? {MAX_SECONDS}"),
+        "quiet": True,
+        "no_warnings": True,
+        "socket_timeout": 30,
+        "retries": 3,
+        "ffmpeg_location": _ffmpeg(),
+        "progress_hooks": [hook],
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+    files = [f for f in job_dir.glob("v.*") if f.suffix not in (".part", ".ytdl")]
+    if not files:
+        raise RuntimeError("ဗီဒီယို မရဘူး (၃ နာရီထက် ရှည်တာ / live / ၂ GB ထက်ကြီးတာ ဖြစ်နိုင်တယ်)")
+    path = max(files, key=lambda f: f.stat().st_size)
+    if isinstance(info, dict) and info.get("entries"):
+        info = (info["entries"] or [{}])[0] or {}
+    ms = int(float((info or {}).get("duration") or 0) * 1000)
+    if not ms:
+        try:
+            p = subprocess.run([_ffmpeg(), "-i", str(path)], capture_output=True, text=True, timeout=60)
+            ms = parse_ffmpeg_duration(p.stderr)
+        except Exception:
+            ms = 0
+    return {"path": str(path), "title": (info or {}).get("title") or "", "duration_ms": ms}
+
+
+def _gemini_upload(key: str, path: str, mime: str):
+    client = genai.Client(api_key=key)
+    f = client.files.upload(file=path, config=types.UploadFileConfig(mime_type=mime, display_name="dramaflow_ingest"))
+    waited = 0
+    while _state_name(f) == "PROCESSING":
+        if waited > 1200:
+            raise RuntimeError("Gemini က ဗီဒီယိုကို မပြီးသေးဘူး (၂၀ မိနစ်ကျော်)")
+        time.sleep(5)
+        waited += 5
+        f = client.files.get(name=f.name)
+    if _state_name(f) != "ACTIVE":
+        raise RuntimeError("Gemini က ဗီဒီယိုကို လက်မခံဘူး (%s)" % (_state_name(f) or "?"))
+    return f.uri, mime
+
+
+def run_ingest_job(job_id: str, req: IngestRequest):
+    job_dir = OUT_DIR / job_id
+    done = {}
+    try:
+        job_dir.mkdir(parents=True, exist_ok=True)
+        _set(job_id, status="running", stage="စတင်နေတယ်", progress=2)
+        done = run_ingest(
+            req.url.strip(),
+            lambda url, on_pct: _ytdlp_download(url, job_dir, req.max_height, on_pct),
+            lambda path, mime: _gemini_upload(req.gemini_key, path, mime),
+            lambda stage, pct: _set(job_id, stage=stage, progress=min(pct, 99)),
+        )
+        err = ""
+    except Exception as e:  # shown in the app, with the key hidden
+        msg = mask_key(str(e), req.gemini_key)
+        hint = ingest_hint(msg, classify(req.url))
+        err = ((hint + " · ") if hint else "") + msg[:300]
+    shutil.rmtree(job_dir, ignore_errors=True)  # the downloaded copy is never kept
+    if err:
+        _set(job_id, status="error", stage="မအောင်မြင်ဘူး", error=err)
+    else:
+        _set(job_id, status="done", stage="ပြီးပြီ", progress=100, info=done)
+
+
+@app.post("/ingest/jobs")
+def create_ingest(req: IngestRequest, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    if not req.gemini_key.strip():
+        raise HTTPException(status_code=400, detail="Gemini key မပါဘူး")
+    ok, why = check_url(req.url)
+    if not ok:
+        raise HTTPException(status_code=400, detail=why)
+    clean_old()
+    with LOCK:
+        if any(j["status"] in ("queued", "running") for j in JOBS.values()):
+            raise HTTPException(status_code=409, detail="တခြား job တစ်ခု လုပ်နေတုန်းပါ")
+        job_id = f"ingest_{int(time.time())}_{secrets.token_hex(2)}"
+        JOBS[job_id] = {"status": "queued", "stage": "စောင့်နေတယ်", "progress": 0, "created": time.time(),
+                        "error": "", "info": {}}
+    threading.Thread(target=run_ingest_job, args=(job_id, req), daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/ingest/jobs/{job_id}")
+def ingest_status(job_id: str, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    with LOCK:
+        j = JOBS.get(job_id) if job_id.startswith("ingest_") else None
+        if j is None:
+            raise HTTPException(status_code=404, detail="Job မတွေ့ပါ")
+        return {k: v for k, v in j.items() if k != "created"}
 
 
 class TtsRequest(BaseModel):

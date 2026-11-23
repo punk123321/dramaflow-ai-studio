@@ -17,6 +17,7 @@ import '../data/usage_repo.dart';
 import 'assembly_client.dart';
 import 'audio_channel.dart';
 import 'gemini_files.dart';
+import 'link_ingest.dart';
 import 'recap_client.dart';
 
 /// Everything one queue run needs, read once when the queue starts.
@@ -83,51 +84,86 @@ class RecapEpisodeRunner {
     } catch (_) {} // a counter must never fail an episode
   }
 
+  /// Does this project take its video from a link (instead of a file)?
+  Future<String> linkOf(int pid) => LinkIngest(_handoff).linkOf(pid);
+
   Future<void> run(Project p, QueueCtx ctx) async {
     final pid = p.id!;
     final uri = p.sourceVideoUri;
-    if (uri == null || !p.hasVideo) throw const HttpException('ဗီဒီယို မရွေးထားဘူး (Stage 1 မှာ ရွေးပါ)');
+    final hasFile = uri != null && p.hasVideo;
+    final link = await linkOf(pid);
+    final useLink = link.isNotEmpty;
+    if (!useLink && !hasFile) throw const HttpException('ဗီဒီယို မရွေးထားဘူး (Stage 1 မှာ ရွေးပါ၊ သို့မဟုတ် Video Recap မှာ link ထည့်ပါ)');
 
-    // 1. subtitles
+    // 1. subtitles (the sound is read from a video file on the phone; a link has none here)
     ctx.step(QStep.subtitles);
     var entries = await _loadSrt(pid);
     if (entries.isNotEmpty) {
       ctx.skip(QStep.subtitles, 'စာတန်း ${entries.length} ကြောင်း ရှိပြီးသား');
     } else if (!s.useAsr || !s.asr.hasKey) {
       ctx.skip(QStep.subtitles, 'စာတန်းမရှိ၊ AssemblyAI မသုံးဘူး — စာတန်းမပါဘဲ ဆက်သွားမယ်');
+    } else if (!hasFile) {
+      ctx.skip(QStep.subtitles, 'link သက်သက်မို့ စာတန်း မထုတ်နိုင်ဘူး — Gemini က ဗီဒီယိုထဲက အသံကို ကိုယ်တိုင် နားထောင်မယ်');
     } else {
-      entries = await _asr(p, uri, ctx);
+      entries = await _asr(p, uri!, ctx);
     }
     ctx.check();
 
-    var segs = await _segRepo.load(pid);
-    final fromIndex = segs.isNotEmpty;
-    if (segs.isEmpty) segs = buildSegments(p.videoDurationMs ?? 0, 60000);
-    if (segs.isEmpty) throw const HttpException('ဗီဒီယိုအရှည် မသိလို့ အပိုင်း မခွဲနိုင်ဘူး');
-    ctx.log('အပိုင်း ${segs.length} ခု (${fromIndex ? 'Video Index က' : '၁ မိနစ်စီ'})');
-
-    // 2. upload to the user's own Gemini account
-    ctx.step(QStep.upload, 'Gemini ကို ကြိုစစ်နေတယ် (key နဲ့ တည်နေရာ)');
-    await GeminiFiles.preflight(s.geminiKey);
-    ctx.log('Gemini ကြိုစစ်ပြီး (key + တည်နေရာ ပြဿနာမတွေ့ဘူး)');
-    ctx.progress(0, 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
-    File? tmp;
-    late final GeminiFile file;
-    try {
-      tmp = await GeminiFiles.copyToCache(uri);
-      ctx.log('cache ထဲ ကူးပြီး (${(tmp.lengthSync() / 1048576).toStringAsFixed(1)} MB)');
-      file = await GeminiFiles.upload(
-        s.geminiKey,
-        tmp,
-        onStage: (st, f) => ctx.progress(f == null ? 0 : (f * 100).round(), st),
-        canceled: () => ctx.canceled,
-      );
-    } finally {
-      try {
-        tmp?.deleteSync();
-      } catch (_) {}
+    var segs = const <SegmentSpec>[];
+    var fromIndex = false;
+    Future<void> prepareParts(int durationMs) async {
+      segs = await _segRepo.load(pid);
+      fromIndex = segs.isNotEmpty;
+      if (segs.isEmpty) segs = buildSegments(durationMs, 60000);
+      if (segs.isEmpty) throw const HttpException('ဗီဒီယိုအရှည် မသိလို့ အပိုင်း မခွဲနိုင်ဘူး');
+      ctx.log('အပိုင်း ${segs.length} ခု (${fromIndex ? 'Video Index က' : '၁ မိနစ်စီ'})');
     }
-    ctx.log('Gemini ဆီ ရောက်ပြီး (${file.mime})');
+
+    // 2. the video goes into the user's own Gemini account
+    ctx.step(QStep.upload, useLink ? 'link ကနေ' : 'Gemini ကို ကြိုစစ်နေတယ် (key နဲ့ တည်နေရာ)');
+    late final GeminiFile file;
+    if (useLink) {
+      final client = RecapClient(s.backend);
+      _client = client;
+      try {
+        final info = await LinkIngest(_handoff).ensure(
+          projectId: pid,
+          client: client,
+          url: link,
+          geminiKey: s.geminiKey,
+          onStage: (st, pct) => ctx.progress(pct, st),
+          reused: (r) => ctx.log(r ? 'link ကနေ ဆွဲပြီးသား Gemini file ကို ပြန်သုံး' : 'link ကို Backend က ဆွဲပြီး Gemini ဆီ တင်မယ် (${linkKindLabels[linkKindOf(link)]})'),
+        );
+        ctx.log('Gemini ဆီ ရောက်ပြီး (${info.mime}, ${(info.durationMs / 60000).toStringAsFixed(1)} မိနစ်${info.title.isEmpty ? '' : ' · ${info.title}'})');
+        file = GeminiFile(info.fileUri, info.mime);
+        await prepareParts(p.videoDurationMs ?? info.durationMs);
+      } on RecapCanceled {
+        throw const QueueCanceled();
+      } finally {
+        _client = null;
+      }
+    } else {
+      await prepareParts(p.videoDurationMs ?? 0);
+      await GeminiFiles.preflight(s.geminiKey);
+      ctx.log('Gemini ကြိုစစ်ပြီး (key + တည်နေရာ ပြဿနာမတွေ့ဘူး)');
+      ctx.progress(0, 'ဗီဒီယိုကို ဖုန်း cache ထဲ ကူးနေတယ်');
+      File? tmp;
+      try {
+        tmp = await GeminiFiles.copyToCache(uri!);
+        ctx.log('cache ထဲ ကူးပြီး (${(tmp.lengthSync() / 1048576).toStringAsFixed(1)} MB)');
+        file = await GeminiFiles.upload(
+          s.geminiKey,
+          tmp,
+          onStage: (st, f) => ctx.progress(f == null ? 0 : (f * 100).round(), st),
+          canceled: () => ctx.canceled,
+        );
+      } finally {
+        try {
+          tmp?.deleteSync();
+        } catch (_) {}
+      }
+      ctx.log('Gemini ဆီ ရောက်ပြီး (${file.mime})');
+    }
     ctx.check();
 
     // 3. Gemini writes, the backend makes the voice
