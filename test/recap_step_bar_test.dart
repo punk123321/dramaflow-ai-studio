@@ -15,9 +15,10 @@ void main() {
       skipped: {QStep.subtitles},
     )));
     await tester.pump();
-    for (final l in qStepLabels.values) {
-      expect(find.text(l), findsOneWidget);
+    for (final st in videoQSteps) {
+      expect(find.text(qStepLabels[st]!), findsOneWidget);
     }
+    expect(find.text(qStepLabels[QStep.scenes]!), findsNothing); // only in a Scene Recap bar
     expect(find.byIcon(Icons.check_circle), findsOneWidget); // upload
     expect(find.byIcon(Icons.remove_circle_outline), findsOneWidget); // subtitles skipped
     expect(find.byType(CircularProgressIndicator), findsOneWidget); // ask is running
@@ -37,5 +38,13 @@ void main() {
     await tester.pump();
     expect(find.text(qStepLabels[QStep.subtitles]!), findsOneWidget);
     expect(find.text(qStepLabels[QStep.upload]!), findsNothing);
+  });
+
+  testWidgets('a scene bar shows the scene step instead of upload', (tester) async {
+    await tester.pumpWidget(_wrap(const RecapStepBar(steps: sceneQSteps, current: QStep.scenes, running: true, done: {QStep.subtitles})));
+    await tester.pump();
+    expect(find.text(qStepLabels[QStep.scenes]!), findsOneWidget);
+    expect(find.text(qStepLabels[QStep.upload]!), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
