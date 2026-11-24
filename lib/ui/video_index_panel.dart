@@ -12,6 +12,7 @@ import '../core/theme.dart';
 import '../core/timeline.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
+import '../platform/part_saver.dart';
 import '../platform/render_channel.dart';
 import '../platform/video_import.dart';
 import '../state/project_store.dart';
@@ -54,6 +55,16 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
   String _keyOfSpec(SegmentSpec s) => partKey(s.startMs, s.endMs, tag: _keepSound ? 's' : 'm');
   Set<int> get _finished => {for (var i = 0; i < _specs.length; i++) if (_doneKeys.contains(_keyOfSpec(_specs[i]))) i};
 
+  static const _lastKind = 'parts_last_seg';
+
+  Future<void> _saveLastRun(String text) async {
+    final id = widget.project.id;
+    if (id == null) return;
+    try {
+      await _repo.setDoc(id, _lastKind, text);
+    } catch (_) {}
+  }
+
   Future<void> _saveDone() async {
     final id = widget.project.id;
     if (id == null) return;
@@ -88,13 +99,21 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
     try {
       final list = await store.segmentsOf(widget.project);
       Set<String> done = {};
+      String last = '';
       try {
         final id = widget.project.id;
-        if (id != null) done = decodeDone(await _repo.getDoc(id, _doneKind));
+        if (id != null) {
+          done = decodeDone(await _repo.getDoc(id, _doneKind));
+          last = await _repo.getDoc(id, _lastKind) ?? '';
+        }
       } catch (_) {}
       if (!mounted) return;
       setState(() {
         _doneKeys = done;
+        if (!_running && last.isNotEmpty && _msg == null) {
+          _msg = 'အရင်တစ်ခါ: $last';
+          _msgErr = last.contains('ရပ်သွား');
+        }
         _specs = sortedSegments(list);
         _loading = false;
       });
@@ -232,6 +251,8 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
     final width = _specs.length >= 100 ? 3 : 2;
     var ok = 0;
     var saved = 0;
+    String? stoppedAt;
+    String? why;
     if (indexes.length > 1) await RenderChannel.keepAlive(true, text: 'Segment ${indexes.length} ခု');
     for (final i in indexes) {
       if (_paused && mounted && !_stop) await RenderChannel.keepAlive(true, text: 'ခဏရပ်ထားတယ် (#${i + 1} မစသေး)');
@@ -263,28 +284,46 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
         });
         break;
       }
-      ok++;
+      // A part counts as finished only when it is really in the Gallery. If the
+      // Gallery refuses (usually no space left) we stop: the next ones would fail too.
       final done = rs.lastDone;
-      if (done != null) {
-        try {
-          await RenderChannel.saveToGallery(done.path, name);
-          saved++;
-        } catch (_) {
-          if (mounted) setState(() {
-            _msg = '#${i + 1} ကို Gallery ထဲ မသိမ်းနိုင်ပါ (နေရာမလောက်/Android 9)။ Render stage > Save မှာ ကိုယ်တိုင် သိမ်းပါ။';
-            _msgErr = true;
-          });
-        }
+      if (done == null || done.name != name) {
+        stoppedAt = '#${i + 1}';
+        why = 'ထွက်ပြီး ဒါပေမယ့် မှတ်တမ်းသိမ်းလို့ မရဘူး';
+        if (mounted) setState(() {
+          _msg = '#${i + 1} $why';
+          _msgErr = true;
+        });
+        break;
       }
+      final fail = await PartSaver.toGallery(done, name);
+      if (fail != null) {
+        stoppedAt = '#${i + 1}';
+        why = fail;
+        if (mounted) setState(() {
+          _msg = '#${i + 1} ကို Gallery ထဲ မသိမ်းနိုင်ဘူး: $fail။ ဖိုင်က app ထဲမှာ ကျန်တယ် (Render > Save မှာ ကိုယ်တိုင်သိမ်းနိုင်)၊ ဆက်မလုပ်တော့ဘူး။';
+          _msgErr = true;
+        });
+        break;
+      }
+      ok++;
+      saved++;
       if (mounted) {
         setState(() {
           _done = ok;
           _doneKeys = {..._doneKeys, _keyOfSpec(spec)};
         });
-        await _saveDone();
+      } else {
+        _doneKeys = {..._doneKeys, _keyOfSpec(spec)};
       }
+      await _saveDone();
+    }
+    if (!mounted && stoppedAt == null && ok < indexes.length && !_stop) {
+      stoppedAt = 'screen ပိတ်သွားလို့';
+      why = 'ဒီစာမျက်နှာကို ထွက်သွားတယ်';
     }
     await RenderChannel.keepAlive(false);
+    await _saveLastRun(partsRunSummary(total: indexes.length, saved: saved, what: 'Segment', stoppedAt: stoppedAt ?? (_stop && ok < indexes.length ? 'ကိုယ်တိုင်ရပ်လို့' : null), why: why));
     if (!mounted) return;
     setState(() {
       _running = false;
@@ -309,7 +348,7 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
         Row(children: [
           const Icon(Icons.download_for_offline_outlined, size: 20, color: DfColors.muted),
           const SizedBox(width: 8),
-          const Expanded(child: Text('Segment တွေကို MP4 အဖြစ် download', style: TextStyle(fontWeight: FontWeight.w600))),
+          const Expanded(child: Text('Segment တွေကို MP4 အဖြစ် export', style: TextStyle(fontWeight: FontWeight.w600))),
         ]),
         const SizedBox(height: 8),
         Row(children: [
@@ -397,7 +436,7 @@ class _VideoIndexPanelState extends State<VideoIndexPanel> {
               FilledButton.icon(
                 onPressed: (busyElsewhere || _specs.isEmpty) ? null : () => _download(left.isEmpty ? [for (var i = 0; i < _specs.length; i++) i] : left),
                 icon: const Icon(Icons.download),
-                label: Text(partly ? 'ကျန်တာ download (${left.length}/${_specs.length})' : 'အားလုံး download (${_specs.length})'),
+                label: Text(partly ? 'ကျန်တာ export (${left.length}/${_specs.length})' : 'အားလုံး export (${_specs.length})'),
               ),
               if (partly)
                 TextButton(
@@ -617,7 +656,7 @@ class _SegmentRow extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: done ? 'Download ပြီး (ထပ်ဆွဲမယ်)' : 'Download',
+            tooltip: done ? 'Export ပြီး (ထပ်ထုတ်မယ်)' : 'Export',
             onPressed: onDownload,
             icon: Icon(done ? Icons.download_done : Icons.download_outlined, size: 20, color: done ? DfColors.ok : null),
           ),

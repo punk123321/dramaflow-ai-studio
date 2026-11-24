@@ -13,6 +13,7 @@ import '../core/timeline.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/handoff_channel.dart';
+import '../platform/part_saver.dart';
 import '../platform/render_channel.dart';
 import '../state/render_store.dart';
 import 'widgets.dart';
@@ -65,6 +66,14 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     return {for (var i = 0; i < parts.length; i++) if (_doneKeys.contains(_keyOfPart(parts[i]))) i};
   }
 
+  static const _lastKind = 'parts_last_split';
+
+  Future<void> _saveLastRun(String text) async {
+    try {
+      await _repo.setDoc(_pid, _lastKind, text);
+    } catch (_) {}
+  }
+
   Future<void> _saveDone() async {
     try {
       await _repo.setDoc(_pid, _doneKind, encodeDone(_doneKeys));
@@ -106,6 +115,11 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
       if (raw != null) _lines = sortedLines(parseSrt(raw).entries);
       _tl = Timeline.decode(await _repo.getDoc(_pid, DocKind.timeline));
       _doneKeys = decodeDone(await _repo.getDoc(_pid, _doneKind));
+      final last = await _repo.getDoc(_pid, _lastKind) ?? '';
+      if (!_running && last.isNotEmpty && _msg == null) {
+        _msg = 'အရင်တစ်ခါ: $last';
+        _err = last.contains('ရပ်သွား');
+      }
     } catch (e) {
       _say('ဖတ်လို့မရပါ: $e', error: true);
     }
@@ -167,6 +181,8 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
     final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     var saved = 0;
     var ok = 0;
+    String? stoppedAt;
+    String? why;
     if (indexes.length > 1) await RenderChannel.keepAlive(true, text: 'အပိုင်း ${indexes.length} ခု');
     for (final i in indexes) {
       // Pause: the part being made finishes first, then we wait here.
@@ -201,22 +217,38 @@ class _SrtSplitScreenState extends State<SrtSplitScreen> {
         _say('အပိုင်း ${i + 1} မှာ ရပ်သွားတယ်: ${rs.error ?? 'ရပ်လိုက်တယ်'}', error: true);
         break;
       }
+      // A part counts as finished only when it is really where it should be. If the
+      // Gallery refuses (usually no space left) we stop: the next ones would fail too.
+      final done = rs.lastDone;
+      if (done == null || done.name != name) {
+        stoppedAt = 'အပိုင်း ${i + 1}';
+        why = 'ထွက်ပြီး ဒါပေမယ့် မှတ်တမ်းသိမ်းလို့ မရဘူး';
+        _say('အပိုင်း ${i + 1} $why', error: true);
+        break;
+      }
+      if (_toGallery) {
+        final fail = await PartSaver.toGallery(done, name);
+        if (fail != null) {
+          stoppedAt = 'အပိုင်း ${i + 1}';
+          why = fail;
+          _say('အပိုင်း ${i + 1} ကို Gallery ထဲ မသိမ်းနိုင်ဘူး: $fail။ ဖိုင်က app ထဲမှာ ကျန်တယ် (Stage "Save" မှာ ကိုယ်တိုင်သိမ်းနိုင်)၊ ဆက်မလုပ်တော့ဘူး။', error: true);
+          break;
+        }
+        saved++;
+      }
       ok++;
       _doneParts = ok;
       _doneKeys = {..._doneKeys, _keyOfPart(part)};
       await _saveDone();
-      final done = rs.lastDone;
-      if (_toGallery && done != null) {
-        try {
-          await RenderChannel.saveToGallery(done.path, name);
-          saved++;
-        } catch (_) {
-          _say('အပိုင်း ${i + 1} ကို Gallery ထဲ မသိမ်းနိုင်ပါ (Android 9 ဒါမှမဟုတ် နေရာမလောက်)။ Stage "Save" မှာ ကိုယ်တိုင် သိမ်းပါ။', error: true);
-        }
-      }
       if (mounted) setState(() {});
     }
+    if (!mounted && stoppedAt == null && ok < indexes.length && !_stop) {
+      stoppedAt = 'screen ပိတ်သွားလို့';
+      why = 'ဒီစာမျက်နှာကို ထွက်သွားတယ်';
+    }
     await RenderChannel.keepAlive(false);
+    await _saveLastRun(partsRunSummary(
+        total: indexes.length, saved: _toGallery ? saved : ok, what: 'အပိုင်း', stoppedAt: stoppedAt ?? (_stop && ok < indexes.length ? 'ကိုယ်တိုင်ရပ်လို့' : null), why: why));
     if (mounted) {
       setState(() {
         _running = false;
