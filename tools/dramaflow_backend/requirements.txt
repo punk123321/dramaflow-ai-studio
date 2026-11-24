@@ -4,3 +4,7 @@ edge-tts
 google-genai
 imageio-ffmpeg
 yt-dlp
+deep-translator
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2

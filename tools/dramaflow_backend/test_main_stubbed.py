@@ -43,6 +43,7 @@ class _App:
         return lambda f: f
 
     post = get
+    delete = get
 
 
 def _install():

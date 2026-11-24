@@ -13,6 +13,13 @@ What it does for the app (Video Recap and Scene Recap):
                                here, put it into the user's own Gemini account, answer
                                with the Gemini file address and the length
   GET  /ingest/jobs/<id>       progress, then {file_uri, mime, duration_ms, title}
+  Creator Studio (your own files and videos you may use; the library lives on this machine):
+  GET  /studio/files           the library          GET /studio/files/<name>   one file to the phone
+  DELETE /studio/files/<name>  POST /studio/upload  a small .srt / picture from the phone
+  POST /studio/jobs            download | split | translate | subtitle | zip | youtube
+  GET  /studio/jobs/<id>       progress (speed, ETA), result files / links
+  POST /studio/jobs/<id>/cancel | pause | resume
+  GET/POST /studio/youtube/... status, auth-link, auth-complete, unlink
 The Gemini key arrives with the request, is used for the job and is not stored.
 """
 import asyncio
@@ -41,6 +48,8 @@ from pydantic import BaseModel
 from ingest_core import (MAX_BYTES, MAX_SECONDS, SUB_LANGS, SUB_SUFFIXES, check_url, classify, clean_srt, cookie_note,
                          cookies_problem, cookies_source as _cookies_source, ingest_hint, parse_ffmpeg_duration, pick_subtitle, run_ingest)
 from recap_core import fit_tempo, gemini_hint, mask_key, run_recap
+import studio_core as sc
+import studio_ops as so
 from tts_text import normalize_for_tts
 
 app = FastAPI(title="DramaFlow Recap Backend")
@@ -255,7 +264,7 @@ def run_job(job_id: str, req: RecapRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "DramaFlow Recap Backend", "features": ["recap", "tts", "ingest"]}
+    return {"status": "ok", "service": "DramaFlow Recap Backend", "features": ["recap", "tts", "ingest", "studio"]}
 
 
 @app.post("/recap/jobs")
@@ -534,3 +543,236 @@ def selftest(req: SelfTestRequest, x_app_token: Optional[str] = Header(default=N
             hint = gemini_hint(msg)
             add("gemini", False, hint + " · " + msg[:120])
     return {"checks": checks}
+
+
+# ---- Creator Studio ---------------------------------------------------------
+STUDIO_DIR = Path(os.environ.get("DF_STUDIO_DIR") or (Path(tempfile.gettempdir()) / "dramaflow_studio"))
+STUDIO_OPS = ("download", "split", "translate", "subtitle", "zip", "youtube")
+STUDIO_FLAGS: dict = {}  # job id -> {"cancel": bool, "pause": bool}
+
+
+class StudioUpload(BaseModel):
+    name: str
+    data_b64: str
+
+
+class StudioRequest(BaseModel):
+    op: str
+    # download
+    url: str = ""
+    quality: str = "720"
+    speed: str = "safe4"
+    playlist: bool = False
+    playlist_items: str = ""
+    sub_langs: str = "auto"
+    subtitles: bool = False
+    auto_subs: bool = False
+    # split / subtitle / translate
+    file: str = ""
+    split_mode: str = "count"
+    count: int = 2
+    ranges: str = ""
+    srt_file: str = ""
+    reencode: bool = False
+    engine: str = "free"
+    src_lang: str = "auto"
+    gemini_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
+    sub_mode: str = "soft"
+    font: str = "Padauk"
+    font_size: int = 22
+    # zip / youtube
+    files: List[str] = []
+    zip_name: str = ""
+    confirm_rights: bool = False
+    privacy: str = "private"
+    title_template: str = "{name}"
+    description: str = ""
+    tags: str = ""
+    category: str = "entertainment"
+    kids: bool = False
+    thumbnail: str = ""
+    upload_cc: bool = False
+
+
+class YoutubePaste(BaseModel):
+    pasted: str
+
+
+def _studio_gemini(req: StudioRequest):
+    """Lines in, Burmese lines out, with the user's own Gemini key (used for this job only)."""
+    client = genai.Client(api_key=req.gemini_key)
+
+    def many(texts: List[str], lang: str) -> List[str]:
+        prompt = sc.numbered_prompt(texts, lang)
+        for attempt in range(3):
+            try:
+                r = client.models.generate_content(model=req.gemini_model, contents=prompt, config=types.GenerateContentConfig(temperature=0.3))
+                return sc.parse_numbered_reply(r.text or "", len(texts))
+            except Exception as e:
+                msg = str(e)
+                if any(k in msg for k in ("429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE")) and attempt < 2:
+                    time.sleep(20 * (attempt + 1))
+                    continue
+                raise RuntimeError(mask_key(msg, req.gemini_key))
+        return []
+
+    return many
+
+
+def run_studio_job(job_id: str, req: StudioRequest):
+    flags = STUDIO_FLAGS.setdefault(job_id, {"cancel": False, "pause": False})
+
+    def detail(**kw):
+        with LOCK:
+            JOBS[job_id].setdefault("detail", {}).update(kw)
+
+    env = so.Env(
+        STUDIO_DIR, _ffmpeg(),
+        lambda stage, pct: _set(job_id, stage=stage, progress=min(100, max(0, int(pct)))),
+        lambda: flags["cancel"], lambda: flags["pause"], detail,
+        _studio_gemini(req) if req.engine == "gemini" and req.gemini_key.strip() else None,
+    )
+    try:
+        STUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        _set(job_id, status="running", stage="စတင်နေတယ်", progress=1)
+        fn = {"download": so.op_download, "split": so.op_split, "translate": so.op_translate,
+              "subtitle": so.op_subtitle_video, "zip": so.op_zip, "youtube": so.op_youtube}[req.op]
+        result = fn(env, req)
+        _set(job_id, status="done", stage="ပြီးပြီ", progress=100, result=result)
+    except so.Canceled:
+        _set(job_id, status="canceled", stage="ရပ်လိုက်ပြီ")
+    except Exception as e:  # shown in the app, with the key hidden
+        _set(job_id, status="error", stage="မအောင်မြင်ဘူး", error=mask_key(str(e), req.gemini_key)[:500])
+    finally:
+        flags["pause"] = False
+        detail(paused=False)
+
+
+@app.get("/studio/files")
+def studio_files(x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    STUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        free = round(shutil.disk_usage(STUDIO_DIR).free / 1024**3, 1)
+    except OSError:
+        free = None
+    return {"files": so.list_library(STUDIO_DIR), "free_gb": free, "aria2c": bool(shutil.which("aria2c")), "youtube": so.yt_status()}
+
+
+@app.get("/studio/files/{name}")
+def studio_file(name: str, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    try:
+        p = so.file_path(STUDIO_DIR, name)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(str(p), filename=p.name, media_type="application/octet-stream")
+
+
+@app.delete("/studio/files/{name}")
+def studio_delete(name: str, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    try:
+        so.delete_file(STUDIO_DIR, name)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"ok": True}
+
+
+@app.post("/studio/upload")
+def studio_upload(req: StudioUpload, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    try:
+        return {"name": so.save_upload(STUDIO_DIR, req.name, req.data_b64)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/studio/jobs")
+def studio_create(req: StudioRequest, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    if req.op not in STUDIO_OPS:
+        raise HTTPException(status_code=400, detail="op မမှန်ဘူး")
+    if req.op == "youtube" and not req.confirm_rights:
+        raise HTTPException(status_code=400, detail="YouTube ပေါ် တင်မယ့် ဗီဒီယိုက ကိုယ်ပိုင် / တင်ခွင့်ရှိတာ ဖြစ်ကြောင်း အတည်ပြုပါ")
+    if req.op == "youtube" and req.privacy not in sc.YT_PRIVACY:
+        raise HTTPException(status_code=400, detail="privacy မမှန်ဘူး")
+    if req.op == "translate" and req.engine == "gemini" and not req.gemini_key.strip():
+        raise HTTPException(status_code=400, detail="Gemini key မပါဘူး (Settings မှာ ထည့်ပါ)")
+    clean_old()
+    with LOCK:
+        if any(j["status"] in ("queued", "running") for j in JOBS.values()):
+            raise HTTPException(status_code=409, detail="တခြား job တစ်ခု လုပ်နေတုန်းပါ")
+        job_id = f"studio_{int(time.time())}_{secrets.token_hex(2)}"
+        JOBS[job_id] = {"status": "queued", "stage": "စောင့်နေတယ်", "progress": 0, "created": time.time(), "error": "",
+                        "op": req.op, "detail": {}, "result": {"files": [], "links": [], "notes": [], "errors": []}}
+        STUDIO_FLAGS[job_id] = {"cancel": False, "pause": False}
+    threading.Thread(target=run_studio_job, args=(job_id, req), daemon=True).start()
+    return {"job_id": job_id}
+
+
+def _studio_job(job_id: str):
+    j = JOBS.get(job_id) if job_id.startswith("studio_") else None
+    if j is None:
+        raise HTTPException(status_code=404, detail="Job မတွေ့ပါ")
+    return j
+
+
+@app.get("/studio/jobs/{job_id}")
+def studio_status(job_id: str, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    with LOCK:
+        j = _studio_job(job_id)
+        return {k: (dict(v) if isinstance(v, dict) else v) for k, v in j.items() if k != "created"}
+
+
+@app.post("/studio/jobs/{job_id}/{action}")
+def studio_control(job_id: str, action: str, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    if action not in ("cancel", "pause", "resume"):
+        raise HTTPException(status_code=404, detail="Not found")
+    with LOCK:
+        j = _studio_job(job_id)
+        if j["status"] not in ("queued", "running"):
+            raise HTTPException(status_code=409, detail="Job ပြီးသွားပြီ")
+    flags = STUDIO_FLAGS.setdefault(job_id, {"cancel": False, "pause": False})
+    if action == "cancel":
+        flags["cancel"] = True
+        flags["pause"] = False
+    else:
+        flags["pause"] = action == "pause"
+    return {"ok": True}
+
+
+@app.get("/studio/youtube/status")
+def studio_yt_status(x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    return so.yt_status()
+
+
+@app.post("/studio/youtube/auth-link")
+def studio_yt_link(x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    try:
+        return {"url": so.yt_auth_link()}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/studio/youtube/auth-complete")
+def studio_yt_complete(req: YoutubePaste, x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    try:
+        return so.yt_auth_complete(req.pasted)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/studio/youtube/unlink")
+def studio_yt_unlink(x_app_token: Optional[str] = Header(default=None)):
+    _auth(x_app_token)
+    so.yt_unlink()
+    return so.yt_status()
