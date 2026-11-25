@@ -844,3 +844,10 @@ Reported by the user: Export (2 h, 1080p, 2 Censor boxes) finished, but the Save
 | New native call `renderList` (Kotlin) lists every .mp4 in the app's render folder | none (Kotlin compiles only on CI) | see CI | **No** |
 | The Save stage shows "App ထဲမှာ တွေ့တဲ့ ဗီဒီယို (မှတ်တမ်းထဲ မပါ)": finished files of this project not in the history, with preview / Gallery save / delete; and a note about unfinished (.part) files | Dart tests for which files count (`orphan_renders_test`) | see CI | **No** |
 Honest limits: if the file is not there at all, the render did not finish (the note about unfinished files will say so). An unfinished .part file cannot be played or saved. Starting a new export deletes old unfinished files. The Android "Files" app cannot see the app's private folder, so this list is the only way to reach such a file.
+
+## TE-66: YouTube description helper in the Save stage (2026-11-25)
+Asked by the user: have the app write the video description. Branch `claude/te-58-studio`.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Save stage has a "YouTube Description ရေး" card: it builds a Burmese prompt from the project (title, part, channel, notes, the narration text if there is one, and a time-stamped sample of the subtitles spread over the whole length) and opens it in Gemini (same share route as the TE advice; no API key). The answer is pasted back, kept with the project (`yt_description`) and can be copied | Dart tests for the sampling, the clock text and the prompt content (`description_prompt_test`); the card itself needs a phone | see CI | **No** |
+Honest limits: the AI reads text only, it does not watch the video; with no subtitles or narration text the description has no story summary. The prompt tells the model not to invent names or events, but the answer must still be checked by the person. No direct API call from the app (that would need the person's Gemini key and a text client; not built). The prompt asks for a "recap / commentary, thanks to the original creators" line; it gives no advice on avoiding copyright checks.

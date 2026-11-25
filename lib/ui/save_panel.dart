@@ -12,6 +12,7 @@ import '../platform/part_saver.dart' show galleryFailText;
 import '../platform/render_channel.dart';
 import '../state/project_store.dart';
 import '../state/render_store.dart';
+import 'description_card.dart';
 import 'render_panel.dart' show showVideoPreview;
 
 /// Stage 6: put a finished video in the phone's gallery or a folder, and keep
@@ -176,6 +177,7 @@ class _SavePanelState extends State<SavePanel> {
             child: Text(_msg!, style: const TextStyle(fontSize: 13)),
           ),
         Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: _load, child: const Text('စာရင်း ပြန်ယူ'))),
+        DescriptionCard(project: widget.project),
         if (_items.isEmpty)
           const Text('ထုတ်ပြီးသား ဗီဒီယို မရှိသေးပါ။ အဆင့် ၅ မှာ အရင်ထုတ်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
         for (final e in _items)
