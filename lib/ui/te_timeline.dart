@@ -7,6 +7,7 @@ import '../core/te_frames.dart';
 import '../core/te_preview.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
+import '../core/timeline_window.dart';
 import '../core/transformative_plan.dart';
 
 /// Multi-track timeline on the ORIGINAL video's time: ruler, the video pieces
@@ -50,6 +51,11 @@ class TeTimeline extends StatefulWidget {
 class _TeTimelineState extends State<TeTimeline> {
   final _sc = ScrollController();
   double _pps = 30; // pixels per second
+
+  // Only the subtitle blocks near the visible part are built. The window is one
+  // screen wide on each side; scrolling more than half a screen redraws it.
+  double _viewW = 360;
+  double _winOffset = 0;
 
   static const _ruler = 22.0;
   static const _minLenMs = 200;
@@ -107,6 +113,17 @@ class _TeTimelineState extends State<TeTimeline> {
     return [grip(true), grip(false)];
   }
   static const _row = 28.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _sc.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (!mounted || !_sc.hasClients) return;
+    if ((_sc.offset - _winOffset).abs() > _viewW * 0.5) setState(() {});
+  }
 
   @override
   void dispose() {
@@ -261,6 +278,10 @@ class _TeTimelineState extends State<TeTimeline> {
         ),
         LayoutBuilder(builder: (ctx, bc) {
           final width = math.max(secs * _pps + 40, bc.maxWidth);
+          _viewW = bc.maxWidth;
+          _winOffset = _sc.hasClients ? _sc.offset : 0;
+          final subFrom = ((_winOffset - _viewW) / _pps * 1000).floor();
+          final subTo = ((_winOffset + 2 * _viewW) / _pps * 1000).ceil();
           return SizedBox(
             height: height,
             child: SingleChildScrollView(
@@ -309,7 +330,7 @@ class _TeTimelineState extends State<TeTimeline> {
                           label: 'Video ${i + 1}',
                         ),
                   // Subtitle track.
-                  for (final e in widget.subs)
+                  for (final e in subsInWindow(widget.subs, subFrom, subTo))
                     _block(
                       left: e.startMs / 1000 * _pps,
                       width: math.max(4, (e.endMs - e.startMs) / 1000 * _pps),
