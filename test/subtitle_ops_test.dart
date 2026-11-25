@@ -153,4 +153,32 @@ void main() {
       expect(applyTerms(sample(), const [Term('zzz', 'y')]).entries, sample());
     });
   });
+
+  group('analyseEntries', () {
+    test('counts real faults and soft notes apart, and marks the faulty lines', () {
+      final e = [
+        const SrtEntry(1, 1000, 3000, 'ok'),
+        const SrtEntry(2, 2500, 4000, 'overlaps the first'),
+        const SrtEntry(3, 5000, 5000, 'bad range'),
+        const SrtEntry(4, 6000, 7000, ''),
+      ];
+      final a = analyseEntries(e);
+      expect(a.serious.every(isSeriousProblem), isTrue);
+      expect(a.bad, containsAll([1, 2, 3]));
+      expect(a.bad.contains(0), isFalse);
+      expect(a.serious.length + a.soft, findProblems(e).length);
+    });
+
+    test('a clean list has nothing flagged', () {
+      final a = analyseEntries(sample());
+      expect(a.serious, isEmpty);
+      expect(a.bad, isEmpty);
+    });
+
+    test('speed and length notes are not real faults', () {
+      expect(isSeriousProblem(const SubProblem(0, ProblemKind.tooFast, 'x')), isFalse);
+      expect(isSeriousProblem(const SubProblem(0, ProblemKind.longLine, 'x')), isFalse);
+      expect(isSeriousProblem(const SubProblem(0, ProblemKind.overlap, 'x')), isTrue);
+    });
+  });
 }

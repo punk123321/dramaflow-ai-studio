@@ -811,3 +811,21 @@ Asked by the user after the "Creator Media Studio" notebook review ("အကု�
 | App: "Creator Studio" on the home screen — Download / ဖြတ် / စာတန်း / YouTube tabs, Library with tick boxes, "ဖုန်းထဲ ယူ" (video -> Gallery, others -> save dialog, a cut download carries on), ZIP, delete; keeps running with the screen off (TE-59 service) | Dart tests of the reading/requests (`studio_test`); the screen needs a phone | see CI | **No** |
 | Notebook: `dramaflow_recap_colab_standalone.ipynb` rebuilt by `tools/build_standalone_notebook.py` (`--check` says "same"); new Cell 5c uploads `client_secret.json`; Cell 1 also installs aria2c + Padauk font + the Google libraries | cells parse; file-by-file comparison | n/a | **No** |
 Honest limits: the real YouTube/TikTok/Bilibili sites, the real Google OAuth, aria2c speed and the Cloudflare tunnel with big files were NOT tried here. The tunnel may cut big downloads to the phone (it carries on from where it stopped if the backend allows ranges). Files live on the Colab and vanish with the runtime. YouTube's API gives about 6 uploads a day, and a Google project that is not audited may force uploads to private. Needs the NEW notebook (all cells run again) — `tools/dramaflow_recap_colab.ipynb` (git clone of main) has no Studio until this is merged.
+
+## TE-63: Subtitle Studio opens faster (2026-11-25)
+Reported by the user: "Studio editor ထဲကိုဝင်ရင် နည်းနည်း လေးနေတယ်". Assumed to mean the Subtitle Studio screen (not the Video Editor or Creator Studio) - not confirmed. Branch `claude/te-63-studio-speed` (on TE-62; does not contain the Creator Studio branch). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The subtitle fault check (`findProblems`) ran on every redraw (each keystroke / scroll rebuild). It now runs only when the subtitle list changes (`analyseEntries`, kept until the list is replaced) | Dart tests for the check result (`subtitle_ops_test`); the speed itself is not measured | see CI | **No** |
+| Opening / returning to the editor tab read the SRT, parsed it and wrote it back twice. Now the text on screen is remembered, so an unchanged file is not parsed again; a file over 40,000 characters is parsed in a background isolate | none (needs a phone) | see CI | **No** |
+Honest limits: these are the causes found by reading the code; no timing was taken on a phone, so how much faster it feels is unknown. If it is still slow, the cause may be another screen (Video Editor / Creator Studio) or the preview video, which this change does not touch.
+
+### TE-63 addendum: Video Editor (the user said this was the screen they meant, 2026-11-25)
+Causes found by reading the code (no timing taken on a phone):
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The timeline built one widget for EVERY subtitle (thousands for a long drama) and rebuilt them on every playhead update. Now only the subtitle blocks within one screen on each side of the visible part are built (`subsInWindow`); scrolling more than half a screen refreshes the window | Dart tests for the window filter (`timeline_window_test`); how it looks and scrolls needs a phone | see CI | **No** |
+| The subtitle remap and the timeline check ran on every redraw (playhead moves). Now they run only when the timeline or the subtitles change | none (needs a phone) | see CI | **No** |
+| The video preview started loading in the same moment the page was opening. Now it starts 0.35 s after the page is shown, so the page appears first and the preview picture follows | none | see CI | **No** |
+| A subtitle file over 40,000 characters is read in the background | none | see CI | **No** |
+Honest limits: no timing on a phone, so how much faster it feels is unknown. The preview picture now appears a moment later by design. The effect list, piece rows and voice rows are still all built at once (making them lazy could lose half-typed text when they scroll away, so it was left alone); if it is still slow with a very long piece list, that is the next place to look.
