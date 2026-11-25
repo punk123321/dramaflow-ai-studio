@@ -798,3 +798,11 @@ Reported by the user: 7 parts exported overnight, in the morning only one was in
 | A one-line summary of the last run is kept per project ("Segment 7 ခုထဲက 1 ခု Gallery ထဲ သိမ်းပြီး၊ #2 မှာ ရပ်သွားတယ်: …") and shown when the screen is opened again, so the next morning shows how far it got and why it stopped | same | see CI | **No** |
 | Wording: "download" -> "export" (it is a re-encode, not a download) on the Video Index buttons | none | see CI | **No** |
 Honest limits: if the real cause was something else (the phone killing the app), the summary will say "ရပ်သွားတယ်" only when the app got to write it; a killed app writes nothing, but the ✓ marks of the parts already in the Gallery stay and "ကျန်တာ export" continues from there (TE-61).
+
+## TE-63: Subtitle Studio opens faster (2026-11-25)
+Reported by the user: "Studio editor ထဲကိုဝင်ရင် နည်းနည်း လေးနေတယ်". Assumed to mean the Subtitle Studio screen (not the Video Editor or Creator Studio) - not confirmed. Branch `claude/te-63-studio-speed` (on TE-62; does not contain the Creator Studio branch). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The subtitle fault check (`findProblems`) ran on every redraw (each keystroke / scroll rebuild). It now runs only when the subtitle list changes (`analyseEntries`, kept until the list is replaced) | Dart tests for the check result (`subtitle_ops_test`); the speed itself is not measured | see CI | **No** |
+| Opening / returning to the editor tab read the SRT, parsed it and wrote it back twice. Now the text on screen is remembered, so an unchanged file is not parsed again; a file over 40,000 characters is parsed in a background isolate | none (needs a phone) | see CI | **No** |
+Honest limits: these are the causes found by reading the code; no timing was taken on a phone, so how much faster it feels is unknown. If it is still slow, the cause may be another screen (Video Editor / Creator Studio) or the preview video, which this change does not touch.
