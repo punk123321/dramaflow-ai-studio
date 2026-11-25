@@ -829,3 +829,10 @@ Causes found by reading the code (no timing taken on a phone):
 | The video preview started loading in the same moment the page was opening. Now it starts 0.35 s after the page is shown, so the page appears first and the preview picture follows | none | see CI | **No** |
 | A subtitle file over 40,000 characters is read in the background | none | see CI | **No** |
 Honest limits: no timing on a phone, so how much faster it feels is unknown. The preview picture now appears a moment later by design. The effect list, piece rows and voice rows are still all built at once (making them lazy could lose half-typed text when they scroll away, so it was left alone); if it is still slow with a very long piece list, that is the next place to look.
+
+## TE-64: "Gallery ထဲ သိမ်းမယ်" button on the finished Export Video box (2026-11-25)
+Reported by the user: after Export Video finished they could not find the video in the Gallery. Cause found by reading: Export Video never saves to the Gallery by itself; the box said to go to the next stage "Save", but the Editor's "Export Video" button opens only the Render panel, so there was no Save stage to go to. The file was still in the app (history), not lost. Branch `claude/te-58-studio` (includes TE-63).
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The "ပြီးပါပြီ ✓" box now has a "Gallery ထဲ သိမ်းမယ်" button (same saver as the parts export: shows the reason when the Gallery refuses, keeps the app's copy so the Save stage still lists it) | the saver and its reason texts are covered by `part_saver_test`; the button itself needs a phone | see CI | **No** |
+Honest limits: a 2-hour 1080p video is a big file; if the phone has little free space the Gallery save can fail and the reason is shown. The app's copy is kept (twice the space) so it can be saved again from Save; delete it there after it is in the Gallery.
