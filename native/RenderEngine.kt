@@ -165,6 +165,22 @@ class RenderEngine(private val activity: Activity, private val channel: MethodCh
                 result.success(ok)
             }
             "renderFreeBytes" -> result.success(StatFs(rendersDir.path).availableBytes)
+            "renderList" -> {
+                // Every video the app itself holds, finished or not, so one whose "done" message
+                // never reached the screen (app killed, screen off for hours) can still be found.
+                val list = ArrayList<HashMap<String, Any>>()
+                rendersDir.listFiles()?.filter { it.isFile && it.name.endsWith(".mp4") }?.sortedByDescending { it.lastModified() }?.forEach { f ->
+                    val partial = f.name.endsWith(".part.mp4")
+                    list.add(hashMapOf(
+                        "path" to f.absolutePath,
+                        "name" to (if (partial) f.name.removeSuffix(".part.mp4") else f.name.removeSuffix(".mp4")),
+                        "size" to f.length(),
+                        "modified" to f.lastModified(),
+                        "partial" to partial
+                    ))
+                }
+                result.success(list)
+            }
             "saveToGallery" -> saveToGallery(
                 args?.get("path") as? String ?: "",
                 args?.get("name") as? String ?: "dramaflow",

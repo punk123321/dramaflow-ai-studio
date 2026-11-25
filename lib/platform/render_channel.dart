@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+import '../core/orphan_renders.dart';
+
 sealed class RenderEvent {
   const RenderEvent();
 }
@@ -82,6 +84,22 @@ class RenderChannel {
   }
 
   static Future<int> freeBytes() async => (await _channel.invokeMethod<int>('renderFreeBytes')) ?? 0;
+
+  /// Every .mp4 in the app's own render folder (finished and unfinished).
+  static Future<List<RenderFile>> listRenders() async {
+    final raw = await _channel.invokeMethod<List<Object?>>('renderList') ?? const [];
+    return [
+      for (final r in raw)
+        if (r is Map)
+          RenderFile(
+            path: '${r['path']}',
+            name: '${r['name']}',
+            sizeBytes: (r['size'] as num?)?.toInt() ?? 0,
+            modifiedMs: (r['modified'] as num?)?.toInt() ?? 0,
+            partial: r['partial'] == true,
+          )
+    ];
+  }
 
   /// Returns the gallery link. Throws code `use_export` on Android 9 and older.
   static Future<String?> saveToGallery(String path, String name) =>

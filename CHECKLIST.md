@@ -836,3 +836,11 @@ Reported by the user: after Export Video finished they could not find the video 
 |---|---|---|---|
 | The "ပြီးပါပြီ ✓" box now has a "Gallery ထဲ သိမ်းမယ်" button (same saver as the parts export: shows the reason when the Gallery refuses, keeps the app's copy so the Save stage still lists it) | the saver and its reason texts are covered by `part_saver_test`; the button itself needs a phone | see CI | **No** |
 Honest limits: a 2-hour 1080p video is a big file; if the phone has little free space the Gallery save can fail and the reason is shown. The app's copy is kept (twice the space) so it can be saved again from Save; delete it there after it is in the Gallery.
+
+## TE-65: find a finished video that is missing from the Save list (2026-11-25)
+Reported by the user: Export (2 h, 1080p, 2 Censor boxes) finished, but the Save stage did not list it. Likely cause (not proven; the phone was not inspected): the native side renamed the finished file and sent "done" to the screen, and if the app / screen was not listening at that moment (phone in a bag for a long render) the history row was never written, so the file sits in the app's private folder with no list entry. Branch `claude/te-58-studio`.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| New native call `renderList` (Kotlin) lists every .mp4 in the app's render folder | none (Kotlin compiles only on CI) | see CI | **No** |
+| The Save stage shows "App ထဲမှာ တွေ့တဲ့ ဗီဒီယို (မှတ်တမ်းထဲ မပါ)": finished files of this project not in the history, with preview / Gallery save / delete; and a note about unfinished (.part) files | Dart tests for which files count (`orphan_renders_test`) | see CI | **No** |
+Honest limits: if the file is not there at all, the render did not finish (the note about unfinished files will say so). An unfinished .part file cannot be played or saved. Starting a new export deletes old unfinished files. The Android "Files" app cannot see the app's private folder, so this list is the only way to reach such a file.

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/orphan_renders.dart';
+import '../core/render_plan.dart' show safeFileName;
 import '../core/stage.dart';
 import '../core/theme.dart';
 import '../data/export_item.dart';
 import '../data/project.dart';
 import '../platform/audio_channel.dart';
+import '../platform/part_saver.dart' show galleryFailText;
 import '../platform/render_channel.dart';
 import '../state/project_store.dart';
 import '../state/render_store.dart';
@@ -29,6 +32,9 @@ class _SavePanelState extends State<SavePanel> {
   String? _msg;
   bool _error = false;
   int? _busyId;
+  List<RenderFile> _orphans = [];
+  List<RenderFile> _unfinished = [];
+  String? _busyPath;
 
   int get _pid => widget.project.id!;
 
@@ -41,6 +47,12 @@ class _SavePanelState extends State<SavePanel> {
   Future<void> _load() async {
     try {
       _items = await _repo.forProject(_pid);
+      try {
+        final files = await RenderChannel.listRenders();
+        final prefix = '${safeFileName(widget.project.name)}_';
+        _orphans = orphanRenders(files, {for (final i in _items) i.path}, prefix: prefix);
+        _unfinished = unfinishedRenders(files, prefix: prefix);
+      } catch (_) {}
     } catch (e) {
       _say('ဖတ်လို့မရပါ: $e', error: true);
     }
@@ -74,6 +86,39 @@ class _SavePanelState extends State<SavePanel> {
       _say(text.contains('use_export') ? 'ဒီ Android ဗားရှင်းမှာ "ဖိုင်အဖြစ်သိမ်း" ကို သုံးပါ။' : 'Gallery ထဲ သိမ်းလို့မရပါ: $err', error: true);
     }
     if (mounted) setState(() => _busyId = null);
+  }
+
+  Future<void> _orphanGallery(RenderFile f) async {
+    setState(() => _busyPath = f.path);
+    try {
+      await RenderChannel.saveToGallery(f.path, f.name);
+      _say('${f.name} ကို Gallery (Movies/DramaFlow) ထဲ သိမ်းပြီး');
+      await _markDone();
+    } catch (err) {
+      _say('Gallery ထဲ သိမ်းလို့မရပါ: ${galleryFailText('$err')}', error: true);
+    }
+    if (mounted) setState(() => _busyPath = null);
+  }
+
+  Future<void> _orphanDelete(RenderFile f) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('ဒီဖိုင်ကို ဖျက်မလား?'),
+        content: const Text('App ထဲက ဖိုင်ကို ဖျက်မယ်။ Gallery ထဲ မသိမ်းရသေးရင် ပြန်မရတော့ပါဘူး။'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('မဖျက်ဘူး')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('ဖျက်မယ်')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await RenderChannel.deleteRender(f.path);
+      await _load();
+    } catch (err) {
+      _say('ဖျက်လို့မရပါ: $err', error: true);
+    }
   }
 
   Future<void> _asFile(ExportItem e) async {
@@ -153,6 +198,41 @@ class _SavePanelState extends State<SavePanel> {
                   TextButton(onPressed: () => _delete(e), child: const Text('ဖျက်')),
                 ]),
               ]),
+            ),
+          ),
+        if (_orphans.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const Text('App ထဲမှာ တွေ့တဲ့ ဗီဒီယို (မှတ်တမ်းထဲ မပါ)', style: TextStyle(fontWeight: FontWeight.w600, color: DfColors.accent)),
+          const Text('ထုတ်ပြီးတာကို screen ဆီ မပို့လိုက်နိုင်တဲ့ ဖိုင်တွေ ဖြစ်နိုင်တယ်။ ဒီကနေ သိမ်းလို့ရတယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+          const SizedBox(height: 6),
+          for (final f in _orphans)
+            Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(f.name, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                  Text(
+                    '${(f.sizeBytes / 1048576).toStringAsFixed(1)} MB · ${DateTime.fromMillisecondsSinceEpoch(f.modifiedMs).toString().substring(0, 16)}',
+                    style: const TextStyle(color: DfColors.muted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 6, runSpacing: 2, children: [
+                    TextButton(onPressed: () => showVideoPreview(context, f.path), child: const Text('ကြည့်')),
+                    TextButton(onPressed: _busyPath == f.path ? null : () => _orphanGallery(f), child: const Text('Gallery ထဲသိမ်း')),
+                    TextButton(onPressed: () => _orphanDelete(f), child: const Text('ဖျက်')),
+                  ]),
+                ]),
+              ),
+            ),
+        ],
+        if (_unfinished.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'မပြီးသေးတဲ့ ဖိုင် ${_unfinished.length} ခု ရှိတယ် (${(_unfinished.fold<int>(0, (a, f) => a + f.sizeBytes) / 1048576).toStringAsFixed(0)} MB)။ '
+              'Render က အဆုံးမရောက်ဘဲ ရပ်သွားတာမို့ ဖွင့်လို့မရဘူး၊ နောက် export စတဲ့အခါ အလိုအလျောက် ဖျက်မယ်။',
+              style: const TextStyle(color: DfColors.warn, fontSize: 12.5),
             ),
           ),
       ],
