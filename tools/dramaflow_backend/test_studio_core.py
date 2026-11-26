@@ -308,5 +308,37 @@ class Downloading(unittest.TestCase):
         self.assertEqual(sc.download_hint("fine"), "")
 
 
+
+class WhisperHelpers(unittest.TestCase):
+    def test_language(self):
+        self.assertIsNone(sc.whisper_lang("auto"))
+        self.assertIsNone(sc.whisper_lang(""))
+        self.assertIsNone(sc.whisper_lang("; rm -rf"))
+        self.assertEqual(sc.whisper_lang("zh-CN"), "zh")
+        self.assertEqual(sc.whisper_lang(" EN "), "en")
+
+    def test_model_name_falls_back_to_small(self):
+        self.assertEqual(sc.whisper_model_name("large-v3"), "large-v3")
+        self.assertEqual(sc.whisper_model_name("../../x"), "small")
+        self.assertEqual(sc.whisper_model_name(""), "small")
+
+    def test_segments_to_cues(self):
+        from types import SimpleNamespace as NS
+        segs = [NS(start=0.0, end=2.0, text=" hello  world "), NS(start=1.5, end=3.0, text="overlap"), NS(start=4.0, end=4.1, text="short"), NS(start=5.0, end=6.0, text="  ")]
+        cues = sc.segments_to_cues(segs)
+        self.assertEqual(cues[0], (0, 1500, "hello world"))
+        self.assertEqual(cues[1], (1500, 3000, "overlap"))
+        self.assertEqual(cues[2], (4000, 4400, "short"))
+        self.assertEqual(len(cues), 3)
+        for a, b in zip(cues, cues[1:]):
+            self.assertLessEqual(a[1], b[0])
+
+    def test_close_start_moves_the_next_cue_instead(self):
+        from types import SimpleNamespace as NS
+        cues = sc.segments_to_cues([NS(start=1.0, end=2.0, text="a"), NS(start=1.1, end=2.5, text="b")])
+        self.assertEqual(cues[0], (1000, 2000, "a"))
+        self.assertEqual(cues[1][0], 2000)
+
+
 if __name__ == "__main__":
     unittest.main()

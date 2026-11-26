@@ -145,6 +145,48 @@ def parse_srt(text: str) -> List[Cue]:
     return cues
 
 
+# ---- speech to text (Whisper) -----------------------------------------------
+WHISPER_MODELS = ("tiny", "base", "small", "medium", "large-v3")
+_WHISPER_LANG = re.compile(r"^[a-z]{2,3}$")
+
+
+def whisper_lang(code: str) -> Optional[str]:
+    """'auto' / empty / anything odd -> None (Whisper finds the language); 'zh-CN' -> 'zh'."""
+    c = (code or "").strip().lower()
+    if c in ("", "auto"):
+        return None
+    c = c.split("-")[0].split("_")[0]
+    return c if _WHISPER_LANG.match(c) else None
+
+
+def whisper_model_name(name: str) -> str:
+    return name if name in WHISPER_MODELS else "small"
+
+
+def segments_to_cues(segments, min_ms: int = 400) -> List[Cue]:
+    """Whisper segments (objects with start / end in seconds and text) -> SRT cues: empty text dropped, every cue at least
+    min_ms long, and no two cues overlapping (the earlier one is shortened)."""
+    out: List[Cue] = []
+    for seg in segments:
+        text = " ".join(str(getattr(seg, "text", "") or "").split())
+        if not text:
+            continue
+        a = max(0, int(round(float(getattr(seg, "start", 0.0)) * 1000)))
+        b = int(round(float(getattr(seg, "end", 0.0)) * 1000))
+        if b < a + min_ms:
+            b = a + min_ms
+        if out and a < out[-1][1]:
+            ps, pe, pt = out[-1]
+            if a - ps >= 200:
+                out[-1] = (ps, a, pt)
+            else:
+                a = pe
+                if b < a + min_ms:
+                    b = a + min_ms
+        out.append((a, b, text))
+    return out
+
+
 def _stamp(ms: int) -> str:
     ms = max(0, int(ms))
     return f"{ms // 3600000:02d}:{(ms // 60000) % 60:02d}:{(ms // 1000) % 60:02d},{ms % 1000:03d}"

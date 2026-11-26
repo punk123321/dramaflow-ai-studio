@@ -164,5 +164,28 @@ class Studio(unittest.TestCase):
         self.assertEqual(c.exception.status_code, 400)
 
 
+class Transcribe(Studio):
+    def test_transcribe_job_makes_an_srt_in_the_library(self):
+        from types import SimpleNamespace as NS
+
+        class Fake:
+            def transcribe(self, path, **kw):
+                return iter([NS(start=0.0, end=2.0, text="你好")]), NS(duration=2.0, language="zh", language_probability=0.99)
+
+        real = main.so._load_whisper
+        main.so._load_whisper = lambda name: (Fake(), "CPU")
+        self.addCleanup(setattr, main.so, "_load_whisper", real)
+        main.STUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        (main.STUDIO_DIR / "ep.mp4").write_bytes(b"x")
+        j = wait(start(op="transcribe", file="ep.mp4", src_lang="auto", whisper_model="tiny"))
+        self.assertEqual(j["status"], "done", j)
+        self.assertEqual(j["result"]["files"], ["ep_zh.srt"])
+        self.assertTrue((main.STUDIO_DIR / "ep_zh.srt").exists())
+
+    def test_unknown_op_is_still_refused(self):
+        with self.assertRaises(Exception):
+            start(op="whisperx", file="ep.mp4")
+
+
 if __name__ == "__main__":
     unittest.main()

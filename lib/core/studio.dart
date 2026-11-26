@@ -290,6 +290,22 @@ Map<String, Object?> studioTranslateRequest({required String file, bool gemini =
       if (gemini && geminiModel.isNotEmpty) 'gemini_model': geminiModel,
     };
 
+/// Speech to text with Whisper on the backend. [srcLang] 'auto' lets Whisper find the language.
+Map<String, Object?> studioTranscribeRequest({required String file, String srcLang = 'auto', String model = 'small', bool vad = true}) => {
+      'op': 'transcribe',
+      'file': file,
+      'src_lang': srcLang,
+      'whisper_model': model,
+      'whisper_vad': vad,
+    };
+
+const whisperModels = <(String, String)>[
+  ('small', 'small — မြန်၊ ပုံမှန် (အကြံပြု)'),
+  ('medium', 'medium — ပိုမှန်၊ ပိုကြာ'),
+  ('large-v3', 'large-v3 — အမှန်ဆုံး၊ အကြာဆုံး (GPU ပေါ်)'),
+  ('base', 'base — အမြန်ဆုံး၊ အမှားများ'),
+];
+
 Map<String, Object?> studioSubtitleRequest({required String file, required String srtFile, String mode = 'soft', String font = 'Padauk', int fontSize = 22}) => {
       'op': 'subtitle',
       'file': file,

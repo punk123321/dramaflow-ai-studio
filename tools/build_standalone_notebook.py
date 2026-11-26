@@ -23,7 +23,7 @@ GitHub branch မလိုဘူး၊ backend ကုဒ်အားလုံး
 """
 
 INSTALL = """# Cell 1: package တွေ + cloudflared + aria2 + မြန်မာဖောင့် တပ်ဆင် (တစ်ကြိမ်၊ ၂ မိနစ်လောက်)
-!pip -q install fastapi uvicorn edge-tts google-genai imageio-ffmpeg yt-dlp deep-translator google-api-python-client google-auth-oauthlib google-auth-httplib2
+!pip -q install fastapi uvicorn edge-tts google-genai imageio-ffmpeg yt-dlp deep-translator google-api-python-client google-auth-oauthlib google-auth-httplib2 faster-whisper
 !apt-get -qq install -y aria2 fonts-sil-padauk > /dev/null 2>&1 || echo "aria2/ဖောင့် မတပ်နိုင်ဘူး — download က 1 လိုင်းနဲ့ပဲ၊ Hardsub က မူရင်းဖောင့်နဲ့ ထွက်မယ်"
 !wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared
 !mkdir -p /content/dramaflow_backend

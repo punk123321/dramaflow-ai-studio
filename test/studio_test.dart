@@ -102,6 +102,17 @@ void main() {
     expect(studioZipRequest(files: ['a'], name: 'p')['zip_name'], 'p');
   });
 
+  test('the Whisper request names the op, the file, the language and the model', () {
+    final r = studioTranscribeRequest(file: 'a.mp4', srcLang: 'zh', model: 'medium');
+    expect(r['op'], 'transcribe');
+    expect(r['file'], 'a.mp4');
+    expect(r['src_lang'], 'zh');
+    expect(r['whisper_model'], 'medium');
+    expect(r['whisper_vad'], isTrue);
+    expect(studioTranscribeRequest(file: 'a.mp4')['whisper_model'], 'small');
+    expect(whisperModels.map((m) => m.$1), containsAll(['small', 'medium', 'large-v3']));
+  });
+
   test('the YouTube request is private by default and always carries the rights answer', () {
     final y = studioYoutubeRequest(files: ['a.mp4'], confirmRights: true);
     expect(y['privacy'], 'private');

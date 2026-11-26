@@ -433,6 +433,64 @@ def op_translate(env: Env, req) -> dict:
     return {"files": [out], "notes": notes, "errors": []}
 
 
+def _load_whisper(model_name: str):
+    """(model, device note). Uses the GPU when there is one, and falls back to the CPU if the GPU cannot be started."""
+    from faster_whisper import WhisperModel
+
+    cuda = False
+    try:
+        import ctranslate2
+
+        cuda = ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        cuda = False
+    if cuda:
+        try:
+            return WhisperModel(model_name, device="cuda", compute_type="float16"), "GPU"
+        except Exception:
+            pass
+    return WhisperModel(model_name, device="cpu", compute_type="int8"), "CPU"
+
+
+def op_transcribe(env: Env, req) -> dict:
+    """Speech to text with Whisper (faster-whisper), on the Colab machine: no paid service. The result is an .srt in the library
+    (the video / audio is only read), which can then be translated to Burmese or put into the video."""
+    src = file_path(env.lib, req.file, ("video", "audio"))
+    model_name = sc.whisper_model_name(getattr(req, "whisper_model", "small"))
+    lang = sc.whisper_lang(getattr(req, "src_lang", "auto"))
+    env.progress(f"Whisper model ({model_name}) ပြင်နေတယ် — ပထမဆုံးအကြိမ် ဒေါင်းရလို့ ကြာနိုင်တယ်", 2)
+    try:
+        model, device = _load_whisper(model_name)
+    except ImportError:
+        raise RuntimeError("faster-whisper မတပ်ရသေးဘူး (Colab Cell 1 ကို ပြန် run ပါ)")
+    env.check()
+    started = time.time()
+    segments, info = model.transcribe(str(src), language=lang, vad_filter=bool(getattr(req, "whisper_vad", True)), beam_size=5)
+    total = float(getattr(info, "duration", 0.0) or 0.0)
+    found = []
+    for seg in segments:  # a generator: the work happens here
+        env.check()
+        found.append(seg)
+        end = float(getattr(seg, "end", 0.0) or 0.0)
+        if total > 0:
+            env.progress(f"စာတန်းထုတ်နေတယ် {int(end) // 60}:{int(end) % 60:02d} / {int(total) // 60}:{int(total) % 60:02d}", 3 + int(95 * min(end, total) / total))
+    cues = sc.segments_to_cues(found)
+    if not cues:
+        raise RuntimeError("စကားသံ တစ်ခုမှ မတွေ့ဘူး (အသံမပါတာ / ဇာတ်ကြောင်းက တီးလုံးသက်သက်ဖြစ်တာ ဖြစ်နိုင်တယ်)")
+    spoken = getattr(info, "language", None) or lang or "auto"
+    stem = os.path.splitext(src.name)[0]
+    out = sc.unique_name(f"{stem}_{spoken}", ".srt", [f.name for f in env.lib.iterdir()])
+    (env.lib / out).write_text(sc.serialize_srt(cues), encoding="utf-8")
+    took = max(1, int(time.time() - started))
+    notes = [f"စာကြောင်း {len(cues)} ခု · ဘာသာ {spoken} · Whisper {model_name} ({device}) · {took} စက္ကန့်"]
+    prob = getattr(info, "language_probability", None)
+    if lang is None and isinstance(prob, (int, float)) and prob < 0.6:
+        notes.append(f"ဘာသာကို အလိုအလျောက် ခန့်မှန်းတာ ယုံကြည်မှု နည်းတယ် ({int(prob * 100)}%) — ဘာသာကို ကိုယ်တိုင် ရွေးပြီး ပြန်လုပ်ကြည့်ပါ")
+    notes.append("စကားသံကနေ ထုတ်တာမို့ အမှားပါနိုင်တယ်၊ Subtitle Studio မှာ ပြင်ပါ")
+    env.progress("ပြီးပြီ", 100)
+    return {"files": [out], "notes": notes, "errors": []}
+
+
 def op_subtitle_video(env: Env, req) -> dict:
     """Soft CC (a track you can switch off, what YouTube also reads) and / or hardsub (burned in)."""
     video = file_path(env.lib, req.file, ("video",))

@@ -62,6 +62,9 @@ class _StudioScreenState extends State<StudioScreen> {
   bool _reencode = false;
 
   // subtitles
+  String? _asrVideo;
+  String _asrLang = 'zh';
+  String _asrModel = 'small';
   String? _subVideo;
   String? _subSrt;
   bool _gemini = false;
@@ -644,6 +647,23 @@ class _StudioScreenState extends State<StudioScreen> {
       );
 
   Widget _subtitleTab() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        DfCard(
+          title: 'စကားသံကနေ စာတန်းထုတ် (Whisper)',
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _pick('ဗီဒီယို', _asrVideo, _videos, (v) => _asrVideo = v),
+            _choice('ဗီဒီယိုထဲက စကားဘာသာ', _asrLang, _srcLangs, (v) => _asrLang = v),
+            _choice('Whisper model', _asrModel, whisperModels, (v) => _asrModel = v),
+            _hint('Colab ပေါ်မှာ အခမဲ့ လုပ်တယ် (ပိုက်ဆံပေးတဲ့ service မလို)။ GPU runtime ရွေးထားရင် အများကြီး မြန်တယ်။ ပထမဆုံးအကြိမ်က model ဒေါင်းရလို့ ကြာတယ်။ ဘာသာကို သိရင် ရွေးပေးတာ ပိုမှန်တယ်။ ရလဒ်က "<ဗီဒီယိုနာမည်>_zh.srt" ပုံစံနဲ့ Library ထဲ ထွက်မယ်၊ အောက်က ဘာသာပြန်နဲ့ ဆက်သုံးလို့ရတယ်။ စကားသံကနေ ထုတ်တာမို့ အမှားပါနိုင်တယ်၊ Subtitle Studio မှာ ပြင်ပါ။'),
+            const SizedBox(height: 10),
+            GradientButton(
+              label: 'စာတန်းထုတ်မယ်',
+              icon: Icons.graphic_eq,
+              onPressed: (_busy || _asrVideo == null || !_videos.contains(_asrVideo))
+                  ? null
+                  : () => _run('စကားသံကနေ စာတန်းထုတ်နေတယ်', studioTranscribeRequest(file: _asrVideo!, srcLang: _asrLang, model: _asrModel)),
+            ),
+          ]),
+        ),
         DfCard(
           title: 'စာတန်း မြန်မာလို ဘာသာပြန်',
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

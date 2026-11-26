@@ -551,5 +551,81 @@ class NoEvasionFilters(unittest.TestCase):
             self.assertNotIn(bad, src, bad)
 
 
+
+class Transcribe(Tmp):
+    """Whisper is replaced by a stand-in: no model, no network."""
+
+    class FakeModel:
+        def __init__(self, segs, language="zh", prob=0.95, duration=10.0):
+            self.segs, self.language, self.prob, self.duration, self.calls = segs, language, prob, duration, []
+
+        def transcribe(self, path, **kw):
+            self.calls.append((path, kw))
+            return iter(self.segs), NS(duration=self.duration, language=self.language, language_probability=self.prob)
+
+    def setUp(self):
+        super().setUp()
+        self.real = so._load_whisper
+        self.addCleanup(setattr, so, "_load_whisper", self.real)
+        (self.lib / "ep1.mp4").write_bytes(b"x")
+        (self.lib / "ep1.srt").write_text(SRT, encoding="utf-8")
+
+    def use(self, model, device="GPU"):
+        so._load_whisper = lambda name: (model, device)
+
+    def test_makes_an_srt_from_the_segments(self):
+        m = self.FakeModel([NS(start=0.5, end=2.0, text="你好"), NS(start=3.0, end=4.5, text="再见")])
+        self.use(m)
+        log = []
+        out = so.op_transcribe(make_env(self.lib, log=log), NS(file="ep1.mp4", src_lang="auto", whisper_model="medium", whisper_vad=True))
+        self.assertEqual(out["files"], ["ep1_zh.srt"])
+        cues = sc.parse_srt((self.lib / "ep1_zh.srt").read_text(encoding="utf-8"))
+        self.assertEqual([c[2] for c in cues], ["你好", "再见"])
+        self.assertIn("Whisper medium (GPU)", out["notes"][0])
+        self.assertEqual(log[-1][1], 100)
+        self.assertIsNone(m.calls[0][1]["language"])
+        self.assertTrue((self.lib / "ep1.mp4").read_bytes() == b"x")  # the original is only read
+
+    def test_the_chosen_language_is_passed_and_an_existing_name_is_not_overwritten(self):
+        m = self.FakeModel([NS(start=0, end=1, text="a")])
+        self.use(m)
+        (self.lib / "ep1_zh.srt").write_text("keep", encoding="utf-8")
+        out = so.op_transcribe(make_env(self.lib), NS(file="ep1.mp4", src_lang="zh-CN", whisper_model="small"))
+        self.assertEqual(m.calls[0][1]["language"], "zh")
+        self.assertNotEqual(out["files"][0], "ep1_zh.srt")
+        self.assertEqual((self.lib / "ep1_zh.srt").read_text(encoding="utf-8"), "keep")
+
+    def test_unsure_language_is_reported(self):
+        self.use(self.FakeModel([NS(start=0, end=1, text="a")], prob=0.4))
+        out = so.op_transcribe(make_env(self.lib), NS(file="ep1.mp4", src_lang="auto"))
+        self.assertTrue(any("ယုံကြည်မှု နည်း" in n for n in out["notes"]))
+
+    def test_no_speech_is_an_error(self):
+        self.use(self.FakeModel([NS(start=0, end=1, text="  ")]))
+        with self.assertRaises(RuntimeError):
+            so.op_transcribe(make_env(self.lib), NS(file="ep1.mp4", src_lang="auto"))
+
+    def test_only_video_or_audio_files_are_accepted(self):
+        self.use(self.FakeModel([]))
+        with self.assertRaises(ValueError):
+            so.op_transcribe(make_env(self.lib), NS(file="ep1.srt", src_lang="auto"))
+        with self.assertRaises(ValueError):
+            so.op_transcribe(make_env(self.lib), NS(file="../x.mp4", src_lang="auto"))
+
+    def test_cancel_stops_the_work(self):
+        self.use(self.FakeModel([NS(start=0, end=1, text="a"), NS(start=1, end=2, text="b")]))
+        with self.assertRaises(so.Canceled):
+            so.op_transcribe(make_env(self.lib, canceled=lambda: True), NS(file="ep1.mp4", src_lang="auto"))
+
+    def test_missing_package_gives_a_hint(self):
+        def boom(name):
+            raise ImportError("faster_whisper")
+
+        so._load_whisper = boom
+        with self.assertRaises(RuntimeError) as c:
+            so.op_transcribe(make_env(self.lib), NS(file="ep1.mp4", src_lang="auto"))
+        self.assertIn("faster-whisper", str(c.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
