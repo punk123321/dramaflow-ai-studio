@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
+import '../core/chunk_export.dart';
 import '../core/render_plan.dart';
 import '../core/srt.dart';
+import '../core/srt_split.dart' show partFileName;
 import '../core/stage.dart';
 import '../core/theme.dart';
 import '../core/timeline.dart';
@@ -50,6 +53,20 @@ class _RenderPanelState extends State<RenderPanel> {
   bool _markedDone = false;
   DateTime? _t0; // when the running render was first seen, for the time-left guess
 
+  // Long video made in several files, with a rest between them so the phone can cool down.
+  static const _lastKind = 'export_chunks_last';
+  int _chunkMin = 0; // 0 = one file
+  int _restSec = 120;
+  int _fromChunk = 1;
+  bool _chunkRunning = false;
+  bool _chunkStop = false;
+  bool _skipRest = false;
+  int _chunkDone = 0;
+  int _chunkTotal = 0;
+  int _restLeft = 0;
+  String? _chunkMsg;
+  bool _chunkErr = false;
+
   int get _pid => widget.project.id!;
 
   @override
@@ -68,6 +85,11 @@ class _RenderPanelState extends State<RenderPanel> {
       _free = await RenderChannel.freeBytes();
       final uri = widget.project.sourceVideoUri;
       if (uri != null) _videoOk = await RenderChannel.uriReadable(uri);
+      final last = await _repo.getDoc(_pid, _lastKind);
+      if (last != null && last.isNotEmpty && !_chunkRunning) {
+        _chunkMsg = 'အရင်တစ်ခါ: $last';
+        _chunkErr = last.contains('ရပ်သွား');
+      }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -91,6 +113,136 @@ class _RenderPanelState extends State<RenderPanel> {
       _galleryErr = fail != null;
       if (fail == null) _galleryName = done.name;
       _galleryMsg = fail ?? 'Gallery (Movies/DramaFlow) ထဲ သိမ်းပြီး ✓';
+    });
+  }
+
+  Future<void> _idle(RenderStore rs) {
+    if (!rs.running) return Future.value();
+    final c = Completer<void>();
+    void l() {
+      if (!rs.running && !c.isCompleted) {
+        rs.removeListener(l);
+        c.complete();
+      }
+    }
+
+    rs.addListener(l);
+    return c.future;
+  }
+
+  /// A rest between two files. The service keeps the app alive (and the notification updated).
+  Future<void> _rest() async {
+    _skipRest = false;
+    for (var left = _restSec; left > 0; left--) {
+      if (!mounted || _chunkStop || _skipRest) break;
+      setState(() => _restLeft = left);
+      if (left == _restSec || left % 15 == 0) {
+        await RenderChannel.keepAlive(true, text: 'ဖုန်းအေးအောင် နားနေတယ် ${coolDownText(left)}');
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    if (mounted) setState(() => _restLeft = 0);
+  }
+
+  Future<void> _saveLast(String text) async {
+    try {
+      await _repo.setDoc(_pid, _lastKind, text);
+    } catch (_) {}
+  }
+
+  /// Makes the video in several files, one after another. Each file goes to the Gallery as
+  /// soon as it is made (and the app's own copy is removed), and the run stops at the first
+  /// failure. Effects that sit on the finished video's time are cut to each file; narration
+  /// that crosses a cut cannot be kept and is counted.
+  Future<void> _runChunks() async {
+    final p = widget.project;
+    final rs = context.read<RenderStore>();
+    final te = compileOps(_tl.pieces, _plan.ops);
+    final full = _tl.copyWith(pieces: te.pieces, voices: [..._tl.voices, ...te.sounds]);
+    final ranges = chunkRanges(outputDurationMs(full), _chunkMin * 60000);
+    if (ranges.length < 2) {
+      await _start();
+      return;
+    }
+    final first = (_fromChunk - 1).clamp(0, ranges.length - 1).toInt();
+    final overlaysAll = [for (final o in te.overlays) o.toJson()];
+    final splitsAll = [for (final x in te.splits) x.toJson()];
+    final censors = [for (final x in te.censors) x.toJson()];
+    final count = ranges.length - first;
+    setState(() {
+      _chunkRunning = true;
+      _chunkStop = false;
+      _chunkDone = 0;
+      _chunkTotal = count;
+      _chunkMsg = null;
+      _chunkErr = false;
+    });
+    final stamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var saved = 0;
+    var dropped = 0;
+    String? stoppedAt;
+    String? why;
+    await RenderChannel.keepAlive(true, text: 'ခွဲထုတ် $count ပိုင်း');
+    for (var k = first; k < ranges.length; k++) {
+      if (!mounted || _chunkStop) break;
+      final r = ranges[k];
+      final slice = sliceTimeline(full, r.from, r.to);
+      dropped += slice.droppedVoices;
+      final name = '${partFileName(safeFileName(p.name), k, ranges.length)}_$stamp';
+      final job = buildRenderJob(
+        name: name,
+        videoUri: p.sourceVideoUri!,
+        timeline: slice.timeline,
+        overlays: sliceWindows(overlaysAll, r.from, r.to),
+        splits: sliceWindows(splitsAll, r.from, r.to, minMs: minSplitMs),
+        // Blur boxes are on the ORIGINAL video's time, so the cut pieces already limit them.
+        censors: censors,
+        sourceSubtitles: _subs,
+        settings: _eff,
+        aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
+      );
+      await rs.start(_pid, name, job);
+      await _idle(rs);
+      if (rs.error != null || rs.canceled) {
+        stoppedAt = 'အပိုင်း ${k + 1}';
+        why = rs.error ?? 'ကိုယ်တိုင်ရပ်လို့';
+        break;
+      }
+      final done = rs.lastDone;
+      if (done == null || done.name != name) {
+        stoppedAt = 'အပိုင်း ${k + 1}';
+        why = 'ထွက်ပြီး ဒါပေမယ့် မှတ်တမ်းသိမ်းလို့ မရဘူး';
+        break;
+      }
+      final fail = await PartSaver.toGallery(done, name);
+      if (fail != null) {
+        stoppedAt = 'အပိုင်း ${k + 1}';
+        why = '$fail (ဖိုင်က app ထဲမှာ ကျန်တယ်၊ Save အဆင့်မှာ ကိုယ်တိုင်သိမ်းနိုင်)';
+        break;
+      }
+      saved++;
+      if (mounted) setState(() => _chunkDone = saved);
+      if (k < ranges.length - 1 && _restSec > 0 && !_chunkStop) await _rest();
+    }
+    if (!mounted && stoppedAt == null && saved < count && !_chunkStop) {
+      stoppedAt = 'screen ပိတ်သွားလို့';
+      why = 'ဒီစာမျက်နှာကို ထွက်သွားတယ်';
+    }
+    await RenderChannel.keepAlive(false);
+    final summary = partsRunSummary(
+      total: count,
+      saved: saved,
+      what: 'အပိုင်း',
+      stoppedAt: stoppedAt ?? (_chunkStop && saved < count ? 'ကိုယ်တိုင်ရပ်လို့' : null),
+      why: why,
+    );
+    await _saveLast(summary);
+    if (!mounted) return;
+    setState(() {
+      _chunkRunning = false;
+      _restLeft = 0;
+      _chunkErr = saved < count;
+      _chunkMsg = '$summary${dropped > 0 ? '။ Narration / sound $dropped ခုက ဖြတ်တဲ့နေရာကို ကျော်နေလို့ မပါဘူး' : ''}';
     });
   }
 
@@ -148,6 +300,8 @@ class _RenderPanelState extends State<RenderPanel> {
     final est = estimateBytes(dur, _eff);
     final lowSpace = _free > 0 && est > 0 && _free < est + est ~/ 5 + 50 * 1048576;
     final done = rs.lastDone;
+    final ranges = chunkRanges(dur, _chunkMin * 60000);
+    final fromChunk = ranges.isEmpty ? 1 : _fromChunk.clamp(1, ranges.length).toInt();
 
     if (done != null && done.projectId == _pid && !p.isDone(Stage.render) && !_markedDone) {
       _markedDone = true;
@@ -293,6 +447,69 @@ class _RenderPanelState extends State<RenderPanel> {
             ],
           ),
         ),
+        if (!mine && !_chunkRunning && dur >= 20 * 60000)
+          DfCard(
+            title: 'ရှည်တဲ့ video ကို ခွဲထုတ် (ဖုန်းမပူအောင်)',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    key: ValueKey('cm$_chunkMin'),
+                    initialValue: _chunkMin,
+                    decoration: const InputDecoration(labelText: 'တစ်ဖိုင်ကို'),
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('တစ်ဖိုင်တည်း')),
+                      DropdownMenuItem(value: 20, child: Text('၂၀ မိနစ်')),
+                      DropdownMenuItem(value: 30, child: Text('၃၀ မိနစ်')),
+                      DropdownMenuItem(value: 45, child: Text('၄၅ မိနစ်')),
+                      DropdownMenuItem(value: 60, child: Text('၁ နာရီ')),
+                    ],
+                    onChanged: (v) => setState(() {
+                      _chunkMin = v ?? 0;
+                      _fromChunk = 1;
+                    }),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    key: ValueKey('rs$_restSec'),
+                    initialValue: _restSec,
+                    decoration: const InputDecoration(labelText: 'ကြားမှာ နား'),
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('မနား')),
+                      DropdownMenuItem(value: 60, child: Text('၁ မိနစ်')),
+                      DropdownMenuItem(value: 120, child: Text('၂ မိနစ်')),
+                      DropdownMenuItem(value: 180, child: Text('၃ မိနစ်')),
+                      DropdownMenuItem(value: 300, child: Text('၅ မိနစ်')),
+                    ],
+                    onChanged: _chunkMin == 0 ? null : (v) => setState(() => _restSec = v ?? 0),
+                  ),
+                ),
+              ]),
+              if (ranges.length > 1) ...[
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int>(
+                  key: ValueKey('fc$fromChunk${ranges.length}'),
+                  initialValue: fromChunk,
+                  decoration: const InputDecoration(labelText: 'ဘယ်အပိုင်းကနေ စမလဲ (ရပ်သွားရင် ကျန်တာကို ဆက်လုပ်ဖို့)'),
+                  items: [for (var i = 1; i <= ranges.length; i++) DropdownMenuItem(value: i, child: Text('အပိုင်း $i / ${ranges.length}'))],
+                  onChanged: (v) => setState(() => _fromChunk = v ?? 1),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'ဖိုင် ${ranges.length} ခု ထွက်မယ်၊ တစ်ခုပြီးတိုင်း Gallery ထဲ အလိုအလျောက် သိမ်းပြီး app ထဲက ကော်ပီ ဖျက်မယ်။ '
+                  'Narration / sound က ဖြတ်တဲ့နေရာကို ကျော်နေရင် အဲ့ဒါ မပါဘူး၊ Zoom က ဖြတ်တဲ့နေရာမှာ အစကပြန်စမယ်၊ Music က ဖိုင်တိုင်း အစကနေ စမယ်။',
+                  style: const TextStyle(color: DfColors.muted, fontSize: 12),
+                ),
+              ],
+            ]),
+          ),
+        if (_chunkMsg != null && !_chunkRunning && !mine)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(_chunkMsg!, style: TextStyle(fontSize: 12.5, color: _chunkErr ? DfColors.danger : DfColors.ok)),
+          ),
         _row('ခန့်မှန်း ဖိုင်အရွယ်', est > 0 ? '≈ ${_mb(est)}' : '—'),
         if (lowSpace)
           const Padding(
@@ -311,7 +528,22 @@ class _RenderPanelState extends State<RenderPanel> {
         if (rs.canceled && !rs.running)
           const Padding(padding: EdgeInsets.only(top: 6), child: Text('Render ကို ရပ်လိုက်ပါပြီ။ ဖိုင်အပျက် မကျန်ပါ။', style: TextStyle(fontSize: 13))),
         const SizedBox(height: 8),
-        if (mine) ...[
+        if (_chunkRunning && !mine)
+          DfCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_restLeft > 0 ? 'ဖုန်းအေးအောင် နားနေတယ်' : 'နောက်အပိုင်း ပြင်နေတယ်…', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text('ပြီးပြီ $_chunkDone / $_chunkTotal${_restLeft > 0 ? ' · ကျန် ${coolDownText(_restLeft)}' : ''}', style: const TextStyle(color: DfColors.muted)),
+              const SizedBox(height: 8),
+              Row(children: [
+                if (_restLeft > 0)
+                  Expanded(child: OutlinedButton(onPressed: () => _skipRest = true, child: const Text('နားတာ ကျော်'))),
+                if (_restLeft > 0) const SizedBox(width: 8),
+                Expanded(child: OutlinedButton(onPressed: () => setState(() => _chunkStop = true), child: const Text('ရပ်မယ်'))),
+              ]),
+            ]),
+          )
+        else if (mine) ...[
           DfCard(
             child: Row(
               children: [
@@ -323,7 +555,7 @@ class _RenderPanelState extends State<RenderPanel> {
                     children: [
                       const Text('ထုတ်နေတယ်…', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
-                      const Text('ခဏစောင့်ပါ', style: TextStyle(color: DfColors.muted)),
+                      Text(_chunkRunning ? 'အပိုင်း ${_chunkDone + 1} / $_chunkTotal' : 'ခဏစောင့်ပါ', style: const TextStyle(color: DfColors.muted)),
                       if (left != null) ...[
                         const SizedBox(height: 6),
                         Text('ကျန်ခန့် $left (ခန့်မှန်းချက်)', style: const TextStyle(color: DfColors.muted, fontSize: 12.5)),
@@ -334,12 +566,18 @@ class _RenderPanelState extends State<RenderPanel> {
               ],
             ),
           ),
-          OutlinedButton(onPressed: rs.cancel, child: const Text('ရပ်မယ်')),
+          OutlinedButton(
+            onPressed: () {
+              _chunkStop = true;
+              rs.cancel();
+            },
+            child: const Text('ရပ်မယ်'),
+          ),
         ] else
           GradientButton(
-            onPressed: (blockers.isNotEmpty || otherRunning) ? null : _start,
+            onPressed: (blockers.isNotEmpty || otherRunning) ? null : () => ranges.length > 1 ? _runChunks() : _start(),
             icon: Icons.movie_creation_outlined,
-            label: otherRunning ? 'တခြား project render လုပ်နေဆဲ' : 'MP4 ထုတ်မယ်',
+            label: otherRunning ? 'တခြား project render လုပ်နေဆဲ' : (ranges.length > 1 ? 'ခွဲထုတ်မယ် (${ranges.length - fromChunk + 1} ပိုင်း)' : 'MP4 ထုတ်မယ်'),
           ),
         if (!mine)
           Padding(

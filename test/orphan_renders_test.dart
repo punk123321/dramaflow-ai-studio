@@ -28,4 +28,44 @@ void main() {
     final u = unfinishedRenders([f('Show_1', partial: true), f('Show_2'), f('Other_1', partial: true)], prefix: 'Show_');
     expect(u.map((e) => e.name), ['Show_1']);
   });
+
+  group('pending render', () {
+    test('encode and decode keep every field, even a name with a bar in it', () {
+      const p = PendingRender(projectId: 7, name: 'a|b_c', height: 1080, durationMs: 7200000);
+      final d = PendingRender.decode(p.encode())!;
+      expect(d.projectId, 7);
+      expect(d.name, 'a|b_c');
+      expect(d.height, 1080);
+      expect(d.durationMs, 7200000);
+    });
+
+    test('empty or damaged text gives null', () {
+      expect(PendingRender.decode(null), isNull);
+      expect(PendingRender.decode(''), isNull);
+      expect(PendingRender.decode('x|1|2|n'), isNull);
+      expect(PendingRender.decode('1|2|3'), isNull);
+    });
+
+    test('jobDurationMs follows speed and still frames', () {
+      expect(
+        jobDurationMs({
+          'pieces': [
+            {'s': 0, 'e': 10000},
+            {'s': 0, 'e': 10000, 'sp': 2.0},
+            {'s': 5000, 'e': 8000, 'f': 1},
+          ]
+        }),
+        10000 + 5000 + 3000,
+      );
+      expect(jobDurationMs({}), 0);
+    });
+
+    test('findFinished ignores unfinished files; hasUnfinished sees them', () {
+      final files = [f('Show_1', partial: true), f('Show_2')];
+      expect(findFinished(files, 'Show_1'), isNull);
+      expect(findFinished(files, 'Show_2'), isNotNull);
+      expect(hasUnfinished(files, 'Show_1'), isTrue);
+      expect(hasUnfinished(files, 'Show_2'), isFalse);
+    });
+  });
 }
