@@ -9,6 +9,7 @@ import '../core/news_video.dart';
 import '../core/recap_auto.dart';
 import '../core/recap_queue.dart' show QStep, qStepLabels;
 import '../core/script.dart';
+import '../core/source_link.dart';
 import '../core/srt.dart';
 import '../core/theme.dart';
 import '../core/usage_log.dart';
@@ -20,7 +21,9 @@ import '../data/recap_backend_repo.dart';
 import '../data/usage_repo.dart';
 import '../platform/assembly_client.dart';
 import '../platform/audio_channel.dart';
+import '../platform/background_work.dart';
 import '../platform/gemini_files.dart';
+import '../platform/link_ingest.dart';
 import '../platform/news_video_client.dart';
 import '../platform/recap_client.dart';
 import 'recap_step_bar.dart';
@@ -40,6 +43,7 @@ class RecapAutoSection extends StatefulWidget {
     required this.onTextsSaved,
     required this.onSrtReady,
     this.durationMs = 0,
+    this.linkUrl = '',
   });
 
   final int projectId;
@@ -58,6 +62,10 @@ class RecapAutoSection extends StatefulWidget {
   /// Length of the video (0 = not known), to say how many minutes of sound
   /// AssemblyAI will get.
   final int durationMs;
+
+  /// The video link of this project ('' = none). When there is one, the
+  /// backend puts that video into Gemini and the phone uploads nothing.
+  final String linkUrl;
 
   @override
   State<RecapAutoSection> createState() => _RecapAutoSectionState();
@@ -216,7 +224,10 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
   }
 
   Future<bool> _confirm(bool asr) async {
-    final what = _video
+    final what = _video && widget.linkUrl.isNotEmpty
+        ? 'link ကို သင့် Backend ဆီ ပို့မယ် — Backend က ဗီဒီယိုကို ဆွဲပြီး သင့် Gemini account ဆီ တင်မယ် (ဖုန်းက မတင်ဘူး)။ '
+            'Gemini key ကို သင့် Backend ဆီ ပို့မယ်။ မူရင်းဗီဒီယိုကို မပြင်ဘူး။ (ဗီဒီယိုရှည်ရင် ၅–၁၅ မိနစ်လောက် ကြာနိုင်တယ်)'
+        : _video
         ? 'ဗီဒီယိုတစ်ခုလုံးကို သင့် Gemini account (Google) ဆီ upload လုပ်မယ်။ Gemini key ကို သင့် Backend ဆီ ပို့မယ်။ '
             'မူရင်းဗီဒီယိုကို မပြင်ဘူး၊ ဖုန်း cache ထဲ ယာယီကူးပြီး ပြီးရင် ဖျက်မယ်။ (ဗီဒီယိုကြီးရင် data အများကြီး သုံးမယ် — Wi-Fi သုံးပါ)'
         : 'Scene ပုံတွေ (contact sheet) နဲ့ စာတန်းစာသားကို သင့် Backend နဲ့ Google (Gemini) ဆီ ပို့မယ်။ Gemini key ကိုလည်း Backend ဆီ ပို့မယ်။';
@@ -295,8 +306,8 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _say('Gemini API key မထည့်ရသေးဘူး။ Settings မှာ ထည့်ပါ', error: true);
       return;
     }
-    if (_video && widget.videoUri == null) {
-      _say('ဗီဒီယို မရွေးရသေးဘူး', error: true);
+    if (_video && widget.videoUri == null && widget.linkUrl.isEmpty) {
+      _say('ဗီဒီယို မရွေးရသေးဘူး (Stage 1 မှာ ရွေးပါ၊ သို့မဟုတ် အပေါ်မှာ link ထည့်ပါ)', error: true);
       return;
     }
     final needAsr = !retry && _useAsr && _asr.hasKey && widget.videoUri != null && !await _hasSrt();
@@ -316,6 +327,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _stage = 'ပြင်ဆင်နေတယ်';
     });
     if (!retry) _stepReset();
+    await BackgroundWork.begin('DramaFlow · Recap လုပ်နေတယ်', 'ပြင်ဆင်နေတယ်');
     try {
       if (retry) {
         _enter(QStep.subtitles);
@@ -335,6 +347,31 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         mime = _lastMime;
         _enter(QStep.upload);
         _skipStep(QStep.upload, 'Gemini ထဲ ရှိပြီးသား ဗီဒီယိုကို ပြန်သုံး');
+      } else if (_video && widget.linkUrl.isNotEmpty) {
+        _enter(QStep.upload);
+        setState(() => _stage = 'link ကို Backend ဆီ ပို့နေတယ်');
+        final info = await LinkIngest(_handoff).ensure(
+          projectId: widget.projectId,
+          client: client,
+          url: widget.linkUrl,
+          geminiKey: _geminiKey,
+          onStage: (st, pct) {
+            BackgroundWork.update(st, percent: pct);
+            if (mounted) {
+              setState(() {
+                _stage = st;
+                _progress = pct;
+              });
+            }
+          },
+          reused: (r) => _note(r ? 'link ကနေ ဆွဲပြီးသား Gemini file ကို ပြန်သုံး' : 'link ကို Backend က ဆွဲပြီး Gemini ဆီ တင်မယ် (${linkKindLabels[linkKindOf(widget.linkUrl)]})'),
+          onSubs: (n, lang) => _note('ဗီဒီယိုနဲ့အတူ စာတန်း $n ကြောင်း ရပြီး သိမ်းပြီး${lang.isEmpty ? '' : ' ($lang)'}'),
+        );
+        await widget.onSrtReady(); // so the groups below use the link's own subtitles, if they came
+        fileUri = info.fileUri;
+        mime = info.mime;
+        _lastFileUri = info.fileUri;
+        _lastMime = info.mime;
       } else if (_video) {
         _enter(QStep.upload);
         setState(() => _stage = 'Gemini ကို ကြိုစစ်နေတယ် (key နဲ့ တည်နေရာ)');
@@ -399,6 +436,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         tmp?.deleteSync();
       } catch (_) {}
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }
@@ -426,6 +464,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _msg = null;
     });
     _enter(QStep.audio);
+    await BackgroundWork.begin('DramaFlow · အသံ ဒေါင်းနေတယ်', 'စတင်နေတယ်');
     try {
       final repo = AudioRepo();
       final old = await repo.forProject(widget.projectId);
@@ -468,6 +507,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _say('$e', error: true);
     } finally {
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }
@@ -479,6 +519,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
         _progress = j.progress;
       });
     }
+    BackgroundWork.update(j.stage, percent: j.progress);
   }
 
   String get _jobKind => 'recap_job_${widget.task}';
@@ -542,6 +583,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
     });
     _stepReset();
     _enter(QStep.ask);
+    await BackgroundWork.begin('DramaFlow · Recap job စောင့်နေတယ်', 'Backend ကို မေးနေတယ်');
     try {
       final job = await client.resume(id, _onJobUpdate);
       await _applyJob(job, retry: false, groupCount: 0);
@@ -555,6 +597,7 @@ class _RecapAutoSectionState extends State<RecapAutoSection> {
       _say('$e', error: true);
     } finally {
       _client = null;
+      await BackgroundWork.end();
       if (mounted) setState(() => _running = false);
     }
   }

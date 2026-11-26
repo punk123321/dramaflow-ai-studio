@@ -738,3 +738,123 @@ What the screenshots showed: (1) Queue/Video Recap upload failed with "User loca
 | Connecting checks the backend's /health name and says "this is the News/Recap backend" when mixed up; 404 text mentions it | Python /health names checked; Dart test | yes | **No** |
 | Self-test hint for 503 and for a location refusal on the backend | Python tests | n/a | **No** |
 Still open: News Video itself was not tested working. It needs the NEWS Colab notebook (`dramaflow_news_backend`) running and its own URL#TOKEN pasted on the News Video page. The Colab recap notebook was regenerated (re-upload it to get the new hints). CI: run 45057201438, `flutter analyze` 104 infos (no warnings/errors), `flutter test` 372 passed, APK artifact `dramaflow-apk-branch-240`. Not merged into main.
+
+## TE-55: video from a link (YouTube / TikTok / Red Note) + News AI pictures (2026-11-23)
+Asked by the user: give a link instead of uploading a video file; News should make its pictures automatically. Branch `claude/te-55-link-ingest`, not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Recap backend `/ingest/jobs`: link -> yt-dlp download (max 720p, size/length limits, private/local addresses refused) -> put into the user's Gemini account from the backend (so no VPN is needed for this upload) -> `file_uri`, mime, length | Python tests (`test_ingest_core`, `test_main_stubbed`) with stand-ins for yt-dlp and Gemini | yes (run 45118749572) | **No** |
+| App: link card in Video Recap, link used by Auto and by the Queue (a project with a link and no local video can run); the answer is cached ~40 h so a retry does not download again; no subtitles for a link-only run (Gemini listens to the sound itself) | Dart tests (`source_link_test`) for link reading, cache and answer parsing | yes (run 45118749572) | **No** |
+| News Video: AI picture sources (Gemini image, Pollinations) with fallback to Wikimedia stock search | Python + Dart tests of the helpers | yes (run 45118749572) | **No** |
+Honest limits: yt-dlp against the real sites was NOT run here (no network). YouTube often blocks Colab's addresses ("sign in to confirm you're not a bot"); TikTok / Red Note short links may need updates of yt-dlp. The backend says so in Burmese when it happens. Downloading is for videos you have the right to use; the original is never changed (a temporary copy on the backend is deleted after the upload). Needs the NEW Recap notebook (`dramaflow_recap_colab_standalone.ipynb`, installs yt-dlp) and the News notebook re-uploaded.
+CI: run 45118749572 success, `flutter analyze` 107 infos (no warnings/errors), APK artifact `dramaflow-apk-branch-246`. Not merged into main.
+
+## TE-56: Scene Recap in the queue + the queue keeps going in the background (2026-11-23)
+Asked by the user ("နှစ်ခုလုံးလုပ်ထား"). Branch `claude/te-56-queue-scenes` (built on TE-55; merging it brings TE-55 too). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Queue: Video / Scene switch. Scene mode per episode: subtitles -> scene split + contact sheets on the phone -> pictures to the user's backend (Gemini + voice there; no VPN needed) -> save -> audio. A scene plan the user already made is reused; the script and Video Index are written only when the project has neither | Dart tests for scene-plan reading and the step lists / notice text; the runner itself needs a phone and a backend | yes (run 45120451549) | **No** |
+| Link-only projects are not offered in Scene mode (frames need the video file) | by reading | yes | **No** |
+| Contact sheets made by the queue are not saved to the phone gallery (a new `gallery:false` option in SceneTools.kt) | none (Kotlin) | yes | **No** |
+| Background: the queue starts the existing foreground service (notification + wake lock) with its own title and "2/5 · episode · step" and a percent; it stops when the queue ends | notice text tested; the service needs a phone | yes | **No** |
+Honest limits: this keeps the app alive, it does not guarantee it. Swiping the app away or a maker's battery saver can still stop it; "retry" then continues with what is left. Android 13+ asks once for the notification permission (without it the queue still runs, only the notification is hidden). CI: `flutter analyze` 107 infos (no warnings/errors), `flutter test` 397 passed, APK artifact `dramaflow-apk-branch-250`.
+
+## TE-57: link — cookies.txt (YouTube bot check) + the link's own subtitles (2026-11-23)
+Idea taken from the user's "All In One Download" notebook (only the downloader ideas; its Zoom/Flip/Colour/Pitch editor part was NOT used). Branch `claude/te-56-queue-scenes` (same branch as TE-56). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Backend: an optional cookies.txt that YOU put on the backend machine (Colab: `/content/cookies.txt`, new notebook Cell 5b) is used by yt-dlp from a private copy that is deleted with the job. It never goes through the app. A broken file (JSON, empty, no tabs) stops with a Burmese reason; the bot-check hint says how to add cookies, or that they may be old | Python tests with a yt-dlp stand-in (`test_main_stubbed`, `test_ingest_core`) | n/a (Python) | **No** |
+| Backend: the uploader's own subtitles (zh first, then en, my; not machine captions, not danmaku) are asked for as .srt and returned; a subtitle file is never mistaken for the video | same | n/a | **No** |
+| App: those subtitles are saved as the project's source subtitles only when the project has none; used at once by Auto and the Queue (a log line says so) | Dart tests of the answer reading | yes (run 45159229875) | **No** |
+Honest limits: the real YouTube / Bilibili / TikTok / Red Note were NOT contacted here. Cookies may expire or be refused; a cookie from your main Google account is a risk (use a spare account). Many videos have no uploader subtitles at all (then nothing changes). Needs the NEW Recap notebook.
+CI: run 45159229875 success, `flutter analyze` 107 infos (no warnings/errors), `flutter test` 399 passed, APK artifact `dramaflow-apk-branch-252`.
+
+## TE-59: downloads and jobs keep going when the screen turns off (2026-11-24)
+Reported by the user: "ဖုန်းပိတ်ရင် download ဆွဲတယ် အခု မဆွဲ". Cause found by reading: only the Recap queue and the render screens started the foreground service; the link download, the Recap job (Auto / resume), the voice download and the News video job + MP4 download did not, so the phone stopped the app's network a few minutes after the screen went dark. Branch `claude/te-59-keepalive` (built on TE-57). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| New `BackgroundWork` (counted begin/update/end) around: link -> backend -> Gemini, Recap Auto run, Recap job resume, voice download, News video job, News MP4 download. Notification shows the stage and percent; it is switched off only when the last job ends | Dart test with a mocked channel (`background_work_test`) | see CI | **No** |
+| `RenderService` also holds a Wi-Fi lock (released with the wake lock) so the Wi-Fi radio does not sleep with the screen off | none (Kotlin, needs a phone) | see CI | **No** |
+Honest limits: this makes it much more likely, it does not guarantee it. Some phone makers (Xiaomi, Oppo, Huawei ...) still kill background apps unless battery saving is set to "No restrictions" for DramaFlow; swiping the app away stops it. Android 13+ asks once for the notification permission. If the phone loses Wi-Fi/mobile data, the job on the backend still goes on and can be resumed.
+
+## TE-60: Censor (rectangle blur) — switch to hide the border line (2026-11-24)
+Asked by the user ("censor ကို ဘေးက border လိုင်းပေါ်နေတာ ဖျောက်ပေးတဲ့ ခလုတ်"). Branch `claude/te-60-censor-border` (built on TE-59). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Censor settings: new switch "ဘောင်လိုင်း ပြ" (default on). Off = no line round the box in the preview unless the box is selected (so it can still be moved). The exported video never had a line (it is only the blur), so the export is unchanged | Dart test (`te_blur_flip_test`): default, off, kept through `withTime`, box still compiled | see CI | **No** |
+
+## TE-61: "make all parts" only makes the parts that are left (2026-11-24)
+Asked by the user: after the first part(s) finished and the run stopped, "all" started again from the first one. Branch `claude/te-61-resume-parts` (built on TE-60 -> TE-59 -> TE-57). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Video Index segments and Split-by-subtitle parts: a finished part is remembered on the phone (per project), by its time range + sound setting (+ subtitle count for Split). The big button then says "ကျန်တာ … ထုတ် (3/8)" and makes only the rest; a small "အစကနေ အကုန်ပြန်ထုတ်" button makes all again. Survives stop, error and closing the app. Moving a cut elsewhere does not reset parts whose range did not change | Dart tests for the key, the "what is left" list and the saved-list reading (`part_progress_test`); the screens themselves need a phone | see CI | **No** |
+Honest limits: "finished" means the MP4 was made and saved to the Gallery in an earlier run; if you deleted that file from the Gallery, press "အစကနေ အကုန်ပြန်ထုတ်" (the app does not check the Gallery). A part that was cut in the middle is not counted as finished. Includes TE-60 (Censor line switch).
+
+## TE-62: a part counts as done only when it is really in the Gallery (2026-11-24)
+Reported by the user: 7 parts exported overnight, in the morning only one was in the Gallery. Cause found by reading: when the Gallery save failed, the part was still marked finished and the run went on; the app's own copy of every part was never deleted after it reached the Gallery, so 7 parts took twice the space and the later ones probably failed (not proven — the phone was not inspected). Also a screen that closed in the middle ended the run silently. Branch `claude/te-62-parts-gallery` (on TE-61). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Video Index segments and Split parts: a part is marked finished (and counted) only after the Gallery really has it; then the app's copy and its history entry are deleted to free space. If the Gallery refuses, the run stops at once with the reason (file stays in the app, can be saved from the Save stage) | Dart tests for the reason texts and the run summary (`part_saver_test`); the flow itself needs a phone | see CI | **No** |
+| A one-line summary of the last run is kept per project ("Segment 7 ခုထဲက 1 ခု Gallery ထဲ သိမ်းပြီး၊ #2 မှာ ရပ်သွားတယ်: …") and shown when the screen is opened again, so the next morning shows how far it got and why it stopped | same | see CI | **No** |
+| Wording: "download" -> "export" (it is a re-encode, not a download) on the Video Index buttons | none | see CI | **No** |
+Honest limits: if the real cause was something else (the phone killing the app), the summary will say "ရပ်သွားတယ်" only when the app got to write it; a killed app writes nothing, but the ✓ marks of the parts already in the Gallery stay and "ကျန်တာ export" continues from there (TE-61).
+
+## TE-58: Creator Studio — download, cut, subtitles, CC, ZIP, YouTube upload (2026-11-24/25)
+Asked by the user after the "Creator Media Studio" notebook review ("အကုန်ပါမယ် ဘာမှ မလျော့စေနဲ့"). Branch `claude/te-58-studio` (on TE-62 -> TE-57; merging it brings all of those). Not merged into main.
+**Left out on purpose (asked three times, still no):** Zoom / Flip / Colour / Pitch changes and automatic re-upload of changed videos — those exist to get past copyright detection. A test fails if such a filter appears in the backend code. YouTube upload needs a "this is mine / I may upload it" tick, is private by default.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Backend `/studio/*` (library, small .srt/picture upload, jobs, pause/resume/cancel, YouTube login) in `main.py`; logic in `studio_core.py` / `studio_ops.py` | 152 Python tests together (`test_studio_core` 38, `test_studio_ops` 32, `test_main_studio` 10 + the older ones); real ffmpeg for cut (stream copy and re-encode), soft CC and hardsub; stand-ins for yt-dlp, deep-translator, Gemini, Google libraries | n/a (Python) | **No** |
+| Download: many links at once (share text accepted), quality best/1080/1080 HEVC/720/480/MP3/subtitles-only, subtitle language, playlist item choice (4-7, 4,6,8), 1/2/4/8/16 lines with aria2c (not for YouTube/TikTok/Red Note/Bilibili, they answer 403), Bilibili link fix, cookies.txt, pause/resume/cancel, live speed + time left | same (yt-dlp stand-in) | n/a | **No** |
+| Cut by number or by time ranges (stream copy or re-encode) with the subtitles cut to match; translate SRT to Burmese (free Google Translate or your Gemini key); soft CC and/or hardsub (Padauk, GPU if the runtime has one); ZIP | same | n/a | **No** |
+| YouTube: login by pasting the redirect address (client_secret.json and token stay on the Colab), title template {name} {n} {total}, description, tags, category, privacy, made-for-kids, thumbnail, Myanmar CC, several files | stand-in Google libraries only (no real YouTube call) | n/a | **No** |
+| App: "Creator Studio" on the home screen — Download / ဖြတ် / စာတန်း / YouTube tabs, Library with tick boxes, "ဖုန်းထဲ ယူ" (video -> Gallery, others -> save dialog, a cut download carries on), ZIP, delete; keeps running with the screen off (TE-59 service) | Dart tests of the reading/requests (`studio_test`); the screen needs a phone | see CI | **No** |
+| Notebook: `dramaflow_recap_colab_standalone.ipynb` rebuilt by `tools/build_standalone_notebook.py` (`--check` says "same"); new Cell 5c uploads `client_secret.json`; Cell 1 also installs aria2c + Padauk font + the Google libraries | cells parse; file-by-file comparison | n/a | **No** |
+Honest limits: the real YouTube/TikTok/Bilibili sites, the real Google OAuth, aria2c speed and the Cloudflare tunnel with big files were NOT tried here. The tunnel may cut big downloads to the phone (it carries on from where it stopped if the backend allows ranges). Files live on the Colab and vanish with the runtime. YouTube's API gives about 6 uploads a day, and a Google project that is not audited may force uploads to private. Needs the NEW notebook (all cells run again) — `tools/dramaflow_recap_colab.ipynb` (git clone of main) has no Studio until this is merged.
+
+## TE-63: Subtitle Studio opens faster (2026-11-25)
+Reported by the user: "Studio editor ထဲကိုဝင်ရင် နည်းနည်း လေးနေတယ်". Assumed to mean the Subtitle Studio screen (not the Video Editor or Creator Studio) - not confirmed. Branch `claude/te-63-studio-speed` (on TE-62; does not contain the Creator Studio branch). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The subtitle fault check (`findProblems`) ran on every redraw (each keystroke / scroll rebuild). It now runs only when the subtitle list changes (`analyseEntries`, kept until the list is replaced) | Dart tests for the check result (`subtitle_ops_test`); the speed itself is not measured | see CI | **No** |
+| Opening / returning to the editor tab read the SRT, parsed it and wrote it back twice. Now the text on screen is remembered, so an unchanged file is not parsed again; a file over 40,000 characters is parsed in a background isolate | none (needs a phone) | see CI | **No** |
+Honest limits: these are the causes found by reading the code; no timing was taken on a phone, so how much faster it feels is unknown. If it is still slow, the cause may be another screen (Video Editor / Creator Studio) or the preview video, which this change does not touch.
+
+### TE-63 addendum: Video Editor (the user said this was the screen they meant, 2026-11-25)
+Causes found by reading the code (no timing taken on a phone):
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The timeline built one widget for EVERY subtitle (thousands for a long drama) and rebuilt them on every playhead update. Now only the subtitle blocks within one screen on each side of the visible part are built (`subsInWindow`); scrolling more than half a screen refreshes the window | Dart tests for the window filter (`timeline_window_test`); how it looks and scrolls needs a phone | see CI | **No** |
+| The subtitle remap and the timeline check ran on every redraw (playhead moves). Now they run only when the timeline or the subtitles change | none (needs a phone) | see CI | **No** |
+| The video preview started loading in the same moment the page was opening. Now it starts 0.35 s after the page is shown, so the page appears first and the preview picture follows | none | see CI | **No** |
+| A subtitle file over 40,000 characters is read in the background | none | see CI | **No** |
+Honest limits: no timing on a phone, so how much faster it feels is unknown. The preview picture now appears a moment later by design. The effect list, piece rows and voice rows are still all built at once (making them lazy could lose half-typed text when they scroll away, so it was left alone); if it is still slow with a very long piece list, that is the next place to look.
+
+## TE-64: "Gallery ထဲ သိမ်းမယ်" button on the finished Export Video box (2026-11-25)
+Reported by the user: after Export Video finished they could not find the video in the Gallery. Cause found by reading: Export Video never saves to the Gallery by itself; the box said to go to the next stage "Save", but the Editor's "Export Video" button opens only the Render panel, so there was no Save stage to go to. The file was still in the app (history), not lost. Branch `claude/te-58-studio` (includes TE-63).
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The "ပြီးပါပြီ ✓" box now has a "Gallery ထဲ သိမ်းမယ်" button (same saver as the parts export: shows the reason when the Gallery refuses, keeps the app's copy so the Save stage still lists it) | the saver and its reason texts are covered by `part_saver_test`; the button itself needs a phone | see CI | **No** |
+Honest limits: a 2-hour 1080p video is a big file; if the phone has little free space the Gallery save can fail and the reason is shown. The app's copy is kept (twice the space) so it can be saved again from Save; delete it there after it is in the Gallery.
+
+## TE-65: find a finished video that is missing from the Save list (2026-11-25)
+Reported by the user: Export (2 h, 1080p, 2 Censor boxes) finished, but the Save stage did not list it. Likely cause (not proven; the phone was not inspected): the native side renamed the finished file and sent "done" to the screen, and if the app / screen was not listening at that moment (phone in a bag for a long render) the history row was never written, so the file sits in the app's private folder with no list entry. Branch `claude/te-58-studio`.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| New native call `renderList` (Kotlin) lists every .mp4 in the app's render folder | none (Kotlin compiles only on CI) | see CI | **No** |
+| The Save stage shows "App ထဲမှာ တွေ့တဲ့ ဗီဒီယို (မှတ်တမ်းထဲ မပါ)": finished files of this project not in the history, with preview / Gallery save / delete; and a note about unfinished (.part) files | Dart tests for which files count (`orphan_renders_test`) | see CI | **No** |
+Honest limits: if the file is not there at all, the render did not finish (the note about unfinished files will say so). An unfinished .part file cannot be played or saved. Starting a new export deletes old unfinished files. The Android "Files" app cannot see the app's private folder, so this list is the only way to reach such a file.
+
+## TE-66: YouTube description helper in the Save stage (2026-11-25)
+Asked by the user: have the app write the video description. Branch `claude/te-58-studio`.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Save stage has a "YouTube Description ရေး" card: it builds a Burmese prompt from the project (title, part, channel, notes, the narration text if there is one, and a time-stamped sample of the subtitles spread over the whole length) and opens it in Gemini (same share route as the TE advice; no API key). The answer is pasted back, kept with the project (`yt_description`) and can be copied | Dart tests for the sampling, the clock text and the prompt content (`description_prompt_test`); the card itself needs a phone | see CI | **No** |
+Honest limits: the AI reads text only, it does not watch the video; with no subtitles or narration text the description has no story summary. The prompt tells the model not to invent names or events, but the answer must still be checked by the person. No direct API call from the app (that would need the person's Gemini key and a text client; not built). The prompt asks for a "recap / commentary, thanks to the original creators" line; it gives no advice on avoiding copyright checks.
+
+## TE-67: Thumbnail prompt for Chinese xianxia dramas (2026-11-26)
+Asked by the user. Branch `claude/te-58-studio`. The APK build of the TE-66 push (run 45636870782) failed only because Maven answered "429 Too Many Requests" while Gradle downloaded the Kotlin plugin (analyze and 441 tests passed); not a code error. The next push builds again.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| Save stage has a "Thumbnail Prompt (Xianxia)" card: mood (battle / romance / mystery / revenge-rebirth), optional character look and scene, a switch that leaves the left third empty for the title. Builds an English 16:9 prompt for an image AI and opens it in Gemini or copies it | Dart tests for the prompt content and options (`thumbnail_prompt_test`); the card needs a phone | see CI | **No** |
+Honest limits: the prompt asks for an ORIGINAL character, no real actor, no existing show or poster, no logo, and no text in the picture (image AIs cannot write Burmese; add the title afterwards). How good the picture is depends on the image AI; the app does not generate it.

@@ -132,4 +132,44 @@ void main() {
     expect(cleanError(const FormatException('bad')), 'bad');
     expect(cleanError(''), 'ဘာကြောင့်မှန်း မသိ');
   });
+
+  test('queue notice: finished count, running episode and overall percent', () async {
+    final q = _q(4);
+    expect(queueNotice(q).text, '0/4');
+    expect(queueNotice(q).percent, 0);
+    QueueItem? mid;
+    var checked = false;
+    await q.run((it, ctx) async {
+      if (it.projectId == 2) {
+        ctx.step(QStep.ask, 'Gemini');
+        ctx.progress(50, 'x');
+        mid = it;
+        final n = queueNotice(q);
+        expect(n.text, '1/4 · Ep 2 · ${qStepLabels[QStep.ask]}');
+        expect(n.percent, (100 + 50) ~/ 4);
+        checked = true;
+      }
+    });
+    expect(checked, isTrue);
+    expect(mid, isNotNull);
+    final end = queueNotice(q);
+    expect(end.text, '4/4');
+    expect(end.percent, 100);
+  });
+
+  test('queue notice of an empty queue is empty', () {
+    final n = queueNotice(RecapQueue([]));
+    expect(n.text, '');
+    expect(n.percent, 0);
+  });
+
+  test('video and scene queues show their own five steps', () {
+    expect(videoQSteps, contains(QStep.upload));
+    expect(videoQSteps, isNot(contains(QStep.scenes)));
+    expect(sceneQSteps, contains(QStep.scenes));
+    expect(sceneQSteps, isNot(contains(QStep.upload)));
+    expect(videoQSteps.length, 5);
+    expect(sceneQSteps.length, 5);
+    expect(qStepLabels.containsKey(QStep.scenes), isTrue);
+  });
 }

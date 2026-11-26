@@ -13,7 +13,7 @@ import 'srt.dart';
 const defaultTextModel = 'gemini-3.8-flash';
 
 class NewsVideoSettings {
-  const NewsVideoSettings({this.url = '', this.token = '', this.provider = 'wikimedia', this.keys = const {}, this.imageCount = 20, this.model = defaultTextModel, this.search = true});
+  const NewsVideoSettings({this.url = '', this.token = '', this.provider = 'wikimedia', this.keys = const {}, this.imageCount = 20, this.model = defaultTextModel, this.search = true, this.imageModel = ''});
 
   final String url;
   final String token;
@@ -33,6 +33,9 @@ class NewsVideoSettings {
   /// Let Gemini use Google Search for the facts (may need quota or billing).
   final bool search;
 
+  /// Gemini picture model for the AI-made pictures ('' = the backend's default).
+  final String imageModel;
+
   bool get ready => url.isNotEmpty && token.isNotEmpty;
 
   String get stockKey => keyOf(provider);
@@ -40,10 +43,10 @@ class NewsVideoSettings {
   /// The key for [p]. Pixabay pictures use the same key as Pixabay videos.
   String keyOf(String p) => keys[p] ?? (p == 'pixabay_photo' ? keys['pixabay'] ?? '' : '');
 
-  NewsVideoSettings copyWith({String? url, String? token, String? provider, Map<String, String>? keys, int? imageCount, String? model, bool? search}) => NewsVideoSettings(
-      url: url ?? this.url, token: token ?? this.token, provider: provider ?? this.provider, keys: keys ?? this.keys, imageCount: imageCount ?? this.imageCount, model: model ?? this.model, search: search ?? this.search);
+  NewsVideoSettings copyWith({String? url, String? token, String? provider, Map<String, String>? keys, int? imageCount, String? model, bool? search, String? imageModel}) => NewsVideoSettings(
+      url: url ?? this.url, token: token ?? this.token, provider: provider ?? this.provider, keys: keys ?? this.keys, imageCount: imageCount ?? this.imageCount, model: model ?? this.model, search: search ?? this.search, imageModel: imageModel ?? this.imageModel);
 
-  String encode() => jsonEncode({'url': url, 'token': token, 'provider': provider, 'keys': keys, 'images': imageCount, 'model': model, 'search': search});
+  String encode() => jsonEncode({'url': url, 'token': token, 'provider': provider, 'keys': keys, 'images': imageCount, 'model': model, 'search': search, 'image_model': imageModel});
 
   static NewsVideoSettings decode(String? s) {
     if (s == null || s.trim().isEmpty) return const NewsVideoSettings();
@@ -69,6 +72,7 @@ class NewsVideoSettings {
         imageCount: img is num ? img.toInt().clamp(0, maxNewsImages) : 20,
         model: g('model').isEmpty ? defaultTextModel : g('model'),
         search: m['search'] is bool ? m['search'] as bool : true,
+        imageModel: g('image_model'),
       );
     } catch (_) {
       return const NewsVideoSettings();
@@ -84,7 +88,22 @@ const stockProviders = <String, ({String title, String note, bool needsKey, bool
   'unsplash': (title: 'Unsplash (ပုံ)', note: 'ပုံ အများကြီး (Ken Burns zoom)၊ Access Key လို', needsKey: true, images: true),
   'pixabay': (title: 'Pixabay (ဗီဒီယို)', note: 'scene တစ်ခုကို ဗီဒီယို ၁ ခု၊ free API key လို', needsKey: true, images: false),
   'pexels': (title: 'Pexels (ဗီဒီယို)', note: 'scene တစ်ခုကို ဗီဒီယို ၁ ခု၊ API key လို', needsKey: true, images: false),
+  'ai_gemini': (
+    title: 'AI ပုံထုတ် (Gemini)',
+    note: 'သင့် Gemini key နဲ့ scene အလိုက် ပုံ ဖန်တီးတယ် (ဓာတ်ပုံအစစ် မဟုတ်ဘူး)။ image model ကို free key နဲ့ မသုံးရနိုင်ဘူး (billing လိုနိုင်) — မရရင် Wikimedia ပုံနဲ့ အလိုအလျောက် အစားထိုးပြီး အကြောင်းရင်း ပြမယ်',
+    needsKey: false,
+    images: true,
+  ),
+  'ai_pollinations': (
+    title: 'AI ပုံထုတ် (Pollinations — key မလို)',
+    note: 'key မလို၊ အခမဲ့။ ဒါပေမဲ့ နှေးတယ် (ပုံတစ်ပုံ ၂၀ စက္ကန့်ကျော်)၊ ပုံသေးတယ် (၇၆၈ အောက်)၊ ပြည့်သွားတတ်တယ် — ပုံ ၁၆ ပုံထက် မယူဘူး၊ မရရင် Wikimedia နဲ့ အစားထိုးမယ်',
+    needsKey: false,
+    images: true,
+  ),
 };
+
+/// Providers whose pictures are made by AI (not searched).
+bool isAiProvider(String p) => p == 'ai_gemini' || p == 'ai_pollinations';
 
 const maxNewsImages = 40;
 
@@ -170,6 +189,7 @@ Map<String, Object?> newsRequestJson({
   int imageCount = 20,
   String model = defaultTextModel,
   bool search = true,
+  String imageModel = '',
   required String ratio,
   required double minutes,
   required String voice,
@@ -186,6 +206,7 @@ Map<String, Object?> newsRequestJson({
     'image_count': imageCount.clamp(0, maxNewsImages),
     if (model.trim().isNotEmpty) 'gemini_model': model.trim(),
     if (stockProvider == 'pexels') 'pexels_key': stockKey.trim(),
+    if (stockProvider == 'ai_gemini' && imageModel.trim().isNotEmpty) 'image_model': imageModel.trim(),
     'aspect_ratio': ratio == '16:9' ? '16:9' : '9:16',
     'duration_min': m,
     'voice_model': voice,

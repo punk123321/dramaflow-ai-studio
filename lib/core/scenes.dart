@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -181,3 +182,26 @@ String buildSceneRecapPrompt({
 
 /// Scenes as the project's Video Index parts.
 List<SegmentSpec> toSegments(List<SceneSpan> s) => [for (final x in s) SegmentSpec(x.startMs, x.endMs)];
+
+/// The scene list as saved in the project (DocKind.scenePlan): [[startMs, endMs], ...].
+String encodeScenePlan(List<SceneSpan> scenes) => jsonEncode([for (final s in scenes) [s.startMs, s.endMs]]);
+
+/// Reads a saved scene list. Anything unreadable, or a span that is empty or
+/// goes backwards, gives an empty list so the caller finds the scenes again.
+List<SceneSpan> parseScenePlan(String? text) {
+  if (text == null || text.trim().isEmpty) return const [];
+  try {
+    final l = jsonDecode(text);
+    if (l is! List) return const [];
+    final out = <SceneSpan>[];
+    for (final e in l) {
+      if (e is! List || e.length < 2 || e[0] is! num || e[1] is! num) return const [];
+      final a = (e[0] as num).toInt(), b = (e[1] as num).toInt();
+      if (a < 0 || b <= a) return const [];
+      out.add(SceneSpan(a, b));
+    }
+    return out;
+  } catch (_) {
+    return const [];
+  }
+}

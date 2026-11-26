@@ -117,6 +117,16 @@ void censorTests() {
     expect(motionFromParams(censorOp(0, 1000).params)!.toJson()['ar'], 0.5);
   });
 
+  test('blur box: the preview line can be switched off, and it never reaches the render', () {
+    expect(motionFromParams(censorOp(0, 1000).params)!.edge, isTrue);
+    final off = {...censorOp(0, 1000).params, 'edge': false};
+    final m = motionFromParams(off)!;
+    expect(m.edge, isFalse);
+    expect(m.withTime(0, 500).edge, isFalse);
+    final r = compileOps(const [VideoPiece(0, 20000)], [censorOp(5000, 9000).copyWith(params: off)]);
+    expect(r.censors.length, 1, reason: 'the box is still blurred');
+  });
+
   test('blur box: compiled to a censor item on the ORIGINAL time, not an overlay', () {
     final r = compileOps(const [VideoPiece(0, 20000)], [censorOp(5000, 9000, x: 0.3, y: 0.6, strength: 35)]);
     expect(r.overlays, isEmpty);

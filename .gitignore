@@ -6,3 +6,7 @@ build/
 *.iml
 .idea/
 local.properties
+
+# Python caches
+__pycache__/
+*.pyc

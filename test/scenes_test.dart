@@ -100,4 +100,23 @@ void main() {
     expect(p, contains('=== PART n ==='));
     expect(p, contains('contact sheet'));
   });
+
+  group('scene plan', () {
+    test('round trip', () {
+      final l = [const SceneSpan(0, 4000), const SceneSpan(4000, 9500)];
+      expect(parseScenePlan(encodeScenePlan(l)), l);
+    });
+
+    test('empty, broken or impossible plans give an empty list', () {
+      expect(parseScenePlan(null), isEmpty);
+      expect(parseScenePlan('  '), isEmpty);
+      expect(parseScenePlan('not json'), isEmpty);
+      expect(parseScenePlan('{"a":1}'), isEmpty);
+      expect(parseScenePlan('[[0]]'), isEmpty);
+      expect(parseScenePlan('[["a","b"]]'), isEmpty);
+      expect(parseScenePlan('[[5000,5000]]'), isEmpty);
+      expect(parseScenePlan('[[0,1000],[3000,2000]]'), isEmpty);
+      expect(parseScenePlan('[[-1,1000]]'), isEmpty);
+    });
+  });
 }

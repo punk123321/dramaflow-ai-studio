@@ -10,12 +10,15 @@ import '../core/recap_auto.dart';
 import '../core/recap_queue.dart';
 import '../core/segments.dart' show formatTime;
 import '../core/theme.dart';
+import '../core/source_link.dart';
 import '../data/ai_settings_repo.dart';
 import '../data/assembly_settings_repo.dart';
 import '../data/recap_backend_repo.dart';
 import '../data/project.dart';
 import '../data/usage_repo.dart';
+import '../data/handoff_repo.dart';
 import '../platform/recap_episode_runner.dart';
+import '../platform/render_channel.dart';
 import '../state/project_store.dart';
 import 'recap_step_bar.dart';
 import 'widgets.dart';
@@ -41,11 +44,17 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
   bool _loaded = false;
   bool _useAsr = true;
   bool _makeVoice = true;
+  // Scene Recap instead of Video Recap: what is chosen now / what the queue on screen was started with.
+  bool _scenesMode = false;
+  bool _queueScenes = false;
+  DateTime _lastNotice = DateTime.fromMillisecondsSinceEpoch(0);
   String _voice = 'my-MM-ThihaNeural';
 
   RecapQueue? _queue;
   RecapEpisodeRunner? _runner;
   Map<int, Project> _byId = {};
+  // projects that take their video from a link (project id -> link)
+  Map<int, String> _links = {};
   String? _msg;
 
   @override
@@ -59,6 +68,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
     final g = await AiSettingsRepo().load();
     final a = await AssemblySettingsRepo().load();
     final fb = await UsageRepo().fallbackModel();
+    await _loadLinks();
     if (!mounted) return;
     setState(() {
       _backend = b;
@@ -67,6 +77,21 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
       _fallback = fb;
       _loaded = true;
     });
+  }
+
+  /// The links of the projects, so a project with a link and no video file can be queued too.
+  Future<void> _loadLinks() async {
+    final out = <int, String>{};
+    try {
+      final h = HandoffRepo();
+      for (final p in context.read<ProjectStore>().items) {
+        final id = p.id;
+        if (id == null) continue;
+        final l = (await h.getDoc(id, DocKind.sourceLink) ?? '').trim();
+        if (l.isNotEmpty) out[id] = l;
+      }
+    } catch (_) {} // the list then shows the projects with a video file only
+    _links = out;
   }
 
   @override
@@ -86,9 +111,9 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
       builder: (c) => AlertDialog(
         title: Text('Episode $n ခု စမလား?'),
         content: Text(
-          'တစ်ခုပြီးမှ တစ်ခု ဆက်သွားမယ်။ ဗီဒီယိုတစ်ခုချင်းစီကို သင့် Gemini account ဆီ upload လုပ်မယ် (Wi-Fi သုံးပါ၊ data အများကြီးသုံးမယ်)။ '
+          '${_scenesMode ? 'တစ်ခုပြီးမှ တစ်ခု ဆက်သွားမယ်။ Episode တစ်ခုချင်းစီမှာ ဖုန်းက scene တွေကို ရှာပြီး ပုံတစ်ချပ်တွေ လုပ်မယ်၊ ပုံတွေကို သင့် Backend ဆီပို့မယ် (Google ဆီ တိုက်ရိုက် မပို့ဘူး၊ VPN မလိုဘူး)။ ဗီဒီယိုဖိုင်ပါတဲ့ project ပဲ ရတယ်။ ' : 'တစ်ခုပြီးမှ တစ်ခု ဆက်သွားမယ်။ ဗီဒီယိုတစ်ခုချင်းစီကို သင့် Gemini account ဆီ upload လုပ်မယ် (Wi-Fi သုံးပါ၊ data အများကြီးသုံးမယ်)။ link ပါတဲ့ project ကိုတော့ Backend က ဗီဒီယိုကို ကိုယ်တိုင်ဆွဲပြီး Gemini ဆီ တင်မယ် (ဖုန်းကနေ upload မလုပ်ဘူး၊ VPN မလိုဘူး)။ '}'
           'Gemini key ကို သင့် Backend ဆီ ပို့မယ်။ မူရင်းဗီဒီယိုကို မပြင်ဘူး။$asrNote\n\n'
-          'လုပ်နေတုန်း ဒီစာမျက်နှာကို မပိတ်ပါနဲ့၊ ဖုန်း screen ကိုလည်း ဖွင့်ထားပါ။',
+          'လုပ်နေတုန်း notification ပြထားမယ် — Home ခလုတ်နဲ့ တခြား app သုံးလို့ရတယ်။ ဒါပေမဲ့ app ကို swipe ပိတ်ရင်၊ ဒါမှမဟုတ် ဖုန်းရဲ့ battery saver က ရပ်ရင် Queue ရပ်သွားမယ် (ပြန်လာပြီး "ပြန်လုပ်" နှိပ်ရင် ကျန်တာ ဆက်လုပ်မယ်)။',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('မလုပ်ဘူး')),
@@ -117,17 +142,20 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
       voice: _makeVoice ? _voice : '',
       useAsr: _useAsr,
       asr: _asr,
+      scenes: _scenesMode,
     ));
     final q = RecapQueue(
       [for (final p in chosen) QueueItem(projectId: p.id!, title: '${p.dramaTitle} · အပိုင်း ${p.episode}')],
       onChange: () {
         if (mounted) setState(() {});
+        _pushNotice();
       },
     )..onCancel = runner.cancelNow;
     setState(() {
       _msg = null;
       _queue = q;
       _runner = runner;
+      _queueScenes = _scenesMode;
       _byId = {for (final p in chosen) p.id!: p};
     });
     await _runAll();
@@ -137,11 +165,18 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
     final q = _queue;
     final r = _runner;
     if (q == null || r == null) return;
-    await q.run((item, ctx) {
-      final p = _byId[item.projectId];
-      if (p == null) throw const HttpException('Project မတွေ့တော့ဘူး');
-      return r.run(p, ctx);
-    });
+    _lastNotice = DateTime.fromMillisecondsSinceEpoch(0);
+    final n = queueNotice(q);
+    await RenderChannel.keepAlive(true, title: _title, text: n.text, percent: n.percent);
+    try {
+      await q.run((item, ctx) {
+        final p = _byId[item.projectId];
+        if (p == null) throw const HttpException('Project မတွေ့တော့ဘူး');
+        return r.run(p, ctx);
+      });
+    } finally {
+      await RenderChannel.keepAlive(false);
+    }
     if (!mounted) return;
     final failed = q.count(QStatus.failed);
     setState(() => _msg = q.canceled
@@ -149,6 +184,20 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
         : failed == 0
             ? 'အကုန်ပြီးပြီ (${q.count(QStatus.done)} ခု)။ ရလဒ်တွေက project တစ်ခုချင်းရဲ့ Video Recap စာမျက်နှာမှာ ရှိတယ်။'
             : 'ပြီး ${q.count(QStatus.done)} ခု၊ မအောင် $failed ခု — အောက်မှာ အကြောင်းရင်း ကြည့်ပါ');
+  }
+
+  String get _title => _queueScenes ? 'DramaFlow · Scene Recap Queue' : 'DramaFlow · Recap Queue';
+
+  /// Updates the background notification at most every 4 seconds, so the
+  /// percent follows the work without flooding the phone with updates.
+  void _pushNotice() {
+    final q = _queue;
+    if (q == null || !q.running) return;
+    final now = DateTime.now();
+    if (now.difference(_lastNotice).inSeconds < 4) return;
+    _lastNotice = now;
+    final n = queueNotice(q);
+    RenderChannel.keepAlive(true, title: _title, text: n.text, percent: n.percent);
   }
 
   Future<void> _retry() async {
@@ -169,7 +218,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) return DfScaffold(appBar: AppBar(title: const Text('Recap Queue')), body: const Center(child: CircularProgressIndicator()));
-    final all = context.watch<ProjectStore>().items.where((p) => p.hasVideo && p.id != null).toList()
+    final all = context.watch<ProjectStore>().items.where((p) => p.id != null && (p.hasVideo || (!_scenesMode && _links.containsKey(p.id)))).toList()
       ..sort((a, b) {
         final c = a.dramaTitle.compareTo(b.dramaTitle);
         return c != 0 ? c : a.episode.compareTo(b.episode);
@@ -179,8 +228,8 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
       appBar: AppBar(title: const Text('Recap Queue (Episode များ တန်းစီ)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const InfoHint(
-          'Episode အများကြီးကို Video Recap Auto နဲ့ တစ်ခုပြီးတစ်ခု လုပ်ပေးတယ်။ တစ်ခု မအောင်ရင် အဲဒီ episode ကို '
-          'ဘယ်အဆင့်မှာ ဘာကြောင့် မအောင်လဲ မှတ်ထားပြီး နောက်တစ်ခုကို ဆက်သွားတယ်။ App ကို ဖွင့်ထားရမယ် (နောက်ကွယ်မှာ မလုပ်နိုင်ဘူး)။ '
+          'Episode အများကြီးကို Video Recap Auto (ဒါမှမဟုတ် Scene Recap Auto) နဲ့ တစ်ခုပြီးတစ်ခု လုပ်ပေးတယ်။ တစ်ခု မအောင်ရင် အဲဒီ episode ကို '
+          'ဘယ်အဆင့်မှာ ဘာကြောင့် မအောင်လဲ မှတ်ထားပြီး နောက်တစ်ခုကို ဆက်သွားတယ်။ လုပ်နေတုန်း notification ပြထားလို့ တခြား app သုံးလို့ရတယ် (app ကို swipe ပိတ်ရင် ရပ်မယ်)။ '
           'Script ရှိပြီးသား project ကို မအစားထိုးဘူး။',
           label: 'ဘယ်လိုအလုပ်လုပ်လဲ',
         ),
@@ -208,6 +257,28 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
         line(_backend.ready, _backend.ready ? 'Backend ချိတ်ထား (${Uri.tryParse(_backend.url)?.host ?? ''})' : 'Backend မချိတ်ရသေးဘူး — Video Recap စာမျက်နှာ၏ Auto card မှာ URL#TOKEN ထည့်ပါ'),
         line(_geminiKey.isNotEmpty, _geminiKey.isNotEmpty ? 'Gemini key ရှိတယ်' : 'Gemini key မရှိဘူး — Settings မှာ ထည့်ပါ'),
         const SizedBox(height: 6),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('Video Recap'), icon: Icon(Icons.movie_outlined, size: 16)),
+            ButtonSegment(value: true, label: Text('Scene Recap'), icon: Icon(Icons.view_module_outlined, size: 16)),
+          ],
+          selected: {_scenesMode},
+          onSelectionChanged: _running
+              ? null
+              : (v) => setState(() {
+                    _scenesMode = v.first;
+                    _selected.clear(); // Scene Recap cannot take a project that only has a link
+                  }),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 4),
+          child: Text(
+            _scenesMode
+                ? 'Scene Recap: ဖုန်းက scene ခွဲ + ပုံတစ်ချပ်လုပ်ပြီး Backend ဆီပို့ (ဗီဒီယိုဖိုင် လိုတယ်၊ VPN မလိုဘူး)'
+                : 'Video Recap: ဗီဒီယိုတစ်ခုလုံးကို Gemini က ကြည့်တယ် (ဖိုင်ဆိုရင် VPN လိုနိုင်တယ်၊ link ဆိုရင် မလို)',
+            style: const TextStyle(fontSize: 12, color: DfColors.muted),
+          ),
+        ),
         TextField(
           controller: _modelC,
           autocorrect: false,
@@ -242,9 +313,9 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
   Widget _pickCard(List<Project> all) {
     final chosen = [for (final p in all) if (_selected.contains(p.id)) p];
     return DfCard(
-      title: 'Episode ရွေး (ဗီဒီယိုရှိတာတွေပဲ)',
+      title: 'Episode ရွေး (ဗီဒီယိုဖိုင် သို့ link ရှိတာတွေပဲ)',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (all.isEmpty) const Text('ဗီဒီယိုပါတဲ့ project မရှိသေးဘူး။ Project ဖန်တီးပြီး Stage 1 မှာ ဗီဒီယိုရွေးပါ။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
+        if (all.isEmpty) const Text('ဗီဒီယိုဖိုင် / link ပါတဲ့ project မရှိသေးဘူး။ Project ဖန်တီးပြီး Stage 1 မှာ ဗီဒီယိုရွေးပါ၊ ဒါမှမဟုတ် Video Recap စာမျက်နှာမှာ link ထည့်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
         for (final p in all)
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
@@ -252,7 +323,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
             value: _selected.contains(p.id),
             onChanged: (v) => setState(() => v == true ? _selected.add(p.id!) : _selected.remove(p.id)),
             title: Text('${p.dramaTitle} · အပိုင်း ${p.episode}', style: const TextStyle(fontSize: 14)),
-            subtitle: Text('${p.name} · ${formatTime(p.videoDurationMs ?? 0)}', style: const TextStyle(fontSize: 12)),
+            subtitle: Text(_links.containsKey(p.id) ? '${p.name} · link: ${linkKindLabels[linkKindOf(_links[p.id]!)]}' : '${p.name} · ${formatTime(p.videoDurationMs ?? 0)}', style: const TextStyle(fontSize: 12)),
           ),
         if (all.isNotEmpty)
           Wrap(spacing: 8, runSpacing: 6, children: [
@@ -272,7 +343,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
     final total = q.items.length;
     return [
       SectionTitle('Queue · ပြီး ${q.count(QStatus.done)}/$total${q.count(QStatus.failed) > 0 ? ' · မအောင် ${q.count(QStatus.failed)}' : ''}'),
-      if (q.running) const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('လုပ်နေတယ် — ဒီစာမျက်နှာကို မပိတ်ပါနဲ့၊ screen ဖွင့်ထားပါ', style: TextStyle(color: DfColors.warn, fontSize: 12.5))),
+      if (q.running) const Padding(padding: EdgeInsets.only(bottom: 8), child: Text('လုပ်နေတယ် — notification ပြထားတယ် (app ကို swipe မပိတ်ပါနဲ့)', style: TextStyle(color: DfColors.warn, fontSize: 12.5))),
       for (final it in q.items) _itemCard(it),
       Wrap(spacing: 8, runSpacing: 6, children: [
         if (q.running) OutlinedButton.icon(onPressed: q.cancel, icon: const Icon(Icons.stop_rounded, size: 18), label: const Text('ရပ်မယ်')),
@@ -299,6 +370,7 @@ class _RecapQueueScreenState extends State<RecapQueueScreen> {
         ]),
         const SizedBox(height: 8),
         RecapStepBar(
+          steps: _queueScenes ? sceneQSteps : videoQSteps,
           current: it.step,
           done: it.doneSteps,
           skipped: it.skipped.keys.toSet(),

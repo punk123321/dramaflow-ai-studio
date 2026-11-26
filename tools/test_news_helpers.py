@@ -17,6 +17,88 @@ def load(*names):
     return ns
 
 
+class AiImages(unittest.TestCase):
+    def test_prompt_is_safe_and_varies(self):
+        f = load("ai_prompt")["ai_prompt"]
+        a, b = f("flooded street", "9:16", 0), f("flooded street", "9:16", 1)
+        self.assertNotEqual(a, b)
+        self.assertIn("vertical", a)
+        self.assertIn("horizontal", f("x", "16:9"))
+        for w in ("no text", "no logos", "no watermark", "no identifiable real people"):
+            self.assertIn(w, a)
+        self.assertLessEqual(len(f("k" * 999, "9:16")), 160 + 220)
+
+    def test_inline_image_parsing(self):
+        import base64
+        f = load("gemini_image_bytes")["gemini_image_bytes"]
+        raw = b"\x89PNG" + b"x" * 50
+        ok = {"candidates": [{"content": {"parts": [{"text": "hi"}, {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(raw).decode()}}]}}]}
+        self.assertEqual(f(ok), raw)
+        snake = {"candidates": [{"content": {"parts": [{"inline_data": {"data": base64.b64encode(raw).decode()}}]}}]}
+        self.assertEqual(f(snake), raw)
+        self.assertIsNone(f({"candidates": [{"content": {"parts": [{"text": "only text"}]}}]}))
+        self.assertIsNone(f({}))
+        self.assertIsNone(f(None))
+        self.assertIsNone(f({"candidates": [{"content": {"parts": [{"inlineData": {"data": "!!not base64!!"}}]}}]}))
+
+    def test_error_text_hides_key(self):
+        f = load("short_api_error")["short_api_error"]
+        body = json.dumps({"error": {"message": "quota for key AIza-secret-12345 exceeded\n  now"}})
+        r = f(body, "AIza-secret-12345")
+        self.assertNotIn("AIza", r)
+        self.assertIn("quota", r)
+        self.assertNotIn("\n", r)
+        self.assertEqual(f("plain text", ""), "plain text")
+        self.assertLessEqual(len(f("x" * 999)), 160)
+
+    def _gen(self, results):
+        ns = load("generate_images", "ai_prompt")
+        calls = []
+
+        def fake(prompt, *a):
+            calls.append(prompt)
+            why = results.pop(0)
+            if why == "":
+                a[-1].write_bytes(b"x" * 2000)  # the save path is the last argument
+            return why
+
+        import secrets
+        ns.update(gen_gemini_image=fake, gen_pollinations_image=fake, secrets=secrets, AI_GEMINI_IMAGE_MODEL="m")
+        return ns["generate_images"], calls
+
+    def test_generates_what_is_needed(self):
+        f, calls = self._gen(["", "", ""])
+        with tempfile.TemporaryDirectory() as d:
+            state = {}
+            imgs = f("ai_gemini", "k", "", ["a", "b"], "9:16", 3, Path(d), 0, state)
+            self.assertEqual(len(imgs), 3)
+            self.assertEqual(state["made"], 3)
+            self.assertFalse(state.get("off"))
+            self.assertIn("a,", calls[0])
+            self.assertIn("b,", calls[1])  # keywords take turns
+
+    def test_two_failures_in_a_row_switch_it_off(self):
+        f, calls = self._gen(["HTTP 429 quota", "HTTP 429 quota", ""])
+        with tempfile.TemporaryDirectory() as d:
+            state = {}
+            self.assertEqual(f("ai_gemini", "k", "", ["a"], "9:16", 4, Path(d), 0, state), [])
+            self.assertTrue(state["off"])
+            self.assertEqual(state["why"], "HTTP 429 quota")
+            self.assertEqual(len(calls), 2)  # it stopped trying
+            # the next scene does not try again
+            self.assertEqual(f("ai_gemini", "k", "", ["a"], "9:16", 4, Path(d), 1, state), [])
+            self.assertEqual(len(calls), 2)
+
+    def test_one_failure_then_success_goes_on(self):
+        f, calls = self._gen(["HTTP 500", "", ""])
+        with tempfile.TemporaryDirectory() as d:
+            state = {}
+            imgs = f("ai_pollinations", "", "", ["a"], "16:9", 3, Path(d), 0, state)
+            self.assertEqual(len(imgs), 2)  # 3 tries, 1 failed
+            self.assertFalse(state.get("off"))
+            self.assertEqual(state["fails"], 0)
+
+
 class Helpers(unittest.TestCase):
     def test_images_for(self):
         f = load("images_for")["images_for"]

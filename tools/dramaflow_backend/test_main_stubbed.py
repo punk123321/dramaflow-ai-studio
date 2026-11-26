@@ -22,6 +22,8 @@ os.environ["APP_TOKEN"] = "test-token-123456"
 # ---- stand-ins -------------------------------------------------------------
 SPOKEN = []  # the text each fake voice call received
 GEMINI = {"reply": None, "gate": None, "calls": 0}
+FILES = {"uploads": [], "states": ["ACTIVE"], "gets": 0}  # Gemini Files API stand-in
+YTDLP = {"calls": [], "fail": None, "ext": "mp4", "duration": 754.0, "subs": [], "cookie_seen": None}
 
 
 class _HTTPException(Exception):
@@ -41,6 +43,7 @@ class _App:
         return lambda f: f
 
     post = get
+    delete = get
 
 
 def _install():
@@ -89,7 +92,7 @@ def _install():
             return _Kw(**k)
 
     types_mod = types.ModuleType("google.genai.types")
-    for name in ("Part", "FileData", "VideoMetadata", "GenerateContentConfig"):
+    for name in ("Part", "FileData", "VideoMetadata", "GenerateContentConfig", "UploadFileConfig"):
         setattr(types_mod, name, type(name, (_Kw,), {"from_bytes": staticmethod(lambda **k: _Kw(**k))}))
     genai = types.ModuleType("google.genai")
 
@@ -103,10 +106,51 @@ def _install():
                 raise r
             return types.SimpleNamespace(text=r)
 
+    class _Files:
+        def upload(self, file, config=None):
+            FILES["uploads"].append((file, getattr(config, "k", {})))
+            st = FILES["states"][0]
+            return types.SimpleNamespace(name="files/abc", uri="https://gen.example/files/abc", state=types.SimpleNamespace(name=st))
+
+        def get(self, name):
+            FILES["gets"] += 1
+            st = FILES["states"][min(FILES["gets"], len(FILES["states"]) - 1)]
+            return types.SimpleNamespace(name=name, uri="https://gen.example/files/abc", state=types.SimpleNamespace(name=st))
+
     class Client:
         def __init__(self, api_key=None):
-            self.api_key, self.models = api_key, _Models()
+            self.api_key, self.models, self.files = api_key, _Models(), _Files()
 
+    yt = types.ModuleType("yt_dlp")
+    ytu = types.ModuleType("yt_dlp.utils")
+    ytu.match_filter_func = lambda expr: expr
+
+    class YoutubeDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def extract_info(self, url, download=True):
+            YTDLP["calls"].append((url, self.opts))
+            if YTDLP["fail"]:
+                raise RuntimeError(YTDLP["fail"])
+            out = Path(self.opts["outtmpl"].replace("%(ext)s", YTDLP["ext"]))
+            out.write_bytes(b"x" * 2048)
+            for lang, text in YTDLP["subs"]:
+                (out.parent / f"v.{lang}.srt").write_text(text, encoding="utf-8")
+            if self.opts.get("cookiefile"):
+                YTDLP["cookie_seen"] = (self.opts["cookiefile"], Path(self.opts["cookiefile"]).read_text(encoding="utf-8"))
+            for h in self.opts["progress_hooks"]:
+                h({"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 2048})
+            return {"title": "Episode 12", "duration": YTDLP["duration"]}
+
+    yt.YoutubeDL, yt.utils = YoutubeDL, ytu
+    sys.modules.update({"yt_dlp": yt, "yt_dlp.utils": ytu})
     genai.Client, genai.types = Client, types_mod
     google = types.ModuleType("google")
     google.genai = genai
@@ -137,6 +181,195 @@ def _req(**kw):
                 groups=[main.Group(first=1, last=2, prompt="P", part_ms=[5000, 800])])
     base.update(kw)
     return main.RecapRequest(**base)
+
+
+def _wait_ingest(job_id, secs=20):
+    end = time.time() + secs
+    while time.time() < end:
+        j = main.ingest_status(job_id, x_app_token=main.TOKEN)
+        if j["status"] in ("done", "error"):
+            return j
+        time.sleep(0.05)
+    raise AssertionError("ingest did not finish")
+
+
+class IngestTests(unittest.TestCase):
+    URL = "https://youtu.be/abc123"
+
+    def setUp(self):
+        main.JOBS.clear()
+        FILES.update(uploads=[], states=["ACTIVE"], gets=0)
+        YTDLP.update(calls=[], fail=None, ext="mp4", duration=754.0, subs=[], cookie_seen=None)
+        self._cookies_env = os.environ.pop("DF_COOKIES", None)
+        self._defaults = main.check_url.__defaults__
+        main.check_url.__defaults__ = (lambda h, p: [(0, 0, 0, "", ("142.250.1.1", 0))],)
+        self._sleep = main.time.sleep
+        main.time.sleep = lambda s: None
+
+    def tearDown(self):
+        main.check_url.__defaults__ = self._defaults
+        main.time.sleep = self._sleep
+        os.environ.pop("DF_COOKIES", None)
+        if self._cookies_env is not None:
+            os.environ["DF_COOKIES"] = self._cookies_env
+
+    def _start(self, **kw):
+        base = dict(url=self.URL, gemini_key="AIza-secret-key-1234")
+        base.update(kw)
+        return main.create_ingest(main.IngestRequest(**base), x_app_token=main.TOKEN)["job_id"]
+
+    def test_token_and_bad_input(self):
+        with self.assertRaises(main.HTTPException) as c:
+            main.create_ingest(main.IngestRequest(url=self.URL, gemini_key="k"), x_app_token="bad")
+        self.assertEqual(c.exception.status_code, 401)
+        with self.assertRaises(main.HTTPException) as c:
+            main.create_ingest(main.IngestRequest(url=self.URL, gemini_key="  "), x_app_token=main.TOKEN)
+        self.assertEqual(c.exception.status_code, 400)
+        with self.assertRaises(main.HTTPException) as c:
+            self._private()
+        self.assertEqual(c.exception.status_code, 400)
+        with self.assertRaises(main.HTTPException):
+            main.ingest_status("recap_1_abcd", x_app_token=main.TOKEN)
+
+    def _private(self):
+        main.check_url.__defaults__ = (lambda h, p: [(0, 0, 0, "", ("10.0.0.1", 0))],)
+        return main.create_ingest(main.IngestRequest(url="https://evil.example/x", gemini_key="k"), x_app_token=main.TOKEN)
+
+    def test_happy_path(self):
+        jid = self._start()
+        j = _wait_ingest(jid)
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(j["info"]["file_uri"], "https://gen.example/files/abc")
+        self.assertEqual(j["info"]["mime"], "video/mp4")
+        self.assertEqual(j["info"]["duration_ms"], 754000)
+        self.assertEqual(j["info"]["title"], "Episode 12")
+        self.assertEqual(j["info"]["source"], "youtube")
+        self.assertEqual(j["progress"], 100)
+        opts = YTDLP["calls"][0][1]
+        self.assertTrue(opts["noplaylist"])
+        self.assertIn("720", opts["format"])
+        self.assertNotIn("AIza", str(j))  # the key is never in the answer
+        # the downloaded copy is gone after the upload
+        self.assertFalse((main.OUT_DIR / jid).exists())
+
+    def test_height_is_clamped(self):
+        _wait_ingest(self._start(max_height=99999))
+        self.assertIn("1080", YTDLP["calls"][0][1]["format"])
+        self.assertNotIn("99999", YTDLP["calls"][0][1]["format"])
+
+    def test_processing_then_active(self):
+        FILES["states"] = ["PROCESSING", "PROCESSING", "ACTIVE"]
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(FILES["gets"], 2)
+
+    def test_gemini_refuses_file(self):
+        FILES["states"] = ["FAILED"]
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "error")
+        self.assertIn("FAILED", j["error"])
+
+    def test_download_error_has_hint_and_no_key(self):
+        YTDLP["fail"] = "ERROR: Sign in to confirm you're not a bot AIza-secret-key-1234"
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "error")
+        self.assertIn("YouTube", j["error"])
+        self.assertNotIn("AIza-secret", j["error"])
+        self.assertEqual(FILES["uploads"], [])  # nothing was uploaded
+
+    def test_unsupported_container_is_not_uploaded(self):
+        YTDLP["ext"] = "mkv"
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "error")
+        self.assertIn("mkv", j["error"])
+        self.assertEqual(FILES["uploads"], [])
+
+    def test_unknown_duration_falls_back_to_ffmpeg(self):
+        YTDLP["duration"] = 0
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertGreaterEqual(j["info"]["duration_ms"], 0)  # ffmpeg cannot read the fake bytes: 0, not a crash
+
+    SRT_ZH = "1\n00:00:01,000 --> 00:00:03,000\n你好\n\n2\n00:00:03,500 --> 00:00:05,000\n再见\n"
+    SRT_EN = "1\n00:00:01,000 --> 00:00:03,000\nHello\n"
+    COOKIES = "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1893456000\tSID\tSECRET-COOKIE-VALUE\n"
+
+    def test_subtitles_are_asked_for_and_the_best_one_comes_back(self):
+        YTDLP["subs"] = [("en", self.SRT_EN), ("zh-Hans", self.SRT_ZH), ("danmaku", "1\n00:00:01,000 --> 00:00:02,000\nbullet\n")]
+        jid = self._start()
+        j = _wait_ingest(jid)
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertEqual(j["info"]["srt_lang"], "zh-Hans")
+        self.assertIn("你好", j["info"]["srt"])
+        self.assertEqual(j["info"]["mime"], "video/mp4")  # a subtitle file is never taken for the video
+        opts = YTDLP["calls"][0][1]
+        self.assertTrue(opts["writesubtitles"])
+        self.assertIn("zh-Hans", opts["subtitleslangs"])
+        self.assertFalse(opts.get("writeautomaticsub"))  # machine captions are not asked for
+        self.assertNotIn("cookiefile", opts)
+        self.assertFalse(j["info"]["cookies"])
+
+    def test_no_subtitles_means_no_srt_in_the_answer(self):
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertNotIn("srt", j["info"])
+
+    def test_a_broken_subtitle_file_is_left_out_not_fatal(self):
+        YTDLP["subs"] = [("zh-Hans", "this is not a subtitle file")]
+        j = _wait_ingest(self._start())
+        self.assertEqual(j["status"], "done", j.get("error"))
+        self.assertNotIn("srt", j["info"])
+
+    def test_cookies_file_is_used_from_a_private_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "cookies.txt"
+            f.write_text(self.COOKIES, encoding="utf-8")
+            os.environ["DF_COOKIES"] = str(f)
+            jid = self._start()
+            j = _wait_ingest(jid)
+            self.assertEqual(j["status"], "done", j.get("error"))
+            self.assertTrue(j["info"]["cookies"])
+            path, content = YTDLP["cookie_seen"]
+            self.assertEqual(content, self.COOKIES)
+            self.assertNotEqual(Path(path), f)  # yt-dlp got a copy, the user's file is not touched
+            self.assertEqual(f.read_text(encoding="utf-8"), self.COOKIES)
+            self.assertFalse(Path(path).exists())  # the copy went with the job
+            self.assertNotIn("SECRET-COOKIE-VALUE", str(j))
+
+    def test_a_bad_cookies_file_stops_before_downloading(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "cookies.txt"
+            f.write_text('[{"name": "SID"}]', encoding="utf-8")
+            os.environ["DF_COOKIES"] = str(f)
+            j = _wait_ingest(self._start())
+            self.assertEqual(j["status"], "error")
+            self.assertIn("JSON", j["error"])
+            self.assertNotIn("robot", j["error"])  # not mistaken for the YouTube bot check
+            self.assertEqual(YTDLP["calls"], [])
+
+    def test_bot_check_with_cookies_says_they_may_be_old(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "cookies.txt"
+            f.write_text(self.COOKIES, encoding="utf-8")
+            os.environ["DF_COOKIES"] = str(f)
+            YTDLP["fail"] = "ERROR: Sign in to confirm you're not a bot"
+            j = _wait_ingest(self._start())
+            self.assertEqual(j["status"], "error")
+            self.assertIn("သက်တမ်း", j["error"])
+
+    def test_bot_check_without_cookies_says_how_to_add_them(self):
+        YTDLP["fail"] = "ERROR: Sign in to confirm you're not a bot"
+        j = _wait_ingest(self._start())
+        self.assertIn("/content/cookies.txt", j["error"])
+
+    def test_second_job_while_running_is_refused(self):
+        main.JOBS["ingest_1_aaaa"] = {"status": "running", "stage": "", "progress": 5, "created": time.time(), "error": "", "info": {}}
+        with self.assertRaises(main.HTTPException) as c:
+            self._start()
+        self.assertEqual(c.exception.status_code, 409)
+
+    def test_health_says_ingest(self):
+        self.assertIn("ingest", main.health()["features"])
 
 
 class MainTests(unittest.TestCase):

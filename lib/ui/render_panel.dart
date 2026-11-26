@@ -11,8 +11,10 @@ import '../core/theme.dart';
 import '../core/timeline.dart';
 import '../core/te_compile.dart';
 import '../core/transformative_plan.dart';
+import '../data/export_item.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
+import '../platform/part_saver.dart';
 import '../platform/render_channel.dart';
 import '../state/project_store.dart';
 import '../state/render_store.dart';
@@ -68,6 +70,28 @@ class _RenderPanelState extends State<RenderPanel> {
       if (uri != null) _videoOk = await RenderChannel.uriReadable(uri);
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  // The finished video the person already put in the Gallery from this panel, and the last answer.
+  String? _galleryName;
+  String? _galleryMsg;
+  bool _galleryErr = false;
+  bool _galleryBusy = false;
+
+  Future<void> _saveToGallery(ExportItem done) async {
+    setState(() {
+      _galleryBusy = true;
+      _galleryMsg = null;
+    });
+    // keepCopy: the file stays in the Save stage's history too, in case it is wanted again.
+    final fail = await PartSaver.toGallery(done, done.name, keepCopy: true);
+    if (!mounted) return;
+    setState(() {
+      _galleryBusy = false;
+      _galleryErr = fail != null;
+      if (fail == null) _galleryName = done.name;
+      _galleryMsg = fail ?? 'Gallery (Movies/DramaFlow) ထဲ သိမ်းပြီး ✓';
+    });
   }
 
   Future<void> _start({bool sample = false}) async {
@@ -347,8 +371,19 @@ class _RenderPanelState extends State<RenderPanel> {
               const SizedBox(height: 6),
               Wrap(spacing: 8, children: [
                 OutlinedButton(onPressed: () => showVideoPreview(context, done.path), child: const Text('ကြည့်မယ်')),
+                FilledButton.icon(
+                  onPressed: (_galleryBusy || _galleryName == done.name) ? null : () => _saveToGallery(done),
+                  icon: Icon(_galleryName == done.name ? Icons.check : Icons.photo_library_outlined, size: 18),
+                  label: Text(_galleryName == done.name ? 'Gallery ထဲ ရောက်ပြီ' : 'Gallery ထဲ သိမ်းမယ်'),
+                ),
               ]),
-              const Text('Gallery ထဲ သိမ်းဖို့ နောက်အဆင့် "Save" ကို သွားပါ။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
+              if (_galleryBusy) const Padding(padding: EdgeInsets.only(top: 6), child: LinearProgressIndicator()),
+              if (_galleryMsg != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(_galleryMsg!, style: TextStyle(fontSize: 12.5, color: _galleryErr ? DfColors.danger : DfColors.ok)),
+                ),
+              const Text('ဖိုင်အဖြစ် သိမ်းချင်ရင် (ဒါမှမဟုတ် Gallery မရရင်) နောက်အဆင့် "Save" မှာ ရပါတယ်။', style: TextStyle(color: DfColors.muted, fontSize: 12)),
             ]),
           ),
         ],

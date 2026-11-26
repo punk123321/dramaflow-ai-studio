@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../core/recap_auto.dart';
 import '../core/scenes.dart' show SceneSpan, dialogueFor;
 import '../core/segments.dart';
+import '../core/source_link.dart';
 import '../core/srt.dart';
 import '../core/theme.dart';
 import '../core/video_recap.dart';
@@ -13,6 +14,7 @@ import '../data/segment_repo.dart';
 import '../platform/gemini_open.dart';
 import 'asr_dialog.dart';
 import 'recap_auto_section.dart';
+import 'recap_link_card.dart';
 import 'widgets.dart';
 
 /// Gemini watches the video (the user attaches it in the Gemini app) and writes
@@ -35,6 +37,8 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
   final _notes = TextEditingController();
   List<SegmentSpec> _parts = [];
   bool _fromIndex = false;
+  String _link = ''; // the video link of this project ('' = none)
+  IngestInfo? _ingest; // what the backend answered for that link
   Map<int, String> _texts = {};
   List<SrtEntry> _srt = [];
   int _batch = 0; // 0-based batch number
@@ -45,6 +49,14 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
 
   int get _pid => widget.project.id!;
   int get _batches => (_parts.length / _perBatch).ceil();
+
+  /// The length of the video: the video file's, else the link's.
+  int get _durationMs {
+    final f = widget.project.videoDurationMs ?? 0;
+    return f > 0 ? f : (_ingest?.durationMs ?? 0);
+  }
+
+  bool get _hasSource => widget.project.hasVideo || _ingest != null;
 
   @override
   void initState() {
@@ -85,7 +97,7 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
   Future<void> _load() async {
     var segs = await _segRepo.load(_pid);
     _fromIndex = segs.isNotEmpty;
-    if (segs.isEmpty) segs = buildSegments(widget.project.videoDurationMs ?? 0, 60000);
+    if (segs.isEmpty) segs = buildSegments(_durationMs, 60000);
     await _loadSrt();
     _texts = await _repo.results(_pid, _task);
     _notes.text = await _repo.getDoc(_pid, DocKind.notes) ?? '';
@@ -95,6 +107,21 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// The link card saved, cleared or checked the link: the parts follow the video's length.
+  Future<void> _onLink(String link, IngestInfo? info) async {
+    _link = link;
+    _ingest = info;
+    var segs = await _segRepo.load(_pid);
+    final fromIndex = segs.isNotEmpty;
+    if (segs.isEmpty) segs = buildSegments(_durationMs, 60000);
+    if (!mounted) return;
+    setState(() {
+      _fromIndex = fromIndex;
+      _parts = segs;
+      if (_batch >= _batches) _batch = 0;
+    });
   }
 
   String _prompt() {
@@ -181,7 +208,7 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return DfScaffold(appBar: AppBar(title: const Text('Video Recap')), body: const Center(child: CircularProgressIndicator()));
-    final has = widget.project.hasVideo && _parts.isNotEmpty;
+    final has = _hasSource && _parts.isNotEmpty;
     return DfScaffold(
       appBar: AppBar(title: const Text('Video Recap (Gemini က ဗီဒီယိုကြည့်ပြီး ရေး)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
@@ -190,10 +217,11 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
           'App က အပိုင်းအလိုက် prompt ပြင်ပေး၊ အဖြေကို ပြန်ဖတ်ပေးတာပဲ။ Gemini က ဗီဒီယိုကို မှားနားလည်နိုင်လို့ ထွက်လာတာကို ကိုယ်တိုင် ဖတ်စစ်ပါ။',
           label: 'ဘယ်လိုအလုပ်လုပ်လဲ',
         ),
+        RecapLinkCard(projectId: _pid, onChanged: _onLink),
         if (!has)
           const Padding(
             padding: EdgeInsets.only(top: 12),
-            child: Text('ဗီဒီယို မရွေးရသေးဘူး (Stage 1)။', style: TextStyle(color: DfColors.danger)),
+            child: Text('ဗီဒီယို မရွေးရသေးဘူး — Stage 1 မှာ ဖိုင်ရွေးပါ၊ ဒါမှမဟုတ် အပေါ်မှာ link ထည့်ပြီး "သိမ်း + Gemini ဆီ တင်" နှိပ်ပါ။', style: TextStyle(color: DfColors.danger)),
           )
         else ...[
           SectionTitle('အပိုင်း ${_parts.length} ခု ${_fromIndex ? '(Video Index က)' : '(၁ မိနစ်စီ အလိုအလျောက်)'}'),
@@ -202,6 +230,7 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
             task: _task,
             mode: 'video',
             videoUri: widget.project.sourceVideoUri,
+            linkUrl: _link,
             buildGroups: (_) async => videoRecapGroups(
               dramaTitle: widget.project.dramaTitle,
               episode: widget.project.episode,
@@ -214,7 +243,7 @@ class _VideoRecapScreenState extends State<VideoRecapScreen> {
               if (mounted) setState(() => _texts = r);
             },
             onSrtReady: _loadSrt,
-            durationMs: widget.project.videoDurationMs ?? 0,
+            durationMs: _durationMs,
           ),
           if (_srt.isEmpty)
             Padding(

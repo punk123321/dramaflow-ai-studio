@@ -167,6 +167,24 @@ List<SubProblem> findProblems(
   return out;
 }
 
+/// Faults that break the subtitle file; speed / length notes are not counted as faults.
+bool isSeriousProblem(SubProblem p) => p.kind == ProblemKind.empty || p.kind == ProblemKind.badRange || p.kind == ProblemKind.overlap;
+
+/// What the editor shows about a subtitle list: the real faults, how many soft notes there are, and which lines are faulty.
+class SrtAnalysis {
+  const SrtAnalysis(this.serious, this.soft, this.bad);
+
+  final List<SubProblem> serious;
+  final int soft;
+  final Set<int> bad;
+}
+
+SrtAnalysis analyseEntries(List<SrtEntry> e) {
+  final all = findProblems(e);
+  final serious = all.where(isSeriousProblem).toList();
+  return SrtAnalysis(serious, all.length - serious.length, {for (final p in serious) p.pos});
+}
+
 // ---- terminology ----
 
 class Term {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -39,6 +40,11 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
   List<SrtEntry> _entries = [];
   int _selected = 0;
   bool _problemsOnly = false;
+  List<SrtEntry>? _analysedFor;
+  SrtAnalysis _analysis = const SrtAnalysis([], 0, {});
+
+  /// The SRT text as it is on screen and on disk, so coming back to the editor tab does not read and parse a big file again.
+  String? _savedText;
   String? _msg;
   String? _error;
 
@@ -83,15 +89,20 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
     try {
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final text = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
-      final before = serializeSrt(_entries);
-      if (text == null || text.trim().isEmpty) {
-        _entries = [];
-      } else {
-        _entries = parseSrt(text).entries;
-        if (studio == null) await _repo.setDoc(_pid, DocKind.studioSrt, serializeSrt(_entries));
+      final raw = text ?? '';
+      if (_savedText == null || raw != _savedText) {
+        final replaced = _savedText != null;
+        if (raw.trim().isEmpty) {
+          _entries = [];
+        } else {
+          // A long file is read in the background so the screen opens at once.
+          _entries = raw.length > 40000 ? await compute(_parseEntries, raw) : parseSrt(raw).entries;
+          if (studio == null) await _repo.setDoc(_pid, DocKind.studioSrt, serializeSrt(_entries));
+        }
+        _savedText = studio == null && raw.trim().isNotEmpty ? serializeSrt(_entries) : raw;
+        // The SRT was replaced elsewhere (quick lane): old undo steps would bring the old text back.
+        if (replaced) _undo.clear();
       }
-      // The SRT was replaced elsewhere (quick lane): old undo steps would bring the old text back.
-      if (before != serializeSrt(_entries)) _undo.clear();
     } catch (e) {
       _error = 'ဖတ်လို့မရပါ: $e';
     }
@@ -140,7 +151,9 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
 
   Future<void> _persist() async {
     try {
-      await _repo.setDoc(_pid, DocKind.studioSrt, serializeSrt(_entries));
+      final text = serializeSrt(_entries);
+      await _repo.setDoc(_pid, DocKind.studioSrt, text);
+      _savedText = text;
     } catch (e) {
       if (mounted) setState(() => _error = 'သိမ်းလို့မရပါ: $e');
     }
@@ -312,11 +325,15 @@ class _SubtitleStudioScreenState extends State<SubtitleStudioScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final all = findProblems(_entries);
     // Only real faults are flagged. "Hard to read fast" lines are just counted: auto-made English captions trip that rule on almost every line.
-    final problems = all.where(_isSerious).toList();
-    final soft = all.length - problems.length;
-    final bad = problems.map((p) => p.pos).toSet();
+    // The list is replaced (never changed in place) on every edit, so the check is redone only then, not on every redraw.
+    if (!identical(_analysedFor, _entries)) {
+      _analysis = analyseEntries(_entries);
+      _analysedFor = _entries;
+    }
+    final problems = _analysis.serious;
+    final soft = _analysis.soft;
+    final bad = _analysis.bad;
     final shown = _problemsOnly ? [for (var i = 0; i < _entries.length; i++) if (bad.contains(i)) i] : List<int>.generate(_entries.length, (i) => i);
 
     final Widget editor = _loading
@@ -475,8 +492,8 @@ extension on SrtEntry {
   SrtEntry withTextAndTime(String t, int s, int e) => SrtEntry(index, s, e, t);
 }
 
-/// Faults that break the subtitle file; speed / length notes are not counted as faults.
-bool _isSerious(SubProblem p) => p.kind == ProblemKind.empty || p.kind == ProblemKind.badRange || p.kind == ProblemKind.overlap;
+/// Top level so it can run in a background isolate.
+List<SrtEntry> _parseEntries(String text) => parseSrt(text).entries;
 
 class _Preview extends StatelessWidget {
   const _Preview({required this.entry});

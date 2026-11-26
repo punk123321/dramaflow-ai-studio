@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
@@ -36,6 +37,9 @@ import 'widgets.dart';
 /// Stage 4: arrange the video pieces, narration, music and subtitles.
 /// This only writes an edit description. The original video is never changed;
 /// the next stage (Phase 7) renders the description into a new file.
+/// Top level so it can run in a background isolate.
+List<SrtEntry> _parseEntries(String text) => parseSrt(text).entries;
+
 class EditorPanel extends StatefulWidget {
   const EditorPanel({super.key, required this.project, this.pinned = false});
 
@@ -58,6 +62,10 @@ class _EditorPanelState extends State<EditorPanel> {
   bool _loading = true;
   Timeline _tl = const Timeline();
   List<SrtEntry> _subs = [];
+  Timeline? _checkedTl;
+  List<SrtEntry>? _checkedSubs;
+  List<TimelineIssue> _issues = const [];
+  List<SrtEntry> _remapped = const [];
   String? _msg;
   String? _error;
 
@@ -98,7 +106,8 @@ class _EditorPanelState extends State<EditorPanel> {
       _tl = Timeline.decode(await _repo.getDoc(_pid, DocKind.timeline));
       final studio = await _repo.getDoc(_pid, DocKind.studioSrt);
       final src = (studio != null && studio.trim().isNotEmpty) ? studio : await _repo.getDoc(_pid, DocKind.sourceSrt);
-      _subs = src == null ? [] : parseSrt(src).entries;
+      // A long SRT is read in the background so the screen opens at once.
+      _subs = src == null ? [] : (src.length > 40000 ? await compute(_parseEntries, src) : parseSrt(src).entries);
       _plan = TransformativePlan.decode(await _repo.getDoc(_pid, DocKind.transformativePlan));
       _basePlan = _plan;
     } catch (e) {
@@ -106,7 +115,12 @@ class _EditorPanelState extends State<EditorPanel> {
     }
     if (mounted) setState(() => _loading = false);
     // Show the first frame right away so effects can be previewed without pressing play.
-    if (mounted && widget.project.hasVideo) _ensurePlayer();
+    // Wait until the page has finished opening: starting the video decoder at the
+    // same moment as the page transition is what made entering the editor stutter.
+    if (mounted && widget.project.hasVideo) {
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      if (mounted) _ensurePlayer();
+    }
   }
 
   /// Every change to the TE plan is saved at once (no separate save button).
@@ -860,8 +874,16 @@ class _EditorPanelState extends State<EditorPanel> {
     if (!widget.project.hasVideo) {
       return const Text('အရင် အဆင့် ၁ မှာ ဗီဒီယို ရွေးပါ။', style: TextStyle(color: DfColors.muted));
     }
-    final issues = checkTimeline(_tl, sourceMs: _sourceMs);
-    final remapped = remapSubtitles(_subs, _tl.pieces, offsetMs: _tl.subtitleOffsetMs);
+    // The preview position changes many times a second and redraws this page;
+    // these two only depend on the timeline and the subtitles, so keep them until those change.
+    if (!identical(_checkedTl, _tl) || !identical(_checkedSubs, _subs)) {
+      _issues = checkTimeline(_tl, sourceMs: _sourceMs);
+      _remapped = remapSubtitles(_subs, _tl.pieces, offsetMs: _tl.subtitleOffsetMs);
+      _checkedTl = _tl;
+      _checkedSubs = _subs;
+    }
+    final issues = _issues;
+    final remapped = _remapped;
 
     final children = <Widget>[
         const InfoHint(
@@ -1286,9 +1308,10 @@ class _EditorPanelState extends State<EditorPanel> {
                     child: ClipRect(
                       child: BackdropFilter(
                         filter: ui.ImageFilter.blur(sigmaX: m.strength * 0.4, sigmaY: m.strength * 0.4),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(border: Border.all(color: sel ? DfColors.accent : Colors.white54, width: sel ? 2 : 1)),
-                        ),
+                        // The line is only a guide in the preview (the render has none). With "edge" off it shows only while the box is selected, so it can still be moved.
+                        child: (m.edge || sel)
+                            ? DecoratedBox(decoration: BoxDecoration(border: Border.all(color: sel ? DfColors.accent : Colors.white54, width: sel ? 2 : 1)))
+                            : const SizedBox.expand(),
                       ),
                     ),
                   ),

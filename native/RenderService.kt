@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.net.wifi.WifiManager
 import android.os.PowerManager
 
 /**
@@ -24,13 +25,15 @@ import android.os.PowerManager
  */
 class RenderService : Service() {
     private var wake: PowerManager.WakeLock? = null
+    private var wifi: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val text = intent?.getStringExtra("text") ?: "Render"
         val percent = intent?.getIntExtra("percent", -1) ?: -1
-        val notification = build(text, percent)
+        val title = intent?.getStringExtra("title") ?: "DramaFlow · ဗီဒီယို ထုတ်နေတယ်"
+        val notification = build(title, text, percent)
         try {
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -50,16 +53,35 @@ class RenderService : Service() {
                 acquire(6L * 60L * 60L * 1000L)
             }
         }
+        if (wifi == null) {
+            // Without this the Wi-Fi radio goes to sleep when the screen is off and
+            // downloads/polling to the backend stall. Best effort only.
+            try {
+                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                @Suppress("DEPRECATION")
+                wifi = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "dramaflow:wifi").apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+            } catch (e: Exception) {
+                wifi = null
+            }
+        }
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         wake?.let { if (it.isHeld) it.release() }
         wake = null
+        try {
+            wifi?.let { if (it.isHeld) it.release() }
+        } catch (e: Exception) {
+        }
+        wifi = null
         super.onDestroy()
     }
 
-    private fun build(text: String, percent: Int): Notification {
+    private fun build(title: String, text: String, percent: Int): Notification {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "Render", NotificationManager.IMPORTANCE_LOW))
@@ -69,7 +91,7 @@ class RenderService : Service() {
         }
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this)
         b.setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("DramaFlow · ဗီဒီယို ထုတ်နေတယ်")
+            .setContentTitle(title)
             .setContentText(if (percent in 0..100) "$text · $percent%" else text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

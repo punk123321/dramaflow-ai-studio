@@ -74,6 +74,13 @@ f. Make one fail on purpose (turn off the Colab cell, or a wrong Gemini model): 
 g. "Log အကုန် ကူး" copies the whole log: paste it to me with any error.
 h. The Auto card (Video/Scene Recap) now also shows the step row and a "Log ကူး" button.
 
+## 7d. Video from a link (needs the NEW Recap notebook)
+1. Run the new Recap Colab notebook, connect it in Video Recap (Self-test green).
+2. Video Recap > link card: paste a public YouTube link (or a TikTok / Red Note share text). Press the link button; it should show progress (download, then Gemini) and then the length. Note: no VPN should be needed for this upload.
+3. Run Auto with the link. Try a Red Note / TikTok link too; if one fails, copy the log and send it.
+4. Recap Queue: a project with a link and no video file should run.
+5. News Video: pick the AI picture source and make a video; pictures should appear without stock search.
+
 ## 8. Data safety
 35. Backup > Restore on a fresh install keeps projects.
 36. Keys (Gemini, AssemblyAI) are NOT in the backup file.
