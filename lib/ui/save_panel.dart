@@ -14,6 +14,7 @@ import '../state/project_store.dart';
 import '../state/render_store.dart';
 import 'description_card.dart';
 import 'render_panel.dart' show showVideoPreview;
+import 'thumbnail_card.dart';
 
 /// Stage 6: put a finished video in the phone's gallery or a folder, and keep
 /// the export history.
@@ -178,6 +179,7 @@ class _SavePanelState extends State<SavePanel> {
           ),
         Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: _load, child: const Text('စာရင်း ပြန်ယူ'))),
         DescriptionCard(project: widget.project),
+        ThumbnailCard(project: widget.project),
         if (_items.isEmpty)
           const Text('ထုတ်ပြီးသား ဗီဒီယို မရှိသေးပါ။ အဆင့် ၅ မှာ အရင်ထုတ်ပါ။', style: TextStyle(color: DfColors.muted, fontSize: 13)),
         for (final e in _items)
