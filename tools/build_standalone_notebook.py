@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "tools" / "dramaflow_backend"
 NB = ROOT / "tools" / "dramaflow_recap_colab_standalone.ipynb"
-FILES = ["main.py", "recap_core.py", "tts_text.py", "ingest_core.py", "studio_core.py", "studio_ops.py"]
+FILES = ["main.py", "recap_core.py", "tts_text.py", "ingest_core.py", "studio_core.py", "render_core.py", "studio_ops.py"]
 
 INTRO = """# DramaFlow Backend (Colab) — Recap + Link ဆွဲ + Creator Studio
 GitHub branch မလိုဘူး၊ backend ကုဒ်အားလုံး ဒီ notebook ထဲမှာ ပါပြီးသား။ (Video Recap / Scene Recap "Auto" + Edge TTS + Self-test + **ဗီဒီယို link (YouTube/TikTok/Red Note/Bilibili) ဆွဲပေးတာ** + **Creator Studio** — download၊ ဖြတ်၊ စာတန်း ဘာသာပြန်၊ CC/Hardsub၊ ZIP၊ YouTube တင်)
@@ -60,6 +60,16 @@ if up:
 else:
     print("ဘာမှ မတင်ဘူး — ကျော်လိုက်တယ်")'''
 
+DRIVE = '''# Cell 5d (ရွေးချယ်ခွင့် — Studio ဖိုင်တွေ Colab ပိတ်ရင်လည်း မပျောက်ချင်မှသာ run ပါ — Server cell မတိုင်ခင်)
+# Google Drive ထဲက "DramaFlow_Studio" folder ကို Studio library အဖြစ် သုံးမယ်။ ဗီဒီယိုကို ဒီ folder ထဲ တစ်ခါထည့်ထားရင်
+# နောက်တစ်ခါ Colab စတိုင်း ပြန်မတင်ရတော့ဘူး၊ App > Render > "Colab မှာ ထုတ်မယ်" က ဒီဖိုင်ကို တိုက်ရိုက်သုံးမယ်။
+from google.colab import drive
+import os
+drive.mount("/content/drive")
+os.makedirs("/content/drive/MyDrive/DramaFlow_Studio", exist_ok=True)
+os.environ["DF_STUDIO_DIR"] = "/content/drive/MyDrive/DramaFlow_Studio"
+print("Studio library =", os.environ["DF_STUDIO_DIR"])'''
+
 SERVER_FALLBACK = None
 
 
@@ -74,7 +84,7 @@ def build():
     cells = [("markdown", INTRO.rstrip("\n")), ("code", INSTALL)]
     for f in FILES:
         cells.append(("code", f"%%writefile /content/dramaflow_backend/{f}\n" + (BACKEND / f).read_text(encoding="utf-8").rstrip("\n")))
-    cells += [("code", COOKIES), ("code", SECRET), ("code", "".join(server["source"]))]
+    cells += [("code", COOKIES), ("code", SECRET), ("code", DRIVE), ("code", "".join(server["source"]))]
     out = []
     for kind, text in cells:
         c = {"cell_type": kind, "metadata": {}, "source": src(text)}

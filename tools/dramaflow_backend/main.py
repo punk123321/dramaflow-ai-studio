@@ -16,7 +16,7 @@ What it does for the app (Video Recap and Scene Recap):
   Creator Studio (your own files and videos you may use; the library lives on this machine):
   GET  /studio/files           the library          GET /studio/files/<name>   one file to the phone
   DELETE /studio/files/<name>  POST /studio/upload  a small .srt / picture from the phone
-  POST /studio/jobs            download | split | translate | subtitle | zip | youtube | transcribe (Whisper)
+  POST /studio/jobs            download | split | translate | subtitle | zip | youtube | transcribe (Whisper) | render
   GET  /studio/jobs/<id>       progress (speed, ETA), result files / links
   POST /studio/jobs/<id>/cancel | pause | resume
   GET/POST /studio/youtube/... status, auth-link, auth-complete, unlink
@@ -547,7 +547,7 @@ def selftest(req: SelfTestRequest, x_app_token: Optional[str] = Header(default=N
 
 # ---- Creator Studio ---------------------------------------------------------
 STUDIO_DIR = Path(os.environ.get("DF_STUDIO_DIR") or (Path(tempfile.gettempdir()) / "dramaflow_studio"))
-STUDIO_OPS = ("download", "split", "translate", "subtitle", "zip", "youtube", "transcribe")
+STUDIO_OPS = ("download", "split", "translate", "subtitle", "zip", "youtube", "transcribe", "render")
 STUDIO_FLAGS: dict = {}  # job id -> {"cancel": bool, "pause": bool}
 
 
@@ -584,6 +584,8 @@ class StudioRequest(BaseModel):
     # transcribe (Whisper)
     whisper_model: str = "small"
     whisper_vad: bool = True
+    # render: the app's render job (see render_core.py)
+    job: dict = {}
     # zip / youtube
     files: List[str] = []
     zip_name: str = ""
@@ -640,7 +642,7 @@ def run_studio_job(job_id: str, req: StudioRequest):
         STUDIO_DIR.mkdir(parents=True, exist_ok=True)
         _set(job_id, status="running", stage="စတင်နေတယ်", progress=1)
         fn = {"download": so.op_download, "split": so.op_split, "translate": so.op_translate,
-              "subtitle": so.op_subtitle_video, "zip": so.op_zip, "youtube": so.op_youtube, "transcribe": so.op_transcribe}[req.op]
+              "subtitle": so.op_subtitle_video, "zip": so.op_zip, "youtube": so.op_youtube, "transcribe": so.op_transcribe, "render": so.op_render}[req.op]
         result = fn(env, req)
         _set(job_id, status="done", stage="ပြီးပြီ", progress=100, result=result)
     except so.Canceled:

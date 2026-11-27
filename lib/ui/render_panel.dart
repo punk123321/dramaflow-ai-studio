@@ -21,6 +21,7 @@ import '../platform/part_saver.dart';
 import '../platform/render_channel.dart';
 import '../state/project_store.dart';
 import '../state/render_store.dart';
+import 'colab_render_card.dart';
 import 'widgets.dart';
 
 String _mb(int bytes) => '${(bytes / 1048576).toStringAsFixed(bytes < 10485760 ? 1 : 0)} MB';
@@ -246,6 +247,32 @@ class _RenderPanelState extends State<RenderPanel> {
     });
   }
 
+  /// The job the renderer reads: the saved edit plus the approved TE operations (applied to a copy).
+  Map<String, Object?> _buildJob(String name, {bool sample = false}) {
+    final p = widget.project;
+    final te = compileOps(_tl.pieces, _plan.ops);
+    var tl = _tl.copyWith(pieces: te.pieces, voices: [..._tl.voices, ...te.sounds]);
+    var overlays = [for (final o in te.overlays) o.toJson()];
+    var splits = [for (final x in te.splits) x.toJson()];
+    final censors = [for (final x in te.censors) x.toJson()];
+    if (sample) {
+      tl = sampleTimeline(tl);
+      overlays = clipWindows(overlays, sampleMs);
+      splits = clipWindows(splits, sampleMs, minMs: minSplitMs);
+    }
+    return buildRenderJob(
+      name: name,
+      videoUri: p.sourceVideoUri!,
+      timeline: tl,
+      overlays: overlays,
+      splits: splits,
+      censors: censors,
+      sourceSubtitles: _subs,
+      settings: _eff,
+      aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
+    );
+  }
+
   Future<void> _start({bool sample = false}) async {
     final p = widget.project;
     final rs0 = context.read<RenderStore>();
@@ -257,28 +284,7 @@ class _RenderPanelState extends State<RenderPanel> {
       } catch (_) {}
     }
     final name = '${safeFileName(p.name)}_${sample ? 'sample_' : ''}${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
-    final te = compileOps(_tl.pieces, _plan.ops);
-    // Approved TE operations are applied to a copy; the saved timeline stays as it is.
-    var tl = _tl.copyWith(pieces: te.pieces, voices: [..._tl.voices, ...te.sounds]);
-    var overlays = [for (final o in te.overlays) o.toJson()];
-    var splits = [for (final x in te.splits) x.toJson()];
-    final censors = [for (final x in te.censors) x.toJson()];
-    if (sample) {
-      tl = sampleTimeline(tl);
-      overlays = clipWindows(overlays, sampleMs);
-      splits = clipWindows(splits, sampleMs, minMs: minSplitMs);
-    }
-    final job = buildRenderJob(
-      name: name,
-      videoUri: p.sourceVideoUri!,
-      timeline: tl,
-      overlays: overlays,
-      splits: splits,
-      censors: censors,
-      sourceSubtitles: _subs,
-      settings: _eff,
-      aspect: (p.videoWidth ?? 0) > 0 && (p.videoHeight ?? 0) > 0 ? p.videoWidth! / p.videoHeight! : 16 / 9,
-    );
+    final job = _buildJob(name, sample: sample);
     await context.read<RenderStore>().start(_pid, name, job, sample: sample);
   }
 
@@ -588,6 +594,8 @@ class _RenderPanelState extends State<RenderPanel> {
               label: const Text('အစ ၈ စက္ကန့် စမ်းထုတ်ကြည့်မယ်'),
             ),
           ),
+        if (p.hasVideo && p.sourceVideoUri != null && blockers.isEmpty)
+          ColabRenderCard(project: p, buildJob: _buildJob, busyElsewhere: rs.running),
         if (rs.lastSample != null && rs.lastSample!.projectId == _pid && !mine)
           Padding(
             padding: const EdgeInsets.only(top: 6),

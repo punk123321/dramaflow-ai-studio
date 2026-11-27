@@ -19,6 +19,10 @@ import zipfile
 from pathlib import Path
 from typing import Callable, List, Optional
 
+import queue
+import tempfile
+
+import render_core as rc
 import studio_core as sc
 from ingest_core import check_url, classify, cookie_note, cookies_problem, cookies_source, parse_ffmpeg_duration
 
@@ -521,6 +525,111 @@ def op_subtitle_video(env: Env, req) -> dict:
         files.append(name)
     env.progress("ပြီးပြီ", 100)
     return {"files": files, "notes": notes, "errors": []}
+
+
+# ---- render (the phone's render job, made on this machine) ------------------
+def has_audio_stream(env: Env, path: Path) -> bool:
+    try:
+        p = subprocess.run([env.ffmpeg, "-i", str(path)], capture_output=True, text=True, timeout=60)
+        return "Audio:" in p.stderr
+    except Exception:
+        return False
+
+
+def run_ffmpeg_progress(env: Env, cmd: List[str], total_ms: int, label: str, timeout: int = 12 * 3600):
+    """ffmpeg with `-progress pipe:1`: the position it reports becomes a percentage, and the user can cancel."""
+    full = [cmd[0], "-hide_banner", "-loglevel", "error"] + cmd[1:]
+    p = subprocess.Popen(full, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    lines: "queue.Queue[str]" = queue.Queue()
+
+    def pump():
+        for ln in p.stdout:  # type: ignore[union-attr]
+            lines.put(ln.rstrip("\n"))
+        lines.put("")
+
+    threading.Thread(target=pump, daemon=True).start()
+    started = time.time()
+    tail: List[str] = []
+    done = False
+    try:
+        _watch_ffmpeg(env, p, lines, total_ms, label, timeout, tail, started)
+    finally:
+        try:
+            p.stdout.close()  # type: ignore[union-attr]
+        except Exception:
+            pass
+    if p.returncode != 0:
+        raise RuntimeError("ffmpeg မအောင်မြင်ဘူး: " + " ".join(tail)[-300:])
+
+
+def _watch_ffmpeg(env: Env, p, lines, total_ms: int, label: str, timeout: int, tail: List[str], started: float):
+    done = False
+    while not done:
+        try:
+            ln = lines.get(timeout=0.5)
+            if ln == "" and p.poll() is not None:
+                done = True
+            elif ln.startswith("out_time_us=") or ln.startswith("out_time_ms="):
+                try:
+                    us = int(ln.split("=", 1)[1])  # both spellings are in microseconds
+                    if total_ms > 0 and us > 0:
+                        env.progress(label, max(1, min(99, int(100 * (us / 1000.0) / total_ms))))
+                except ValueError:
+                    pass
+            elif ln and "=" not in ln.split(" ")[0]:
+                tail.append(ln)
+                tail = tail[-6:]
+        except queue.Empty:
+            pass
+        if env.canceled():
+            p.kill()
+            p.wait()
+            raise Canceled()
+        if time.time() - started > timeout:
+            p.kill()
+            p.wait()
+            raise RuntimeError("ffmpeg အချိန်ကြာလွန်းလို့ ရပ်လိုက်တယ်")
+        if p.poll() is not None and lines.empty():
+            done = True
+
+
+def op_render(env: Env, req) -> dict:
+    """Makes the video described by the app's render job (cut pieces, speed, Censor boxes, subtitles, size) from a video that
+    is already in the library. The original file is only read. Anything the job asks for that is not supported yet makes the
+    whole job refuse, so a video never comes out with something silently missing."""
+    job = getattr(req, "job", None)
+    if not isinstance(job, dict) or not job:
+        raise ValueError("render job မပါဘူး")
+    src = file_path(env.lib, req.file, ("video",))
+    why = rc.unsupported(job)
+    if why:
+        raise ValueError("Colab မှာ မထုတ်နိုင်သေးတာ: " + "၊ ".join(why))
+    free_ok(env.lib)
+    total = rc.output_ms(job)
+    stem = re.sub(r"[^\w\-. ]", "_", str(job.get("name") or os.path.splitext(src.name)[0])).strip(" .") or "render"
+    name = sc.unique_name(stem, ".mp4", [f.name for f in env.lib.iterdir()])
+    out = env.lib / name
+    gpu = has_nvenc(env.ffmpeg)
+    notes = ["GPU (nvenc) နဲ့ ထုတ်တယ်" if gpu else "CPU နဲ့ ထုတ်တယ် (GPU runtime ရွေးရင် ပိုမြန်တယ်)"]
+    with tempfile.TemporaryDirectory() as tmp:
+        srt_path = None
+        if job.get("burn") and job.get("subtitles"):
+            srt_path = os.path.join(tmp, "subs.srt")
+            Path(srt_path).write_text(rc.srt_text(job["subtitles"]), encoding="utf-8")
+        cmd = rc.build_cmd(env.ffmpeg, str(src), str(out), job, has_audio_stream(env, src), gpu, srt_path, getattr(req, "font", "Padauk") or "Padauk")
+        env.progress("ထုတ်နေတယ်", 1)
+        try:
+            run_ffmpeg_progress(env, cmd, total, "ထုတ်နေတယ်")
+        except BaseException:
+            out.unlink(missing_ok=True)
+            raise
+    if not out.exists() or out.stat().st_size < 1024:
+        out.unlink(missing_ok=True)
+        raise RuntimeError("ဗီဒီယို မထွက်ဘူး")
+    if job.get("censors"):
+        notes.append(f"Blur box {len(job['censors'])} ခု ပါတယ် — ထုတ်ပြီးရင် မှုန်သွားတာကို ကိုယ်တိုင် ပြန်စစ်ပါ (အရင်းအမြစ်ပုံ အတိုင်း မှုန်ဖို့ ရည်ရွယ်ပေမယ့် ဖုန်း render နဲ့ အတိအကျ မတူနိုင်ဘူး)")
+    env.progress("ပြီးပြီ", 100)
+    return {"files": [name], "notes": notes, "errors": []}
 
 
 # ---- zip --------------------------------------------------------------------
