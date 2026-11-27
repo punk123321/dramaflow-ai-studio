@@ -17,12 +17,15 @@ enum ThumbMood {
 /// actor's face, no character or poster of an existing show, no logo. Text is
 /// left out of the picture on purpose (image models spell badly and cannot do
 /// Burmese); the title is added afterwards, so the prompt reserves empty space.
+/// With [referenceImage] the person attaches a sample picture next to the prompt: it is used only for
+/// the look (layout, colours, lighting, mood), never for the faces, characters, logos or text in it.
 String buildThumbnailPrompt({
   String title = '',
   String character = '',
   String scene = '',
   ThumbMood mood = ThumbMood.battle,
   bool leaveTextSpace = true,
+  bool referenceImage = false,
 }) {
   String clean(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
   final who = clean(character);
@@ -36,6 +39,9 @@ String buildThumbnailPrompt({
   if (what.isNotEmpty) b.writeln('Scene: $what.');
   b.writeln('Setting and style: floating misty mountains, ancient pagodas above the clouds, glowing golden and cyan spiritual qi, flying swords, drifting petals and light particles; cinematic lighting with a bright rim light, deep contrast, rich saturated colors (gold, jade, azure), highly detailed, painterly semi-realistic donghua look.');
   b.writeln('Composition: one clear focal point, subject on the ${leaveTextSpace ? 'right' : 'center'} third, a darker or softer ${leaveTextSpace ? 'empty area on the left third kept free for a title added later, ' : ''}clean readable at small size.');
+  if (referenceImage) {
+    b.writeln('Reference image: a sample picture is attached. Use it ONLY as a guide for the overall look: composition, colour palette, lighting, contrast and mood. Do NOT copy its faces, characters, costumes, logos, watermarks or any text; the character and scene must still be ORIGINAL and follow the description above. If no image is attached, ignore this line.');
+  }
   b.writeln('Rules: invent an ORIGINAL character. Do not copy any real actor, celebrity, existing drama or anime character, poster, or logo. No text, no letters, no watermark, no subtitles, no borders. No extra fingers or distorted hands.');
   return b.toString().trim();
 }

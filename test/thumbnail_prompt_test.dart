@@ -27,6 +27,16 @@ void main() {
     expect(p, isNot(contains('left third')));
   });
 
+  test('a reference image line is added only when asked, and it keeps the character original', () {
+    expect(buildThumbnailPrompt(), isNot(contains('Reference image')));
+    final p = buildThumbnailPrompt(referenceImage: true);
+    expect(p, contains('Reference image'));
+    expect(p, contains('ONLY as a guide'));
+    expect(p, contains('Do NOT copy its faces'));
+    expect(p, contains('If no image is attached, ignore'));
+    expect(p, contains('invent an ORIGINAL character'));
+  });
+
   test('every mood has a label and an English phrase', () {
     for (final m in ThumbMood.values) {
       expect(m.label.isNotEmpty, isTrue);

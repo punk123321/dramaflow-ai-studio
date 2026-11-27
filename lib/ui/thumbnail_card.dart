@@ -25,6 +25,7 @@ class _ThumbnailCardState extends State<ThumbnailCard> {
   final _scene = TextEditingController();
   ThumbMood _mood = ThumbMood.battle;
   bool _space = true;
+  bool _reference = true;
   String? _msg;
 
   @override
@@ -41,7 +42,7 @@ class _ThumbnailCardState extends State<ThumbnailCard> {
     super.dispose();
   }
 
-  String _prompt() => buildThumbnailPrompt(title: _title.text, character: _character.text, scene: _scene.text, mood: _mood, leaveTextSpace: _space);
+  String _prompt() => buildThumbnailPrompt(title: _title.text, character: _character.text, scene: _scene.text, mood: _mood, leaveTextSpace: _space, referenceImage: _reference);
 
   Future<void> _gemini() async {
     final m = await openInGemini(_prompt());
@@ -91,6 +92,22 @@ class _ThumbnailCardState extends State<ThumbnailCard> {
               value: _space,
               onChanged: (v) => setState(() => _space = v),
             ),
+            SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('နမူနာပုံ ထည့်မယ်', style: TextStyle(fontSize: 14)),
+              subtitle: const Text('ကြိုက်တဲ့ thumbnail ပုံ (ကိုယ့်ပုံ / ကိုယ်သုံးခွင့်ရှိတဲ့ ပုံ) ကို AI ကို ပြပြီး ပုံစံ၊ အရောင်၊ အလင်းပဲ လိုက်ခိုင်းမယ်', style: TextStyle(fontSize: 12, color: DfColors.muted)),
+              value: _reference,
+              onChanged: (v) => setState(() => _reference = v),
+            ),
+            if (_reference)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'လုပ်ပုံ: ၁) "Gemini ဖွင့်မယ်" နှိပ်၊ ၂) Gemini ထဲမှာ ➕ နှိပ်ပြီး နမူနာပုံ ထည့်၊ ၃) Send။ (App က စာသားပဲ ပို့နိုင်တယ်၊ ပုံကို ကိုယ်တိုင်ထည့်ရမယ်။ ပုံမထည့်ရင် prompt ထဲက reference စာကြောင်းကို AI က ကျော်သွားမယ်။) နမူနာပုံထဲက မျက်နှာ၊ ဇာတ်ကောင်၊ logo၊ စာ မကူးဖို့ prompt ထဲ ပါပြီးသား။',
+                  style: TextStyle(fontSize: 12, color: DfColors.ok),
+                ),
+              ),
             const Text(
               'AI ပုံထဲမှာ စာမပါအောင် ပြောထားတယ်၊ မြန်မာစာ ရေးတာ မှန်မှာမဟုတ်လို့ပါ။ ခေါင်းစဉ်ကို ပုံရပြီးနောက် App ရဲ့ thumbnail / Editor စာထည့်တာနဲ့ ထည့်ပါ။ မူရင်း drama ရဲ့ ပုံ၊ ဇာတ်ကောင်ကို မကူးဖို့ prompt ထဲ ပါပြီးသား။',
               style: TextStyle(fontSize: 12, color: DfColors.muted),
