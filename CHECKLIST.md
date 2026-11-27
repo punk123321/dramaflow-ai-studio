@@ -875,3 +875,10 @@ Roadmap step 3 agreed with the user: an SRT made on the free Colab machine inste
 | Colab notebook rebuilt with `faster-whisper` in Cell 1 (`tools/build_standalone_notebook.py`) | the builder's `--check` says "same" | n/a | **No** |
 | App: Creator Studio > Subtitle tab has a new card "စကားသံကနေ စာတန်းထုတ် (Whisper)" (video, spoken language, model small / medium / large-v3 / base) | Dart test for the request (`studio_test`); the card needs a phone | see CI | **No** |
 Honest limits: faster-whisper was NOT run here (no model, no network, no GPU): only a stand-in was tested. Whether it starts on the Colab GPU (CUDA / cuDNN versions), how fast it is on a 2-hour video, and how accurate the Chinese text is are all unknown until it is run on Colab. The first run downloads the model (large-v3 is about 3 GB). Speech-to-text makes mistakes (names, dialects, music over speech); the SRT must be checked in the Subtitle Studio. Only one backend job runs at a time (the existing rule).
+
+## TE-70: write the description with one tap when a Gemini key is set (2026-11-27)
+Roadmap step 4 agreed with the user. Branch `claude/te-70-gemini-direct` (on TE-69). Not merged into main.
+| Change | Tested here | Compiles on CI | Phone-tested |
+|---|---|---|---|
+| The Save-stage "YouTube Description ရေး" card: if the person's own Gemini key is saved (the same one used for Stage 3 voices), a "Gemini key နဲ့ တိုက်ရိုက်ရေး" button sends the prompt to Google and puts the answer in the box (kept with the project). Without a key the card works as before (Gemini app, copy / paste). A note says what text is sent to Google | Dart tests for the request body, the answer text and the block reason (`gemini_text_test`); the call itself was never made (no key, no network here) | see CI | **No** |
+Honest limits: uses the app's default text model (`defaultTextModel`, the same as the other screens); if that name is wrong for the key the error says to check it. Text only, the video is not sent. The answer can contain mistakes and must be checked. The Thumbnail prompt card still works through the Gemini app (no direct call).

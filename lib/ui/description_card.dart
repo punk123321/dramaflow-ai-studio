@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/description_prompt.dart';
+import '../core/gemini_tts.dart';
 import '../core/srt.dart';
 import '../core/theme.dart';
+import '../data/ai_settings_repo.dart';
 import '../data/handoff_repo.dart';
 import '../data/project.dart';
 import '../platform/gemini_open.dart';
+import '../platform/gemini_tts_client.dart';
 
 /// Helps write the YouTube description. The prompt is made from what the app
 /// already knows about this project (the narration text and the subtitles) and
 /// handed to Gemini; the answer is pasted back here and kept with the project.
-/// No API key is needed. The AI reads TEXT only (it does not watch the video),
+/// No API key is needed (with the person's own Gemini key it can also write the description in one tap). The AI reads TEXT only (it does not watch the video),
 /// so the description is only as good as the subtitles and must be checked.
 class DescriptionCard extends StatefulWidget {
   const DescriptionCard({super.key, required this.project});
@@ -31,6 +34,7 @@ class _DescriptionCardState extends State<DescriptionCard> {
   final _notes = TextEditingController();
   final _result = TextEditingController();
   bool _open = false;
+  GeminiTtsSettings _ai = const GeminiTtsSettings();
   bool _busy = false;
   String? _msg;
   bool _err = false;
@@ -42,6 +46,7 @@ class _DescriptionCardState extends State<DescriptionCard> {
     super.initState();
     _title.text = widget.project.name;
     _loadSaved();
+    _loadKey();
   }
 
   @override
@@ -50,6 +55,34 @@ class _DescriptionCardState extends State<DescriptionCard> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _loadKey() async {
+    try {
+      final s = await AiSettingsRepo().load();
+      if (mounted) setState(() => _ai = s);
+    } catch (_) {}
+  }
+
+  /// With the person's own Gemini key: the prompt is sent to Google and the answer lands in the box.
+  Future<void> _direct() async {
+    setState(() {
+      _busy = true;
+      _msg = null;
+    });
+    try {
+      final p = await _prompt();
+      final text = await geminiWrite(_ai, p);
+      if (!mounted) return;
+      _result.text = text;
+      await _repo.setDoc(_pid, _kind, text);
+      _say('Gemini ရေးပေးပြီး၊ project ထဲ သိမ်းပြီး။ ကိုယ်တိုင် စစ်ပြီး ပြင်ပါ။');
+    } on GeminiTtsException catch (e) {
+      _say(e.message, error: true);
+    } catch (e) {
+      _say('မအောင်မြင်ပါ: $e', error: true);
+    }
+    if (mounted) setState(() => _busy = false);
   }
 
   Future<void> _loadSaved() async {
@@ -139,6 +172,22 @@ class _DescriptionCardState extends State<DescriptionCard> {
               style: TextStyle(fontSize: 12, color: DfColors.muted),
             ),
             const SizedBox(height: 8),
+            if (_ai.ready) ...[
+              FilledButton.icon(
+                onPressed: _busy ? null : _direct,
+                icon: const Icon(Icons.bolt, size: 18),
+                label: const Text('Gemini key နဲ့ တိုက်ရိုက်ရေး'),
+              ),
+              if (_busy) const Padding(padding: EdgeInsets.only(top: 6), child: LinearProgressIndicator()),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, bottom: 6),
+                child: Text('ပို့မယ့်စာသား (recap စာသား + စာတန်း ရွေးထုတ်ချက်) ကို Google ဆီ သင့် key နဲ့ ပို့မယ်။ မပို့ချင်ရင် အောက်က Gemini app နည်းကို သုံးပါ။', style: TextStyle(fontSize: 12, color: DfColors.muted)),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text('Gemini API key ထည့်ထားရင် (Stage 3 အသံ အပိုင်းက Gemini setting) တစ်ချက်နှိပ်ရုံနဲ့ ရေးပေးမယ်။ မထည့်ရင် အောက်က Gemini app နည်းကို သုံးပါ။', style: TextStyle(fontSize: 12, color: DfColors.muted)),
+              ),
             Wrap(spacing: 8, runSpacing: 4, children: [
               FilledButton.icon(onPressed: _busy ? null : _gemini, icon: const Icon(Icons.auto_awesome, size: 18), label: const Text('Gemini ဖွင့်မယ်')),
               OutlinedButton.icon(onPressed: _busy ? null : _copyPrompt, icon: const Icon(Icons.copy, size: 18), label: const Text('Prompt ကူး')),

@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../core/gemini_text.dart';
 import '../core/gemini_tts.dart';
+import '../core/news_video.dart' show defaultTextModel;
 
 class GeminiTtsException implements Exception {
   GeminiTtsException(this.message);
@@ -59,4 +61,18 @@ Future<GeneratedImage> geminiDraw(GeminiTtsSettings s, String prompt, String asp
     throw GeminiTtsException('Gemini က ပုံ မပေးပါ။ Prompt ကို ပြောင်းစမ်းပါ (လုံခြုံရေး စည်းကမ်းကြောင့် ပယ်တာ ဖြစ်နိုင်တယ်) ဒါမှမဟုတ် ပုံ model နာမည် စစ်ပါ။');
   }
   return img;
+}
+
+/// A written answer (a description, for example). The prompt is sent to Google with
+/// the person's own key. Throws [GeminiTtsException].
+Future<String> geminiWrite(GeminiTtsSettings s, String prompt, {String model = defaultTextModel}) async {
+  final json = await _post(s, textEndpoint(model), textBody(prompt));
+  final t = extractText(json);
+  if (t == null) {
+    final why = blockReason(json);
+    throw GeminiTtsException(why != null
+        ? 'Gemini က မဖြေဘူး ($why)။ ဇာတ်လမ်းစာသား / prompt ကို ပြင်ပြီး ပြန်စမ်းပါ။'
+        : 'Gemini က စာသား မပေးပါ။ Model နာမည် (${model.trim()}) ကို စစ်ပါ။');
+  }
+  return t;
 }
