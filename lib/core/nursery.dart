@@ -44,10 +44,12 @@ enum NurseryLang {
   chinese('中文', 'Simplified Chinese'),
   bilingual('English + မြန်မာ', 'English and Burmese (each line in English followed by its Burmese meaning in brackets)');
 
-  const NurseryLang(this.label, this.english);
+  const NurseryLang(this.label, this.words);
 
   final String label;
-  final String english;
+
+  /// How the language is named in a prompt.
+  final String words;
 }
 
 String _clean(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -70,7 +72,7 @@ String buildLyricsPrompt({
   final who = _clean(character);
   final b = StringBuffer();
   b.writeln('Write the lyrics of a NEW, ORIGINAL nursery rhyme for toddlers (ages 2 to 5) about: ${_topic(theme, custom)}.');
-  b.writeln('Language: ${lang.english}.');
+  b.writeln('Language: ${lang.words}.');
   if (who.isNotEmpty) b.writeln('Main character (use this name): $who.');
   b.writeln('Structure: $n verses of 4 short lines each, plus a 2-line chorus repeated after every verse. Very simple words, strong rhyme, a steady sing-along rhythm, easy to repeat, gentle and happy.');
   b.writeln('Rules: do not copy or paraphrase any existing song, rhyme, character or brand. Nothing scary, violent or unsafe, no real names. No advertising and no web links.');
@@ -93,7 +95,7 @@ String buildLyricsPrompt({
 String buildMusicPrompt({NurseryLang lang = NurseryLang.english, int bpm = 100, bool female = true, String mood = 'cheerful'}) {
   final m = _clean(mood).isEmpty ? 'cheerful' : _clean(mood);
   final b = StringBuffer();
-  b.writeln("$m children's nursery rhyme, simple catchy melody, ${female ? 'warm friendly female' : 'warm friendly male'} vocal, ${lang.english.split(' ').first} lyrics,");
+  b.writeln("$m children's nursery rhyme, simple catchy melody, ${female ? 'warm friendly female' : 'warm friendly male'} vocal, ${lang.words.split(' ').first} lyrics,");
   b.writeln('ukulele, glockenspiel, soft claps and light percussion, $bpm BPM, sing-along, major key, clean and bright, no explicit content.');
   b.write('Original melody. Do not imitate any existing song, artist or brand.');
   return b.toString();
