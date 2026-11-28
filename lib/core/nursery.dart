@@ -4,6 +4,8 @@
 /// Everything here is plain text work and is tested without a phone.
 library;
 
+import 'dart:convert';
+
 /// What the song is about.
 enum NurseryTheme {
   animals('တိရစ္ဆာန်လေးတွေ', 'friendly farm and forest animals'),
@@ -24,7 +26,7 @@ enum NurseryTheme {
 
 /// The look of the pictures.
 enum NurseryStyle {
-  cartoon3d('3D cartoon (Pixar လို)', 'cute 3D animated cartoon, soft rounded shapes, bright cheerful colors, smooth lighting'),
+  cartoon3d('3D cartoon', 'cute 3D animated cartoon, soft rounded shapes, bright cheerful colors, smooth lighting'),
   flat2d('2D flat cartoon', 'simple flat 2D cartoon, bold outlines, bright primary colors, clean shapes'),
   storybook('Watercolor storybook', 'soft watercolor children\'s storybook illustration, warm pastel colors, gentle textures'),
   paperCut('Paper-cut / craft', 'colorful layered paper-cut craft style, handmade look, soft shadows');
@@ -387,7 +389,7 @@ class NurseryPackScene {
   final String videoPrompt;
 }
 
-/// The scene plan: [count] scenes (4 to 9, the arc repeats if needed). When [lyricScenes] are given their text becomes
+/// The scene plan: [count] scenes (4 to 9 unless [minCount] / [maxCount] say otherwise; the arc repeats if needed). When [lyricScenes] are given their text becomes
 /// the line of each scene in order (a scene without lyrics keeps the arc's line). The topic is shortened to
 /// 60 characters inside the action text so a long Burmese sentence does not swamp the prompt.
 List<NurseryPackScene> buildPackScenes({
@@ -396,12 +398,14 @@ List<NurseryPackScene> buildPackScenes({
   String friend1 = '',
   String friend2 = '',
   int count = 6,
+  int minCount = 4,
+  int maxCount = 9,
   NurseryStyle style = NurseryStyle.cartoon3d,
   String ratio = '16:9',
   String videoTool = 'Google Flow (Veo 3.1)',
   List<NurseryScene> lyricScenes = const [],
 }) {
-  final n = count.clamp(4, 9).toInt();
+  final n = count.clamp(minCount, maxCount).toInt();
   final cast = castText(hero, friend1, friend2);
   final heroName = hero.trim().isEmpty ? 'Hero' : NurseryCharacter('', hero).shortName;
   final names = <String>[
@@ -451,6 +455,157 @@ NurserySeo buildSeo({required String topic, required String hero}) {
     ],
     tags: 'nursery rhymes, kids songs, toddler learning, ${h.toLowerCase()}, sing along, kids animation',
   );
+}
+
+
+/// Weights for the time of each scene when the backend shares the song over the lyrics by line length (the same rule as its
+/// "lyrics" karaoke: each line counts its characters, at least 4), so a scene changes where its first line starts.
+List<double> sceneWeights(List<NurseryScene> scenes) =>
+    [for (final s in scenes) s.lines.isEmpty ? 4.0 : s.lines.fold<double>(0, (a, l) => a + (l.length < 4 ? 4 : l.length))];
+
+/// What the Nursery screen remembers between visits (on this phone only). Indexes are into the enums / library lists
+/// and are clamped when read, so an old or damaged save can never break the screen.
+class NurseryDraft {
+  const NurseryDraft({
+    this.topic = '',
+    this.theme = 0,
+    this.hero = 0,
+    this.friend1 = -1,
+    this.friend2 = -1,
+    this.heroCustom = '',
+    this.lang = 0,
+    this.style = 0,
+    this.tempo = 0,
+    this.tool = 0,
+    this.ratio = '16:9',
+    this.scenes = 6,
+    this.lyrics = '',
+    this.sceneFiles = const {},
+    this.song = '',
+    this.songMs = 0,
+    this.karaoke = '',
+  });
+
+  final String topic;
+  final int theme;
+  final int hero; // index into nurseryCharacters; -1 = the custom text
+  final int friend1; // -1 = none
+  final int friend2;
+  final String heroCustom;
+  final int lang;
+  final int style;
+  final int tempo;
+  final int tool;
+  final String ratio;
+  final int scenes;
+  final String lyrics;
+  final Map<int, String> sceneFiles; // scene number (1-based) -> a file name in the backend's library
+  final String song; // the song's file name in the backend's library
+  final int songMs;
+  final String karaoke; // the .ass written by the karaoke step
+
+  NurseryDraft copyWith({
+    String? topic,
+    int? theme,
+    int? hero,
+    int? friend1,
+    int? friend2,
+    String? heroCustom,
+    int? lang,
+    int? style,
+    int? tempo,
+    int? tool,
+    String? ratio,
+    int? scenes,
+    String? lyrics,
+    Map<int, String>? sceneFiles,
+    String? song,
+    int? songMs,
+    String? karaoke,
+  }) =>
+      NurseryDraft(
+        topic: topic ?? this.topic,
+        theme: theme ?? this.theme,
+        hero: hero ?? this.hero,
+        friend1: friend1 ?? this.friend1,
+        friend2: friend2 ?? this.friend2,
+        heroCustom: heroCustom ?? this.heroCustom,
+        lang: lang ?? this.lang,
+        style: style ?? this.style,
+        tempo: tempo ?? this.tempo,
+        tool: tool ?? this.tool,
+        ratio: ratio ?? this.ratio,
+        scenes: scenes ?? this.scenes,
+        lyrics: lyrics ?? this.lyrics,
+        sceneFiles: sceneFiles ?? this.sceneFiles,
+        song: song ?? this.song,
+        songMs: songMs ?? this.songMs,
+        karaoke: karaoke ?? this.karaoke,
+      );
+
+  String encode() => jsonEncode({
+        'topic': topic,
+        'theme': theme,
+        'hero': hero,
+        'f1': friend1,
+        'f2': friend2,
+        'heroCustom': heroCustom,
+        'lang': lang,
+        'style': style,
+        'tempo': tempo,
+        'tool': tool,
+        'ratio': ratio,
+        'scenes': scenes,
+        'lyrics': lyrics,
+        'files': {for (final e in sceneFiles.entries) '${e.key}': e.value},
+        'song': song,
+        'songMs': songMs,
+        'karaoke': karaoke,
+      });
+
+  static NurseryDraft decode(String? text) {
+    if (text == null || text.trim().isEmpty) return const NurseryDraft();
+    try {
+      final m = jsonDecode(text);
+      if (m is! Map) return const NurseryDraft();
+      int i(String k, int d, int lo, int hi) {
+        final v = m[k];
+        return v is num ? v.toInt().clamp(lo, hi).toInt() : d;
+      }
+
+      String t(String k, String d) => m[k] is String ? m[k] as String : d;
+      final files = <int, String>{};
+      final raw = m['files'];
+      if (raw is Map) {
+        raw.forEach((k, v) {
+          final n = int.tryParse('$k');
+          if (n != null && n >= 1 && n <= 40 && v is String && v.isNotEmpty) files[n] = v;
+        });
+      }
+      final ratio = t('ratio', '16:9');
+      return NurseryDraft(
+        topic: t('topic', ''),
+        theme: i('theme', 0, 0, NurseryTheme.values.length - 1),
+        hero: i('hero', 0, -1, nurseryCharacters.length - 1),
+        friend1: i('f1', -1, -1, nurseryCharacters.length - 1),
+        friend2: i('f2', -1, -1, nurseryCharacters.length - 1),
+        heroCustom: t('heroCustom', ''),
+        lang: i('lang', 0, 0, NurseryLang.values.length - 1),
+        style: i('style', 0, 0, NurseryStyle.values.length - 1),
+        tempo: i('tempo', 0, 0, nurseryTempos.length - 1),
+        tool: i('tool', 0, 0, nurseryVideoTools.length - 1),
+        ratio: ratio == '9:16' ? '9:16' : '16:9',
+        scenes: i('scenes', 6, 4, 9),
+        lyrics: t('lyrics', ''),
+        sceneFiles: files,
+        song: t('song', ''),
+        songMs: i('songMs', 0, 0, 24 * 3600 * 1000),
+        karaoke: t('karaoke', ''),
+      );
+    } catch (_) {
+      return const NurseryDraft();
+    }
+  }
 }
 
 /// The steps to check before putting a children's song video on YouTube.

@@ -194,4 +194,63 @@ one more line
       expect(buildSeo(topic: '', hero: '').titles.first, contains('Friends'));
     });
   });
+
+  group('draft and weights', () {
+    test('sceneWeights count the characters of the lines, at least 4 each', () {
+      const sc = [
+        NurseryScene(label: 'a', lines: ['abcdefghij', 'ab']),
+        NurseryScene(label: 'b', lines: []),
+      ];
+      expect(sceneWeights(sc), [14.0, 4.0]);
+    });
+
+    test('a draft survives encode / decode', () {
+      final d = const NurseryDraft().copyWith(
+        topic: 'Teeth',
+        hero: 3,
+        friend1: 4,
+        lang: 2,
+        ratio: '9:16',
+        scenes: 8,
+        lyrics: '[Verse 1]\nla la',
+        sceneFiles: {1: 'a.png', 3: 'b.mp4'},
+        song: 'song.mp3',
+        songMs: 61000,
+        karaoke: 's_karaoke.ass',
+      );
+      final r = NurseryDraft.decode(d.encode());
+      expect(r.topic, 'Teeth');
+      expect(r.hero, 3);
+      expect(r.friend1, 4);
+      expect(r.friend2, -1);
+      expect(r.lang, 2);
+      expect(r.ratio, '9:16');
+      expect(r.scenes, 8);
+      expect(r.lyrics, '[Verse 1]\nla la');
+      expect(r.sceneFiles, {1: 'a.png', 3: 'b.mp4'});
+      expect(r.song, 'song.mp3');
+      expect(r.songMs, 61000);
+      expect(r.karaoke, 's_karaoke.ass');
+    });
+
+    test('a damaged or old save never breaks it: bad values are clamped or ignored', () {
+      expect(NurseryDraft.decode(null).scenes, 6);
+      expect(NurseryDraft.decode('').hero, 0);
+      expect(NurseryDraft.decode('not json').hero, 0);
+      expect(NurseryDraft.decode('[1,2]').hero, 0);
+      final r = NurseryDraft.decode('{"hero":999,"f1":-50,"scenes":100,"lang":-1,"ratio":"4:3","files":{"0":"x","2":"ok.png","3":5,"99":"y"}}');
+      expect(r.hero, nurseryCharacters.length - 1);
+      expect(r.friend1, -1);
+      expect(r.scenes, 9);
+      expect(r.lang, 0);
+      expect(r.ratio, '16:9');
+      expect(r.sceneFiles, {2: 'ok.png'});
+    });
+
+    test('lyric-driven scene counts are allowed beyond 4..9', () {
+      final hero = nurseryCharacters[0].desc;
+      expect(buildPackScenes(topic: 't', hero: hero, count: 14, minCount: 1, maxCount: 40).length, 14);
+      expect(buildPackScenes(topic: 't', hero: hero, count: 2, minCount: 1, maxCount: 40).length, 2);
+    });
+  });
 }

@@ -12,6 +12,7 @@ import 'subtitle_studio_screen.dart';
 import 'backup_screen.dart';
 import 'news_screen.dart';
 import 'news_video_screen.dart';
+import 'nursery_screen.dart';
 import 'scene_recap_screen.dart';
 import 'stage_screen.dart';
 import 'video_recap_screen.dart';
@@ -21,7 +22,7 @@ import 'recap_queue_screen.dart';
 import 'studio_screen.dart';
 import 'widgets.dart';
 
-enum _Action { none, newsVideo, stage, workflow, library, studio, fairUse, transformative, publish, backup, videoRecap, sceneRecap, news, recapQueue, mediaStudio }
+enum _Action { none, newsVideo, stage, workflow, library, studio, fairUse, transformative, publish, backup, videoRecap, sceneRecap, news, recapQueue, mediaStudio, nursery }
 
 class _Module {
   const _Module(this.code, this.title, this.sub, this.color, this.phase, [this.action = _Action.none]);
@@ -46,6 +47,7 @@ const _modules = <_Module>[
   _Module('SR', 'Scene Studio', 'Scene ခွဲ + contact sheet → Gemini', Color(0xFFFF7A59), 14, _Action.sceneRecap),
   _Module('RQ', 'Recap Queue', 'Episode များ တန်းစီ Auto', Color(0xFFB36BFF), 15, _Action.recapQueue),
   _Module('MS', 'Creator Studio', 'Download · ဖြတ် · စာတန်း · YouTube (Colab)', Color(0xFF34D399), 16, _Action.mediaStudio),
+  _Module('NS', 'Nursery Song', 'ကလေးသီချင်း video · prompt + Colab', Color(0xFFFF8FC8), 17, _Action.nursery),
   _Module('NV', 'News Video', 'သတင်း → ဗီဒီယို (Colab)', Color(0xFF22D3EE), 15, _Action.newsVideo),
   _Module('NW', 'သတင်း (RSS)', 'သတင်းဖတ်၊ script ရေး', Color(0xFF2FA8FF), 14, _Action.news),
   _Module('BK', 'Backup / Restore', 'Project သိမ်း/ပြန်ယူ', Color(0xFF8E9AAF), 12, _Action.backup),
@@ -549,6 +551,11 @@ void _openModule(BuildContext context, _Module module, VoidCallback onOpenWorkfl
     push(const StudioScreen());
     return;
   }
+  if (module.action == _Action.nursery) {
+    // Needs no project: the song, pictures and prompts are kept on this phone; the video comes from the user's own backend.
+    push(const NurseryScreen());
+    return;
+  }
   if (module.action == _Action.newsVideo) {
     // Needs no project: the video comes from the user's own backend.
     push(const NewsVideoScreen());
@@ -590,6 +597,7 @@ void _openModule(BuildContext context, _Module module, VoidCallback onOpenWorkfl
     case _Action.mediaStudio:
     case _Action.news:
     case _Action.newsVideo:
+    case _Action.nursery:
     case _Action.backup:
     case _Action.none:
       break;

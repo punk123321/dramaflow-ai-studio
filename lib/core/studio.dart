@@ -18,6 +18,7 @@ class StudioFile {
   bool get isVideo => kind == 'video';
   bool get isSrt => kind == 'srt';
   bool get isImage => kind == 'image';
+  bool get isAudio => kind == 'audio';
 }
 
 class StudioLibrary {
@@ -297,6 +298,38 @@ Map<String, Object?> studioTranscribeRequest({required String file, String srcLa
       'src_lang': srcLang,
       'whisper_model': model,
       'whisper_vad': vad,
+    };
+
+/// Lyrics timed to a song: writes `<song>_karaoke.ass` (each word fills as it is sung) and a `.srt` into the backend library.
+/// [mode] 'lyrics' shares the song over the given lyrics by line length; 'whisper' lets Whisper listen to the song.
+Map<String, Object?> studioKaraokeRequest({required String file, String lyrics = '', String mode = 'lyrics', String ratio = '16:9', String font = 'Padauk', String srcLang = 'auto'}) => {
+      'op': 'karaoke',
+      'file': file,
+      'lyrics': lyrics,
+      'karaoke_mode': mode == 'whisper' ? 'whisper' : 'lyrics',
+      'ratio': ratio,
+      'font': font,
+      'src_lang': srcLang,
+    };
+
+/// The song video: the library pictures / clips in [files] (in order) over the song [file], with [lyricsFile] (.ass / .srt)
+/// burned in. [durations] are the planned weights per scene (scaled to the song on the backend).
+Map<String, Object?> studioNurseryRequest({
+  required String file,
+  required List<String> files,
+  String lyricsFile = '',
+  List<double> durations = const [],
+  String ratio = '16:9',
+  String font = 'Padauk',
+}) =>
+    {
+      'op': 'nursery',
+      'file': file,
+      'files': files,
+      'srt_file': lyricsFile,
+      'durations': durations,
+      'ratio': ratio,
+      'font': font,
     };
 
 const whisperModels = <(String, String)>[

@@ -144,4 +144,18 @@ void main() {
       expect(all.contains(bad), isFalse, reason: bad);
     }
   });
+
+  test('karaoke and nursery requests', () {
+    final k = studioKaraokeRequest(file: 'song.mp3', lyrics: 'la la', mode: 'whisper', ratio: '9:16');
+    expect(k['op'], 'karaoke');
+    expect(k['karaoke_mode'], 'whisper');
+    expect(k['ratio'], '9:16');
+    expect(studioKaraokeRequest(file: 's.mp3', mode: 'anything')['karaoke_mode'], 'lyrics');
+    final n = studioNurseryRequest(file: 'song.mp3', files: ['a.png', 'b.mp4'], lyricsFile: 'k.ass', durations: [1, 2]);
+    expect(n['op'], 'nursery');
+    expect(n['files'], ['a.png', 'b.mp4']);
+    expect(n['srt_file'], 'k.ass');
+    expect(n['durations'], [1, 2]);
+    expect(const StudioFile(name: 's.mp3', size: 1, kind: 'audio', mtime: 0).isAudio, isTrue);
+  });
 }
