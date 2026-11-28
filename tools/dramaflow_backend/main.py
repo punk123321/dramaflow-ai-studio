@@ -547,7 +547,7 @@ def selftest(req: SelfTestRequest, x_app_token: Optional[str] = Header(default=N
 
 # ---- Creator Studio ---------------------------------------------------------
 STUDIO_DIR = Path(os.environ.get("DF_STUDIO_DIR") or (Path(tempfile.gettempdir()) / "dramaflow_studio"))
-STUDIO_OPS = ("download", "split", "translate", "subtitle", "zip", "youtube", "transcribe", "render")
+STUDIO_OPS = ("download", "split", "translate", "subtitle", "zip", "youtube", "transcribe", "render", "karaoke", "nursery")
 STUDIO_FLAGS: dict = {}  # job id -> {"cancel": bool, "pause": bool}
 
 
@@ -586,6 +586,11 @@ class StudioRequest(BaseModel):
     whisper_vad: bool = True
     # render: the app's render job (see render_core.py)
     job: dict = {}
+    # children's song video (karaoke + nursery ops)
+    lyrics: str = ""
+    karaoke_mode: str = "lyrics"
+    ratio: str = "16:9"
+    durations: List[float] = []
     # zip / youtube
     files: List[str] = []
     zip_name: str = ""
@@ -642,7 +647,7 @@ def run_studio_job(job_id: str, req: StudioRequest):
         STUDIO_DIR.mkdir(parents=True, exist_ok=True)
         _set(job_id, status="running", stage="စတင်နေတယ်", progress=1)
         fn = {"download": so.op_download, "split": so.op_split, "translate": so.op_translate,
-              "subtitle": so.op_subtitle_video, "zip": so.op_zip, "youtube": so.op_youtube, "transcribe": so.op_transcribe, "render": so.op_render}[req.op]
+              "subtitle": so.op_subtitle_video, "zip": so.op_zip, "youtube": so.op_youtube, "transcribe": so.op_transcribe, "render": so.op_render, "karaoke": so.op_karaoke, "nursery": so.op_nursery}[req.op]
         result = fn(env, req)
         _set(job_id, status="done", stage="ပြီးပြီ", progress=100, result=result)
     except so.Canceled:

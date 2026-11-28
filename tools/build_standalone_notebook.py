@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "tools" / "dramaflow_backend"
 NB = ROOT / "tools" / "dramaflow_recap_colab_standalone.ipynb"
-FILES = ["main.py", "recap_core.py", "tts_text.py", "ingest_core.py", "studio_core.py", "render_core.py", "studio_ops.py"]
+FILES = ["main.py", "recap_core.py", "tts_text.py", "ingest_core.py", "studio_core.py", "render_core.py", "nursery_core.py", "studio_ops.py"]
 
 INTRO = """# DramaFlow Backend (Colab) — Recap + Link ဆွဲ + Creator Studio
 GitHub branch မလိုဘူး၊ backend ကုဒ်အားလုံး ဒီ notebook ထဲမှာ ပါပြီးသား။ (Video Recap / Scene Recap "Auto" + Edge TTS + Self-test + **ဗီဒီယို link (YouTube/TikTok/Red Note/Bilibili) ဆွဲပေးတာ** + **Creator Studio** — download၊ ဖြတ်၊ စာတန်း ဘာသာပြန်၊ CC/Hardsub၊ ZIP၊ YouTube တင်)

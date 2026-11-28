@@ -87,13 +87,25 @@ class Library(Tmp):
 
     def test_upload_refusals(self):
         b = base64.b64encode(b"data").decode()
-        for name in ("evil.exe", "../x.srt", "a.mp4", ""):
+        for name in ("evil.exe", "../x.srt", "a.zip", "a.ass", ""):
             with self.assertRaises(ValueError, msg=name):
                 so.save_upload(self.lib, name, b)
         with self.assertRaises(ValueError):
             so.save_upload(self.lib, "a.srt", "")
         with self.assertRaises(ValueError):
             so.save_upload(self.lib, "a.srt", base64.b64encode(b"0" * (so.MAX_UPLOAD_BYTES + 1)).decode())
+
+    def test_upload_song_and_short_clip_have_a_bigger_limit(self):
+        b = base64.b64encode(b"data").decode()
+        self.assertEqual(so.save_upload(self.lib, "song.mp3", b), "song.mp3")
+        self.assertEqual(so.save_upload(self.lib, "clip1.mp4", b), "clip1.mp4")
+        # more than the 8 MB small-file limit is fine for a song, but not more than the media limit
+        big = base64.b64encode(b"0" * (so.MAX_UPLOAD_BYTES + 10)).decode()
+        self.assertEqual(so.save_upload(self.lib, "long.wav", big), "long.wav")
+        with self.assertRaises(ValueError):
+            so.save_upload(self.lib, "huge.mp4", base64.b64encode(b"0" * (so.MAX_UPLOAD_MEDIA_BYTES + 1)).decode())
+        with self.assertRaises(ValueError):  # pictures stay at the small limit
+            so.save_upload(self.lib, "big.png", big)
 
     def test_file_path_is_a_plain_library_file(self):
         (self.lib / "a.mp4").write_bytes(b"0")

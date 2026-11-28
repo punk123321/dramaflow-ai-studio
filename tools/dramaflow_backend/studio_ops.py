@@ -22,11 +22,13 @@ from typing import Callable, List, Optional
 import queue
 import tempfile
 
+import nursery_core as nc
 import render_core as rc
 import studio_core as sc
 from ingest_core import check_url, classify, cookie_note, cookies_problem, cookies_source, parse_ffmpeg_duration
 
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # small files from the phone (subtitles, thumbnails); videos never travel this way
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # small files from the phone (subtitles, pictures)
+MAX_UPLOAD_MEDIA_BYTES = 24 * 1024 * 1024  # a finished song or a short AI clip (sent as base64, so keep it small); long videos never travel this way
 MIN_FREE_BYTES = 1024**3
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp")
 MIME = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".mkv": "video/x-matroska", ".avi": "video/x-msvideo",
@@ -89,16 +91,17 @@ def file_path(lib: Path, name: str, want=None) -> Path:
 
 def save_upload(lib: Path, name: str, data_b64: str) -> str:
     """A small file from the phone (subtitles, a thumbnail) into the library. Returns the stored name."""
-    if not sc.safe_name(name or "") or kind(name) not in ("srt", "image"):
-        raise ValueError("စာတန်း (.srt) သို့မဟုတ် ပုံ (.jpg/.png) ဖိုင်ပဲ တင်လို့ရတယ်")
+    if not sc.safe_name(name or "") or kind(name) not in ("srt", "image", "audio", "video"):
+        raise ValueError("စာတန်း (.srt)၊ ပုံ (.jpg/.png)၊ သီချင်း (.mp3/.wav) သို့မဟုတ် clip အတိုလေး (.mp4) ဖိုင်ပဲ တင်လို့ရတယ်")
     try:
         raw = base64.b64decode(data_b64 or "", validate=False)
     except Exception:
         raise ValueError("ဖိုင်ဒေတာ မဖတ်နိုင်ဘူး")
     if not raw:
         raise ValueError("ဖိုင် အလွတ်ဖြစ်နေတယ်")
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise ValueError("ဖိုင်ကြီးလွန်းတယ် (8 MB ထက် မကျော်ရ)")
+    limit = MAX_UPLOAD_MEDIA_BYTES if kind(name) in ("audio", "video") else MAX_UPLOAD_BYTES
+    if len(raw) > limit:
+        raise ValueError(f"ဖိုင်ကြီးလွန်းတယ် ({limit // 1048576} MB ထက် မကျော်ရ)")
     lib.mkdir(parents=True, exist_ok=True)
     stem, ext = os.path.splitext(name)
     final = sc.unique_name(sc.make_stem(stem), ext.lower(), [f.name for f in lib.iterdir()])
@@ -628,6 +631,114 @@ def op_render(env: Env, req) -> dict:
         raise RuntimeError("ဗီဒီယို မထွက်ဘူး")
     if job.get("censors"):
         notes.append(f"Blur box {len(job['censors'])} ခု ပါတယ် — ထုတ်ပြီးရင် မှုန်သွားတာကို ကိုယ်တိုင် ပြန်စစ်ပါ (အရင်းအမြစ်ပုံ အတိုင်း မှုန်ဖို့ ရည်ရွယ်ပေမယ့် ဖုန်း render နဲ့ အတိအကျ မတူနိုင်ဘူး)")
+    env.progress("ပြီးပြီ", 100)
+    return {"files": [name], "notes": notes, "errors": []}
+
+
+# ---- children's song video (karaoke lyrics + pictures / clips + the finished song) ---------------------------------
+def _lib_sub(env: Env, name: str) -> Path:
+    """A subtitle file in the library: .srt or .ass (the karaoke file this backend writes)."""
+    if not sc.safe_name(name or "") or not name.lower().endswith((".srt", ".ass")):
+        raise ValueError("စာတန်းဖိုင် (.ass / .srt) မဟုတ်ဘူး")
+    p = env.lib / name
+    if not p.is_file():
+        raise ValueError(f"'{name}' ဖိုင် မတွေ့ဘူး (Library ထဲ မရှိတော့ဘူး)")
+    return p
+
+
+def op_karaoke(env: Env, req) -> dict:
+    """Lyrics timed to the song, as .ass (each word fills as it is sung) and .srt, written into the library.
+    mode "lyrics": the person's own lyrics shared over the song by length (works for any language, only roughly on the beat).
+    mode "whisper": Whisper listens to the song and gives line and word times, with the text it heard (good for English /
+    Chinese, poor for sung Burmese; check the text)."""
+    audio = file_path(env.lib, req.file, ("audio", "video"))
+    mode = "whisper" if getattr(req, "karaoke_mode", "lyrics") == "whisper" else "lyrics"
+    lines = nc.lyric_lines(getattr(req, "lyrics", ""))
+    if mode == "lyrics" and not lines:
+        raise ValueError("သီချင်းစာသား မပါဘူး (Lyrics ကို paste လုပ်ပါ)")
+    env.progress("သီချင်းအရှည် ကြည့်နေတယ်", 3)
+    total = duration_ms(env, audio) / 1000.0
+    if total <= 0:
+        raise RuntimeError("သီချင်းအရှည် မဖတ်နိုင်ဘူး")
+    w, h = nc.size_for(getattr(req, "ratio", "16:9"))
+    notes: List[str] = []
+    cues: List[dict] = []
+    if mode == "whisper":
+        env.progress("Whisper ပြင်နေတယ် — ပထမဆုံးအကြိမ် model ဒေါင်းရလို့ ကြာနိုင်တယ်", 8)
+        try:
+            model, device = _load_whisper(sc.whisper_model_name(getattr(req, "whisper_model", "small")))
+        except ImportError:
+            raise RuntimeError("faster-whisper မတပ်ရသေးဘူး (Colab Cell 1 ကို ပြန် run ပါ)")
+        env.check()
+        segs, _info = model.transcribe(str(audio), language=sc.whisper_lang(getattr(req, "src_lang", "auto")), word_timestamps=True, vad_filter=True, beam_size=5)
+        found = []
+        for seg in segs:
+            env.check()
+            found.append(seg)
+            env.progress("သီချင်းကို နားထောင်နေတယ်", 10 + int(80 * min(float(seg.end or 0), total) / total))
+        cues = nc.cues_from_segments(found)
+        if cues:
+            notes.append(f"Whisper ({device}) နဲ့ စာကြောင်း {len(cues)} ခု — ကြားရတဲ့အတိုင်း ရေးတာမို့ စာလုံးအမှားပါနိုင်တယ်၊ သီချင်းဆိုထားရင် ပိုမှားတယ်")
+        else:
+            notes.append("Whisper က စာတစ်ကြောင်းမှ မရဘူး — ပေးထားတဲ့ lyrics ကိုပဲ အရှည်အလိုက် ခွဲထားတယ်")
+    if not cues:
+        if not lines:
+            raise RuntimeError("စာကြောင်း မရဘူး၊ Lyrics ကိုလည်း မပေးထားဘူး")
+        env.progress("Lyrics ကို သီချင်းအရှည်အတိုင်း ခွဲနေတယ်", 60)
+        cues = nc.proportional_cues(lines, total)
+        notes.append("Lyrics ကို စာကြောင်းအရှည် အလိုက် ခွဲထားတာ — အကြမ်းချိန်ပဲ၊ သီချင်းနဲ့ အတိအကျ မကိုက်နိုင်ဘူး။ ကိုက်မှု လိုရင် ထုတ်ပြီး ကြည့်ပြီး .srt ကို Subtitle Studio မှာ ပြင်ပါ")
+    stem = os.path.splitext(audio.name)[0]
+    existing = [f.name for f in env.lib.iterdir()]
+    ass_name = sc.unique_name(f"{stem}_karaoke", ".ass", existing)
+    srt_name = sc.unique_name(f"{stem}_karaoke", ".srt", existing + [ass_name])
+    (env.lib / ass_name).write_text(nc.ass_text(cues, w, h, getattr(req, "font", "Padauk") or "Padauk"), encoding="utf-8")
+    (env.lib / srt_name).write_text(nc.srt_text(cues), encoding="utf-8")
+    env.progress("ပြီးပြီ", 100)
+    return {"files": [ass_name, srt_name], "notes": notes, "errors": []}
+
+
+def op_nursery(env: Env, req) -> dict:
+    """The song video: the pictures / clips in `files` (in order) shown over the song in `file`, with karaoke lyrics from
+    `srt_file` (an .ass or .srt made by the karaoke op) when given. `durations` are the app's planned seconds per scene
+    (scaled to the song length); without them the scenes are equal. Everything is only read; the video is a new file."""
+    names = list(getattr(req, "files", []) or [])
+    if not names:
+        raise ValueError("ပုံ / clip မရွေးထားဘူး")
+    if len(names) > nc.MAX_ITEMS:
+        raise ValueError(f"ပုံ/clip {nc.MAX_ITEMS} ခုထက် မများရဘူး")
+    items = [str(file_path(env.lib, n, ("image", "video"))) for n in names]
+    audio = file_path(env.lib, req.file, ("audio",))
+    sub = _lib_sub(env, req.srt_file) if getattr(req, "srt_file", "") else None
+    free_ok(env.lib)
+    song = duration_ms(env, audio) / 1000.0
+    if song <= 0:
+        raise RuntimeError("သီချင်းအရှည် မဖတ်နိုင်ဘူး")
+    weights = [float(x) for x in (getattr(req, "durations", []) or [])]
+    durs = nc.plan_durations(len(items), song, weights if len(weights) == len(items) else None)
+    stem = re.sub(r"[^\w\-. ]", "_", os.path.splitext(audio.name)[0]).strip(" .") or "song"
+    name = sc.unique_name(f"{stem}_video", ".mp4", [f.name for f in env.lib.iterdir()])
+    out = env.lib / name
+    gpu = has_nvenc(env.ffmpeg)
+    notes = ["GPU (nvenc) နဲ့ ထုတ်တယ်" if gpu else "CPU နဲ့ ထုတ်တယ် (GPU runtime ရွေးရင် ပိုမြန်တယ်)"]
+    if len(weights) not in (0, len(items)):
+        notes.append("scene အချိန် အရေအတွက် ပုံအရေအတွက်နဲ့ မကိုက်လို့ အညီအမျှ ခွဲထားတယ်")
+    with tempfile.TemporaryDirectory() as tmp:
+        sub_path = None
+        if sub is not None:
+            sub_path = os.path.join(tmp, "lyrics" + sub.suffix.lower())
+            shutil.copyfile(sub, sub_path)
+        cmd = nc.build_slideshow_cmd(env.ffmpeg, items, str(audio), str(out), durs, song, getattr(req, "ratio", "16:9"), 30, sub_path,
+                                     getattr(req, "font", "Padauk") or "Padauk", gpu)
+        env.progress("ပုံတွေနဲ့ သီချင်း ပေါင်းနေတယ်", 1)
+        try:
+            run_ffmpeg_progress(env, cmd, int(song * 1000), "ဗီဒီယို ထုတ်နေတယ်")
+        except BaseException:
+            out.unlink(missing_ok=True)
+            raise
+    if not out.exists() or out.stat().st_size < 1024:
+        out.unlink(missing_ok=True)
+        raise RuntimeError("ဗီဒီယို မထွက်ဘူး")
+    notes.append("ပုံ/clip ကို သီချင်းအချိန်ပေါ် ခွဲပြထားတာ — ပုံတွေ မူပိုင်ခွင့်၊ AI ဖော်ပြချက်ကို upload မတင်ခင် စစ်ပါ")
     env.progress("ပြီးပြီ", 100)
     return {"files": [name], "notes": notes, "errors": []}
 
