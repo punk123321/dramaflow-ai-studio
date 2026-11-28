@@ -411,6 +411,7 @@ const nurseryTempos = <String>[
   'Lullaby (72 BPM)',
   'Cheerful Marching (112 BPM)',
   'Calm Lullaby (76 BPM)',
+  'Upbeat & Bouncy (115 BPM)',
 ];
 
 /// The image-to-video tools the video prompt is tuned for (the name is only written into the prompt).
