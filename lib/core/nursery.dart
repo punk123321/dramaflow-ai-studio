@@ -29,7 +29,8 @@ enum NurseryStyle {
   cartoon3d('3D cartoon', 'cute 3D animated cartoon, soft rounded shapes, bright cheerful colors, smooth lighting'),
   flat2d('2D flat cartoon', 'simple flat 2D cartoon, bold outlines, bright primary colors, clean shapes'),
   storybook('Watercolor storybook', 'soft watercolor children\'s storybook illustration, warm pastel colors, gentle textures'),
-  paperCut('Paper-cut / craft', 'colorful layered paper-cut craft style, handmade look, soft shadows');
+  paperCut('Paper-cut / craft', 'colorful layered paper-cut craft style, handmade look, soft shadows'),
+  clay('Clay / stop-motion', 'soft handmade claymation stop-motion look, tactile clay texture, warm studio lighting, gentle rounded shapes');
 
   const NurseryStyle(this.label, this.english);
 
@@ -52,6 +53,42 @@ enum NurseryLang {
   final String words;
 }
 
+/// The music style (from the user's v3 notebook). [words] goes into the song prompts.
+enum NurseryGenre {
+  kidsPop('🎉 Upbeat Kids Pop & Ukulele', 'upbeat kids pop with ukulele, bright, bouncy, catchy hook'),
+  dancePop('💃 Funky Dance Party Pop', 'funky dance party pop, groovy bass, hand claps, energetic'),
+  comedy('😂 Playful Cartoon Comedy', 'playful cartoon comedy bounce, silly, xylophone, slide whistle'),
+  march('🥁 Cheerful Marching Band', 'cheerful marching band, snare drum, brass, counting rhythm'),
+  island('🌴 Tropical Sunny Island Beat', 'relaxed tropical island beat, marimba, happy'),
+  lullaby('🌙 Gentle Bedtime Lullaby', 'gentle acoustic lullaby, music box, soft guitar, dreamy'),
+  synth('🚀 Synth-Pop Adventure', 'synth-pop space adventure, sparkly synths, exciting'),
+  festive('🇲🇲 Myanmar Festive Kids Vibe', 'Myanmar traditional festive kids vibe, cheerful drums, xylophone, warm');
+
+  const NurseryGenre(this.label, this.words);
+
+  final String label;
+  final String words;
+}
+
+/// Song ideas for the 🎲 button (the user's own list from the v3 notebook).
+const nurserySongIdeas = <String>[
+  'Silly Monkey Lost His Banana — funny counting & sharing adventure in the jungle',
+  'Bubbly Brush Your Teeth Party — energetic morning routine brushing up and down',
+  'Freeze Dance Dinosaur Stomp — fun action song where kids dance and freeze like statues',
+  'The Sneezing Baby Elephant — hilarious musical story about covering sneezes and giggling',
+  '1-2-3 Space Rocket Blast Off — counting planets and stars on a rainbow spaceship',
+  'Wash Your Hands Splash Song — soapy bubbles washing away sneaky little germs',
+  'Color Mixing Magic Paint — mixing red, yellow, and blue to discover rainbow colors',
+  'Clean Up Toy Train — cheerful helper song putting toys away before playtime ends',
+  'Who Ate the Rainbow Cookie? — playful mystery rhyme with cute animal friends',
+  'Jump Like a Frog, Flap Like a Duck — animal movement workout song for toddlers',
+  'Goodnight Little Glowing Star — dreamy calm bedtime lullaby floating on pastel clouds',
+  'Wheels on the Rainbow Bus — classic upbeat ride through candy hills and sunny meadows',
+  'သနပ်ခါးပါးကွက်လေးနဲ့ ကျောင်းသွားမယ် — cheerful Myanmar morning school routine song',
+  'ရွှေဆင်လေးရဲ့ ပျော်ပွဲရွှင်ပွဲ — playful Myanmar animal friends singing and dancing together',
+  'လက်ဆေးကြမယ် ရေပူဖောင်းလေးတွေ — fun Burmese & English bilingual hand-washing song',
+];
+
 String _clean(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 String _topic(NurseryTheme theme, String custom) {
@@ -67,6 +104,10 @@ String buildLyricsPrompt({
   NurseryLang lang = NurseryLang.english,
   int verses = 3,
   String character = '',
+  NurseryGenre? genre,
+  String tempo = '',
+  String twist = '',
+  bool withStyle = false,
 }) {
   final n = verses.clamp(1, 8).toInt();
   final who = _clean(character);
@@ -74,8 +115,35 @@ String buildLyricsPrompt({
   b.writeln('Write the lyrics of a NEW, ORIGINAL nursery rhyme for toddlers (ages 2 to 5) about: ${_topic(theme, custom)}.');
   b.writeln('Language: ${lang.words}.');
   if (who.isNotEmpty) b.writeln('Main character (use this name): $who.');
+  if (withStyle) {
+    if (genre != null) b.writeln('Music genre and vibe: ${genre.words}.');
+    if (_clean(tempo).isNotEmpty) b.writeln('Tempo / mood: ${_clean(tempo)}.');
+    if (_clean(twist).isNotEmpty) b.writeln('Special creative twist: ${_clean(twist)}.');
+  }
   b.writeln('Structure: $n verses of 4 short lines each, plus a 2-line chorus repeated after every verse. Very simple words, strong rhyme, a steady sing-along rhythm, easy to repeat, gentle and happy.');
   b.writeln('Rules: do not copy or paraphrase any existing song, rhyme, character or brand. Nothing scary, violent or unsafe, no real names. No advertising and no web links.');
+  if (withStyle) {
+    b.writeln('Put simple animation action cues in their own line in parentheses, for example (clap hands) or (jump high), so the scenes are easy to animate.');
+    b.writeln('Output format, exactly (no other text, no explanations):');
+    b.writeln('SUNO STYLE:');
+    b.writeln('(English only, under 180 characters: the exact BPM, specific instruments, the vocal style, a clean studio mix. Do not name any artist, song or brand)');
+    b.writeln('');
+    b.writeln('LYRICS:');
+    b.writeln('[Intro]');
+    b.writeln('...');
+    b.writeln('[Verse 1]');
+    b.writeln('...');
+    b.writeln('[Chorus]');
+    b.writeln('...');
+    b.writeln('[Verse 2]');
+    b.writeln('...');
+    b.writeln('[Action break]');
+    b.writeln('...');
+    b.writeln('[Final Chorus]');
+    b.writeln('...');
+    b.write('[Outro]');
+    return b.toString();
+  }
   b.writeln('Output format, exactly (no other text, no explanations, no markdown):');
   b.writeln('[Verse 1]');
   b.writeln('line');
@@ -92,11 +160,15 @@ String buildLyricsPrompt({
 }
 
 /// Style words for a music AI (Suno, Udio and similar). No artist or song names on purpose.
-String buildMusicPrompt({NurseryLang lang = NurseryLang.english, int bpm = 100, bool female = true, String mood = 'cheerful'}) {
+String buildMusicPrompt({NurseryLang lang = NurseryLang.english, int bpm = 100, bool female = true, String mood = 'cheerful', NurseryGenre? genre}) {
   final m = _clean(mood).isEmpty ? 'cheerful' : _clean(mood);
   final b = StringBuffer();
   b.writeln("$m children's nursery rhyme, simple catchy melody, ${female ? 'warm friendly female' : 'warm friendly male'} vocal, ${lang.words.split(' ').first} lyrics,");
-  b.writeln('ukulele, glockenspiel, soft claps and light percussion, $bpm BPM, sing-along, major key, clean and bright, no explicit content.');
+  final gentle = bpm <= 80 || genre == NurseryGenre.lullaby;
+  b.writeln(gentle
+      ? 'music box, warm acoustic guitar, soft glockenspiel, soothing, dreamy, $bpm BPM, gentle sing-along, major key, clean studio mix, no explicit content.'
+      : 'ukulele, glockenspiel, soft claps and light percussion, $bpm BPM, sing-along, major key, clean and bright, no explicit content.');
+  if (genre != null) b.writeln('Style: ${genre.words}.');
   b.write('Original melody. Do not imitate any existing song, artist or brand.');
   return b.toString();
 }
@@ -169,10 +241,13 @@ class NurseryScene {
   String get text => lines.join(' / ');
 }
 
-final _tag = RegExp(r'^\s*[\[\(（【]\s*([^\]\)）】]{1,40}?)\s*[\]\)）】]\s*:?\s*$');
+final _tag = RegExp(r'^\s*[\[（【]\s*([^\]）】]{1,40}?)\s*[\]）】]\s*:?\s*$');
+
+/// "(clap hands)" on a line of its own (plain ASCII only) is an animation cue for the person, not a sung line.
+final _cue = RegExp(r'^\(\s*[\x20-\x7E]{1,60}\)$');
 
 /// Reads the lyrics an AI wrote. A scene starts at a "[Verse 1]" style heading or after a blank line.
-/// Headings are kept as labels and are not sung. Stray markdown (**, #, -) is removed. At most [maxScenes] scenes
+/// Headings are kept as labels and are not sung; a line that is only a cue such as "(clap hands)" is dropped. Stray markdown (**, #, -) is removed. At most [maxScenes] scenes
 /// (the rest are added to the last one so no lyric line is lost).
 List<NurseryScene> splitScenes(String lyrics, {int maxScenes = 40}) {
   final out = <NurseryScene>[];
@@ -195,6 +270,7 @@ List<NurseryScene> splitScenes(String lyrics, {int maxScenes = 40}) {
       flush();
       continue;
     }
+    if (_cue.hasMatch(line)) continue;
     final m = _tag.firstMatch(line);
     if (m != null) {
       flush();
@@ -211,6 +287,46 @@ List<NurseryScene> splitScenes(String lyrics, {int maxScenes = 40}) {
     return keep;
   }
   return out;
+}
+
+/// What an AI answered to the songwriter prompt: the style text for the song AI and the lyrics.
+class NurseryAnswer {
+  const NurseryAnswer({this.style = '', required this.lyrics});
+
+  final String style;
+  final String lyrics;
+}
+
+String _unfence(String t) => t.replaceAll(RegExp(r'```[a-zA-Z]*'), '').trim();
+
+/// Splits a pasted answer into "SUNO STYLE:" and "LYRICS:" (also "STYLE PROMPT:", "SONG LYRICS:", with **bold** or ###).
+/// Without a LYRICS heading the lyrics start at the first [Intro] / [Verse]; with no sign of either the whole text
+/// is the lyrics, so a plain pasted song always works.
+NurseryAnswer splitSongAnswer(String raw) {
+  final text = raw.replaceAll('\r\n', '\n').trim();
+  if (text.isEmpty) return const NurseryAnswer(lyrics: '');
+  var style = '';
+  var lyrics = text;
+  final head = RegExp(r'^[ \t]*(?:\*\*|#{1,4}\s*)?(?:SUNO\s*STYLE|STYLE\s*PROMPT|STYLE)(?:\*\*)?\s*:?(?:\*\*)?[ \t]*\n?', caseSensitive: false, multiLine: true);
+  final lyr = RegExp(r'^[ \t]*(?:\*\*|#{1,4}\s*)?(?:SONG\s*LYRICS|LYRICS)(?:\*\*)?\s*:?(?:\*\*)?[ \t]*\n', caseSensitive: false, multiLine: true);
+  final lm = lyr.firstMatch(text);
+  if (lm != null) {
+    lyrics = _unfence(text.substring(lm.end));
+    final before = text.substring(0, lm.start);
+    final sm = head.firstMatch(before);
+    if (sm != null) style = _unfence(before.substring(sm.end)).replaceAll(RegExp(r'\s+'), ' ').trim();
+  } else {
+    final tag = RegExp(r'\[\s*(?:Intro|Verse)', caseSensitive: false).firstMatch(text);
+    if (tag != null) {
+      lyrics = _unfence(text.substring(tag.start));
+      final before = text.substring(0, tag.start);
+      final sm = head.firstMatch(before);
+      if (sm != null) style = _unfence(before.substring(sm.end)).replaceAll(RegExp(r'\s+'), ' ').trim();
+    } else {
+      lyrics = _unfence(text);
+    }
+  }
+  return NurseryAnswer(style: style, lyrics: lyrics);
 }
 
 /// Seconds for each scene when no real timing is known: the song length is shared by the number of lyric
@@ -275,13 +391,30 @@ const nurseryCharacters = <NurseryCharacter>[
   NurseryCharacter('🐘 ရွှေဆင်လေး (Shwe Sin)', 'Shwe Sin, a cute baby golden-brown Asian elephant with big happy eyes, wearing a traditional crimson-and-gold Myanmar festive vest and tiny golden bell collar'),
   NurseryCharacter('🎎 ဖိုးဝရုပ်လေး (Pho Wa)', 'Pho Wa, an adorable 3D animated traditional Myanmar Pho Wa doll character with twin topknot hair buns, Thanaka patches on cheeks, wearing a colorful silk vest and paso'),
   NurseryCharacter('👧 ညီမလေး မေမေ (Myanmar Girl)', 'May May, a sweet 4-year-old Myanmar girl with neat Thanaka patches on her cheeks, white jasmine flowers in her hair, wearing a pastel pink traditional Myanmar blouse and htamein'),
+  NurseryCharacter('👫 Maya & Max — Twin Siblings', 'Maya and Max, adorable 4-year-old twin sister and brother with matching joyful smiles, Maya in a pink polka-dot dress and Max in a blue rocket-ship sweater'),
+  NurseryCharacter('👩‍🏫 Miss Clara — Preschool Teacher', 'Miss Clara, a warm and expressive young preschool teacher with round glasses, braided hair, wearing a pastel mint cardigan over a floral dress'),
+  NurseryCharacter('👨‍👩‍👧 Mommy & Daddy — Loving Parents', 'Mommy and Daddy, friendly warm-hearted young parents with gentle smiles, casual colorful pastel sweaters, encouraging and caring expressions'),
+  NurseryCharacter('🦁 Leo Jr. — Baby Lion Cub', 'Leo Jr., a cute baby lion cub with a tiny fluffy orange tuft mane, big amber eyes, wearing a miniature explorer vest'),
+  NurseryCharacter('🐵 Momo — Silly Little Monkey', 'Momo, a playful baby brown monkey with big expressive ears, curly tail, wearing a bright yellow banana-patterned t-shirt'),
+  NurseryCharacter('🚒 Ember — Little Fire Truck', 'Ember, a cute chibi red fire truck with big friendly windshield eyes, a cheerful bumper smile, shiny yellow ladder, and glowing blue siren light'),
+  NurseryCharacter('🚌 Sunny — Yellow School Bus', 'Sunny, a bright yellow rounded chibi school bus with big joyful cartoon eyes, rosy headlights, and a friendly wave from its side mirror'),
+  NurseryCharacter('☁️ Nimbus — Fluffy Happy Cloud', 'Nimbus, a soft floating white-and-pastel-pink baby cloud character with cute rosy cheeks and a tiny rainbow crown'),
+  NurseryCharacter('🧚 Luna — Tiny Garden Fairy', 'Luna, a cute miniature toddler garden fairy with translucent shimmering butterfly wings, flower-petal dress, and a glowing dandelion wand'),
+  NurseryCharacter('👦 မောင်လေး အောင်အောင် (Myanmar Boy)', 'Aung Aung, a cheerful 4-year-old Myanmar boy with round Thanaka cheek patches, bright eyes, wearing a traditional white collarless shirt (taikpon) and colorful checkered longyi'),
 ];
 
 /// Tempo choices (the number is the BPM written into the music prompt).
-const nurseryTempos = <String>['Upbeat & Bouncy (118 BPM)', 'Energetic Playful (124 BPM)', 'Gentle & Sweet (96 BPM)', 'Lullaby (72 BPM)'];
+const nurseryTempos = <String>[
+  'Upbeat & Bouncy (118 BPM)',
+  'Energetic Playful (124 BPM)',
+  'Gentle & Sweet (96 BPM)',
+  'Lullaby (72 BPM)',
+  'Cheerful Marching (112 BPM)',
+  'Calm Lullaby (76 BPM)',
+];
 
 /// The image-to-video tools the video prompt is tuned for (the name is only written into the prompt).
-const nurseryVideoTools = <String>['Google Flow (Veo 3.1)', 'Kling AI / Hailuo', 'Runway', 'Pika'];
+const nurseryVideoTools = <String>['Google Flow (Veo 3.1)', 'Kling AI / Hailuo', 'Runway', 'Pika', 'Vidu / PixVerse'];
 
 /// The BPM written in a tempo text such as "Upbeat & Bouncy (118 BPM)"; [fallback] when there is none.
 int bpmOf(String tempo, {int fallback = 115}) {
@@ -302,6 +435,7 @@ class NurseryPreset {
     this.tempo = 'Upbeat & Bouncy (118 BPM)',
     this.videoTool = 'Google Flow (Veo 3.1)',
     this.scenes = 6,
+    this.style = NurseryStyle.cartoon3d,
   });
 
   final String label;
@@ -313,6 +447,7 @@ class NurseryPreset {
   final String tempo;
   final String videoTool;
   final int scenes;
+  final NurseryStyle style;
 }
 
 /// Indexes point into [nurseryCharacters].
@@ -342,6 +477,26 @@ const nurseryPresets = <NurseryPreset>[
     lang: NurseryLang.burmese,
     tempo: 'Upbeat & Bouncy (115 BPM)',
   ),
+  NurseryPreset(
+    label: '🚂 Rainbow Counting Train',
+    topic: 'A magical rainbow steam train picking up cute friends and counting colorful fruits from 1 to 5 across candy hills',
+    hero: 9,
+    friend1: 5,
+    friend2: 11,
+    tempo: 'Cheerful Marching (112 BPM)',
+    scenes: 8,
+    style: NurseryStyle.clay,
+  ),
+  NurseryPreset(
+    label: '🌙 Bedtime Stars Lullaby',
+    topic: 'Gentle bedtime lullaby saying goodnight to the glowing moon, sleepy clouds, and twinkling stars',
+    hero: 4,
+    friend1: 12,
+    friend2: 23,
+    lang: NurseryLang.bilingual,
+    tempo: 'Calm Lullaby (76 BPM)',
+    style: NurseryStyle.storybook,
+  ),
 ];
 
 /// "Hero alongside Friend1 and Friend2" for a picture prompt; empty parts are left out.
@@ -352,7 +507,7 @@ String castText(String hero, [String friend1 = '', String friend2 = '']) {
   return h + (a.isEmpty ? '' : ' alongside $a') + (b.isEmpty ? '' : ' and $b');
 }
 
-/// One beat of the story the scenes follow (the starter's 9-step arc). [camera] is the move for the video tool.
+/// One beat of the story the scenes follow (the starter's arc, 12 steps from the v3 notebook; the last one is always the goodbye). [camera] is the move for the video tool.
 class NurseryBeat {
   const NurseryBeat(this.action, this.line, this.camera, {this.heroOnly = false});
 
@@ -371,8 +526,38 @@ const nurseryArc = <NurseryBeat>[
   NurseryBeat('Playful bubble surprise making {cast} giggle', 'Haha, look at those bouncing bubbles!', 'Playful upward tilt following floating bubbles'),
   NurseryBeat('Teamwork moment where {cast} help each other', 'Helping friends makes every day bright!', 'Smooth side-scrolling shot along a rainbow path'),
   NurseryBeat('Musical jam session with xylophone and mini drums', 'Ting-a-ling and boom-boom-clap!', 'Energetic push-in matching musical beats'),
+  NurseryBeat('Big second chorus jump party under a pastel rainbow arch with {cast}', 'Jump up high and spin around!', 'Wide sweeping crane shot capturing joyful leaps'),
+  NurseryBeat('Sweet sharing and kindness close-up with warm hugs between {cast}', 'Sharing kindness, sharing cheer!', 'Warm slow dolly-in with golden rim lighting'),
+  NurseryBeat('Celebration buildup with pastel balloons and twinkling stars for {cast}', 'Hooray! You did an amazing job!', 'Lively upward tilt following rising balloons'),
   NurseryBeat('Grand finale celebration with balloons and warm goodbye wave', 'Yay! Great job! Bye-bye friends!', 'Slow crane-up as colorful balloons rise into sky'),
 ];
+
+/// Which beats of the arc a plan of [n] scenes uses: always the welcome first and the goodbye last, the rest spread
+/// evenly between them without repeating (the v3 notebook's rule). Above 12 the arc repeats.
+List<int> arcPick(int n) {
+  final len = nurseryArc.length;
+  if (n <= 0) return const [];
+  if (n == 1) return const [0];
+  if (n > len) return [for (var i = 0; i < n; i++) i % len];
+  if (n == len) return [for (var i = 0; i < len; i++) i];
+  final mids = n - 2;
+  final used = <int>{0, len - 1};
+  final out = <int>[];
+  final step = (len - 2) / mids;
+  for (var j = 0; j < mids; j++) {
+    var c = (1 + (j * step).round()).clamp(1, len - 2).toInt();
+    while (used.contains(c) && c < len - 2) {
+      c++;
+    }
+    while (used.contains(c) && c > 1) {
+      c--;
+    }
+    used.add(c);
+    out.add(c);
+  }
+  out.sort();
+  return [0, ...out, len - 1];
+}
 
 /// One scene of the finished plan: what happens, the line under it, and the two prompts.
 class NurseryPackScene {
@@ -391,7 +576,7 @@ class NurseryPackScene {
   final String videoPrompt;
 }
 
-/// The scene plan: [count] scenes (4 to 9 unless [minCount] / [maxCount] say otherwise; the arc repeats if needed). When [lyricScenes] are given their text becomes
+/// The scene plan: [count] scenes (4 to 12 unless [minCount] / [maxCount] say otherwise; the arc repeats if needed). When [lyricScenes] are given their text becomes
 /// the line of each scene in order (a scene without lyrics keeps the arc's line). The topic is shortened to
 /// 60 characters inside the action text so a long Burmese sentence does not swamp the prompt.
 List<NurseryPackScene> buildPackScenes({
@@ -401,7 +586,7 @@ List<NurseryPackScene> buildPackScenes({
   String friend2 = '',
   int count = 6,
   int minCount = 4,
-  int maxCount = 9,
+  int maxCount = 12,
   NurseryStyle style = NurseryStyle.cartoon3d,
   String ratio = '16:9',
   String videoTool = 'Google Flow (Veo 3.1)',
@@ -419,8 +604,9 @@ List<NurseryPackScene> buildPackScenes({
   if (shortTopic.length > 60) shortTopic = '${shortTopic.substring(0, 60).trim()}…';
   String fill(String t) => t.replaceAll('{cast}', names).replaceAll('{hero}', heroName).replaceAll('{topic}', shortTopic.isEmpty ? 'a happy song' : shortTopic);
   final out = <NurseryPackScene>[];
+  final pick = arcPick(n);
   for (var i = 0; i < n; i++) {
-    final beat = nurseryArc[i % nurseryArc.length];
+    final beat = nurseryArc[pick[i]];
     final action = fill(beat.action);
     final line = i < lyricScenes.length && lyricScenes[i].lines.isNotEmpty ? lyricScenes[i].text : fill(beat.line);
     final who = beat.heroOnly ? hero : cast;
@@ -438,27 +624,90 @@ List<NurseryPackScene> buildPackScenes({
   return out;
 }
 
+/// One picture prompt for a character sheet (a reference picture the person makes once and reuses in every scene).
+class NurseryCastSheet {
+  const NurseryCastSheet({required this.role, required this.name, required this.prompt});
+
+  final String role;
+  final String name;
+  final String prompt;
+}
+
+/// A sheet for the hero, one for each friend and, with two or more characters, a height-comparison lineup
+/// (the v3 notebook's cast sheets). Empty friends are skipped.
+List<NurseryCastSheet> buildCastSheets({required String hero, String friend1 = '', String friend2 = '', NurseryStyle style = NurseryStyle.cartoon3d}) {
+  final out = <NurseryCastSheet>[];
+  final cast = <String>[];
+  void add(String role, String desc) {
+    final d = _clean(desc);
+    if (d.isEmpty) return;
+    cast.add(d);
+    out.add(NurseryCastSheet(role: role, name: NurseryCharacter('', d).shortName, prompt: buildCharacterPrompt(character: d, style: style)));
+  }
+
+  add('Hero', hero);
+  add('Friend 1', friend1);
+  add('Friend 2', friend2);
+  if (cast.length > 1) {
+    out.add(NurseryCastSheet(
+      role: 'Group lineup',
+      name: 'All ${cast.length} characters',
+      prompt: 'Full-body height comparison lineup of ORIGINAL children\'s cartoon characters: ${cast.join(' standing side-by-side with ')}. '
+          'Smiling forward on a clean studio backdrop, consistent scale. ${style.english}. '
+          'Do not copy any existing cartoon character, brand or logo. No text, no letters, no watermark.',
+    ));
+  }
+  return out;
+}
+
+/// Words to put in the "negative prompt" box of an image or video AI that has one.
+const nurseryNegativePrompt = 'scary, dark shadows, creepy eyes, distorted hands, extra fingers, text, letters, watermark, blurry, violence, realistic people, existing cartoon characters, logos';
+
 /// Title and tag ideas for the upload. Plain text, no claims about views or earnings.
 class NurserySeo {
-  const NurserySeo({required this.titles, required this.tags});
+  const NurserySeo({required this.titles, required this.tags, this.description = '', this.thumbs = const []});
 
   final List<String> titles;
   final String tags;
+  final String description;
+  final List<NurseryThumb> thumbs;
 }
 
-NurserySeo buildSeo({required String topic, required String hero}) {
+/// A thumbnail idea: the picture prompt (no text in the picture) and the words to add afterwards in an editor.
+class NurseryThumb {
+  const NurseryThumb({required this.concept, required this.overlay, required this.prompt});
+
+  final String concept;
+  final String overlay;
+  final String prompt;
+}
+
+NurserySeo buildSeo({required String topic, required String hero, String cast = '', NurseryStyle style = NurseryStyle.cartoon3d}) {
   final t = _clean(topic);
   final short = t.length > 45 ? '${t.substring(0, 45).trim()}…' : t;
+  final short40 = t.length > 40 ? '${t.substring(0, 40).trim()}…' : t;
   final h = hero.trim().isEmpty ? 'Friends' : NurseryCharacter('', hero).shortName;
+  final who = _clean(cast).isEmpty ? _clean(hero) : _clean(cast);
+  final subject = who.isEmpty ? 'a cute original cartoon character' : who;
+  String thumb(String scene) =>
+      'YouTube kids thumbnail, 16:9. $scene. ${style.english}, bright sunburst background, one clear focal point, readable at small size, '
+      'an empty area kept free for a title added later. No text, no letters, no watermark, no existing cartoon characters or logos.';
   return NurserySeo(
     titles: [
       '${short.isEmpty ? 'Sing Along' : short} | Nursery Rhymes & Kids Songs | $h',
-      'Clap & Sing Along! 🎵 ${t.length > 40 ? '${t.substring(0, 40).trim()}…' : t} | Toddler Animation',
+      'Clap & Sing Along! 🎵 ${short40.isEmpty ? 'Kids Song' : short40} | Toddler Animation',
+      'Kids Songs: ${short.isEmpty ? 'Sing Along' : short} | Cute Cartoon Animation',
     ],
     tags: 'nursery rhymes, kids songs, toddler learning, ${h.toLowerCase()}, sing along, kids animation',
+    description: 'Sing, dance, and learn with $h and friends!\n\nIn this episode: ${t.isEmpty ? 'a happy sing-along' : t}\n\n'
+        'The song and the pictures were made with AI tools.\n\n#NurseryRhymes #KidsSongs #ToddlerLearning #KidsAnimation',
+    thumbs: [
+      NurseryThumb(concept: 'Big happy close-up', overlay: 'SING & DANCE! 🎵', prompt: thumb('Joyful close-up of $subject with floating musical notes')),
+      NurseryThumb(concept: 'The whole cast celebrating', overlay: 'SING ALONG ⭐', prompt: thumb('$subject jumping in celebration with balloons and confetti')),
+      NurseryThumb(concept: 'Curious discovery', overlay: '1, 2, 3 GO! 🌈', prompt: thumb('$subject pointing excitedly at a glowing rainbow treasure box')),
+    ],
   );
 }
-
 
 /// Weights for the time of each scene when the backend shares the song over the lyrics by line length (the same rule as its
 /// "lyrics" karaoke: each line counts its characters, at least 4), so a scene changes where its first line starts.
@@ -486,6 +735,8 @@ class NurseryDraft {
     this.song = '',
     this.songMs = 0,
     this.karaoke = '',
+    this.genre = 0,
+    this.songStyle = '',
   });
 
   final String topic;
@@ -505,6 +756,8 @@ class NurseryDraft {
   final String song; // the song's file name in the backend's library
   final int songMs;
   final String karaoke; // the .ass written by the karaoke step
+  final int genre; // index into NurseryGenre.values
+  final String songStyle; // the style text an AI wrote for the song AI ('' = use the generated one)
 
   NurseryDraft copyWith({
     String? topic,
@@ -524,6 +777,8 @@ class NurseryDraft {
     String? song,
     int? songMs,
     String? karaoke,
+    int? genre,
+    String? songStyle,
   }) =>
       NurseryDraft(
         topic: topic ?? this.topic,
@@ -543,6 +798,8 @@ class NurseryDraft {
         song: song ?? this.song,
         songMs: songMs ?? this.songMs,
         karaoke: karaoke ?? this.karaoke,
+        genre: genre ?? this.genre,
+        songStyle: songStyle ?? this.songStyle,
       );
 
   String encode() => jsonEncode({
@@ -563,6 +820,8 @@ class NurseryDraft {
         'song': song,
         'songMs': songMs,
         'karaoke': karaoke,
+        'genre': genre,
+        'songStyle': songStyle,
       });
 
   static NurseryDraft decode(String? text) {
@@ -597,12 +856,14 @@ class NurseryDraft {
         tempo: i('tempo', 0, 0, nurseryTempos.length - 1),
         tool: i('tool', 0, 0, nurseryVideoTools.length - 1),
         ratio: ratio == '9:16' ? '9:16' : '16:9',
-        scenes: i('scenes', 6, 4, 9),
+        scenes: i('scenes', 6, 4, 12),
         lyrics: t('lyrics', ''),
         sceneFiles: files,
         song: t('song', ''),
         songMs: i('songMs', 0, 0, 24 * 3600 * 1000),
         karaoke: t('karaoke', ''),
+        genre: i('genre', 0, 0, NurseryGenre.values.length - 1),
+        songStyle: t('songStyle', ''),
       );
     } catch (_) {
       return const NurseryDraft();
